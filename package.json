@@ -1,0 +1,30 @@
+{
+  "name": "intouch",
+  "version": "1.0.0",
+  "description": "SaaS chat Application for communication",
+  "keywords": [
+    "SaaS",
+    "Chatapp",
+    "Communication"
+  ],
+  "homepage": "https://github.com/RamyMohamed47/intouch-chatapp#readme",
+  "bugs": {
+    "url": "https://github.com/RamyMohamed47/intouch-chatapp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RamyMohamed47/intouch-chatapp.git"
+  },
+  "license": "ISC",
+  "author": "Ramy Mohamed",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "npm test"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}
