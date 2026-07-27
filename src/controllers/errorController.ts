@@ -1,0 +1,69 @@
+import type { ErrorRequestHandler, Response } from "express";
+
+import { getLogger } from "../config/logger.js";
+import ValidationError from "../errors/ValidationError.js";
+
+interface OperationalError extends Error {
+  statusCode?: number;
+  status?: "fail" | "error";
+  isOperational?: boolean;
+}
+
+interface ValidationErrorLike extends Error {
+  name: "ValidationError";
+  errors: Record<string, { message: string }>;
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isValidationError = (err: unknown): err is ValidationErrorLike =>
+  isObject(err) &&
+  err.name === "ValidationError" &&
+  isObject(err.errors) &&
+  Object.values(err.errors).every(
+    (error) => isObject(error) && typeof error.message === "string",
+  );
+
+const toOperationalError = (err: unknown): OperationalError => {
+  if (err instanceof Error) {
+    return err;
+  }
+
+  return new Error("Something went wrong");
+};
+
+const getValidationErrorMessage = (err: ValidationErrorLike) =>
+  Object.values(err.errors)
+    .map((error) => error.message)
+    .join(". ");
+
+const sendError = (err: OperationalError, res: Response) => {
+  const statusCode = err.statusCode ?? 500;
+  const status = err.status ?? "error";
+  const message = err.isOperational ? err.message : "Something went wrong";
+
+  res.status(statusCode).json({
+    status,
+    message,
+  });
+};
+
+const handleError: ErrorRequestHandler = (err, _req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  const error: OperationalError = isValidationError(err)
+    ? new ValidationError(getValidationErrorMessage(err))
+    : toOperationalError(err);
+
+  if (process.env.NODE_ENV !== "test") {
+    getLogger().error({ err }, "Request failed");
+  }
+
+  sendError(error, res);
+};
+
+export default handleError;
