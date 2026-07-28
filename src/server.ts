@@ -12,6 +12,7 @@ import type {
   ServerToClientEvents,
   SocketData,
 } from "./contracts/socket.js";
+import createAuthModule from "./modules/auth/index.js";
 import configureSocket from "./sockets/socket.js";
 
 loadEnvFile();
@@ -19,7 +20,23 @@ loadEnvFile();
 const config = loadConfig();
 const logger = getLogger();
 const messageBroadcaster = createSocketMessageBroadcaster();
-const app = createApp({ messageBroadcaster });
+const auth = createAuthModule({
+  accessTokenSecret: config.accessTokenSecret,
+  accessTokenIssuer: config.accessTokenIssuer,
+  accessTokenAudience: config.accessTokenAudience,
+  allowedOrigins: config.clientOrigins,
+  cookie: {
+    name: config.cookieName,
+    secure: config.cookieSecure,
+    maxAgeMs: 30 * 24 * 60 * 60 * 1000,
+  },
+});
+const app = createApp({
+  allowedOrigins: config.clientOrigins,
+  authRouter: auth.router,
+  messageBroadcaster,
+  trustProxy: config.trustProxy,
+});
 const server = http.createServer(app);
 const io = new Server<
   ClientToServerEvents,

@@ -5,8 +5,8 @@ import type { NextFunction, Request, Response } from "express";
 
 import type { MessageBroadcaster } from "../src/broadcasting/messageBroadcaster.js";
 import type { MessageRecord } from "../src/contracts/message.js";
-import createMessageController from "../src/controllers/messageController.js";
-import type { MessageService } from "../src/services/messageService.js";
+import createMessageController from "../src/modules/message/message.controller.js";
+import type { MessageService } from "../src/modules/message/message.service.js";
 
 interface MockResponse {
   body: unknown;

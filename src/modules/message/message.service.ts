@@ -1,5 +1,5 @@
-import type { CreateMessageInput } from "../contracts/message.js";
-import type { MessageRepository } from "../repositories/messageRepository.js";
+import type { CreateMessageInput } from "../../contracts/message.js";
+import type { MessageRepository } from "./message.repository.js";
 
 const createMessageService = (messageRepository: MessageRepository) => ({
   getAllMessages() {

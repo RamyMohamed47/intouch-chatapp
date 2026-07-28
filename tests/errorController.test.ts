@@ -3,8 +3,8 @@ import { describe, test } from "node:test";
 
 import type { NextFunction, Request, Response } from "express";
 
-import handleError from "../src/controllers/errorController.js";
 import AppError from "../src/errors/AppError.js";
+import handleError from "../src/middleware/errorHandler.js";
 
 process.env.NODE_ENV = "test";
 

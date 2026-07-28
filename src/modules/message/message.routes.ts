@@ -1,6 +1,6 @@
 import express from "express";
 
-import type { MessageController } from "../controllers/messageController.js";
+import type { MessageController } from "./message.controller.js";
 
 const createMessageRouter = (messageController: MessageController) => {
   const router = express.Router();

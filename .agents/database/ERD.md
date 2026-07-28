@@ -4,13 +4,31 @@ erDiagram
     User {
         ObjectId id
         string username
+        string displayName
         string email
-        string passwordHash
-        string avatar
-        string googleProviderId
+        string avatarUrl
+        enum status
+        LoginProvider[] loginProviders
         datetime createdAt
         datetime updatedAt
-        datetime lastSeen
+    }
+
+    LoginProvider {
+        enum provider
+        string providerAccountId
+        string passwordHash
+        datetime linkedAt
+        datetime lastUsedAt
+        object metadata
+    }
+
+    AuthSession {
+        string id
+        ObjectId userId
+        string tokenHash
+        datetime expiresAt
+        datetime createdAt
+        datetime updatedAt
     }
 
     Organization {
@@ -73,6 +91,8 @@ erDiagram
     }
 
     User ||--o{ Membership : joins
+    User ||--o{ LoginProvider : embeds
+    User ||--o{ AuthSession : authenticates
     Organization ||--o{ Membership : has
 
     Organization ||--o{ Category : contains

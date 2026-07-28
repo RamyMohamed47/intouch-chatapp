@@ -8,10 +8,10 @@ const configureSocket = (
   logger: Logger = getLogger(),
 ) => {
   io.on("connection", (socket) => {
-    logger.info({ socketId: socket.id }, "Socket connected");
+    logger.debug({ socketId: socket.id }, "Socket connected");
 
     socket.on("disconnect", () => {
-      logger.info({ socketId: socket.id }, "Socket disconnected");
+      logger.debug({ socketId: socket.id }, "Socket disconnected");
     });
   });
 };

@@ -44,11 +44,13 @@ paths:
         $ref: "#/components/requestBodies/RegisterRequest"
       responses:
         "201":
-          $ref: "#/components/responses/UserResponse"
+          $ref: "#/components/responses/AuthResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
         "409":
-          description: Email already exists
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/login:
     post:
@@ -64,25 +66,26 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/refresh:
     post:
       tags: [Authentication]
       summary: Refresh access token
-      security: []
-      requestBody:
-        $ref: "#/components/requestBodies/RefreshTokenRequest"
+      security:
+        - refreshCookie: []
+      parameters:
+        - $ref: "#/components/parameters/RefreshCsrfHeader"
       responses:
         "200":
-          description: Token refreshed
-
-  /auth/logout:
-    post:
-      tags: [Authentication]
-      summary: Logout current user
-      responses:
-        "204":
-          description: Logged out
+          $ref: "#/components/responses/AccessTokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/me:
     get:
@@ -260,7 +263,20 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: __Secure-intouch_refresh
+
   parameters:
+
+    RefreshCsrfHeader:
+      name: X-CSRF-Protection
+      in: header
+      required: true
+      schema:
+        type: string
+        const: "1"
 
     OrganizationId:
       name: organizationId
@@ -301,12 +317,19 @@ components:
 
     RegisterRequest:
       description: Defined by shared Zod contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RegisterInput"
 
     LoginRequest:
       description: Defined by shared Zod contract.
-
-    RefreshTokenRequest:
-      description: Defined by shared Zod contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LoginInput"
 
     CreateOrganizationRequest:
       description: Defined by shared Zod contract.
@@ -319,11 +342,41 @@ components:
 
   responses:
 
+    AuthResponse:
+      description: Authentication completed and refresh cookie set.
+      headers:
+        Set-Cookie:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AuthPayload"
+
+    AccessTokenResponse:
+      description: Access token refreshed and refresh cookie rotated.
+      headers:
+        Set-Cookie:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccessTokenPayload"
+
     UserResponse:
       description: User returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [user]
+            properties:
+              user:
+                $ref: "#/components/schemas/PublicUser"
 
     LoginResponse:
-      description: Login completed successfully.
+      $ref: "#/components/responses/AuthResponse"
 
     OrganizationResponse:
       description: Organization returned successfully.
@@ -339,18 +392,132 @@ components:
 
     ValidationError:
       description: Validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
 
     Unauthorized:
       description: Authentication required.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
 
     Forbidden:
       description: Permission denied.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
 
     NotFound:
       description: Resource not found.
 
     Conflict:
       description: Resource conflict.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    TooManyRequests:
+      description: Authentication rate limit exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
 
     InternalServerError:
       description: Unexpected server error.
+
+  schemas:
+
+    RegisterInput:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: "^[a-zA-Z0-9_]+$"
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+
+    PublicUser:
+      type: object
+      required: [id, username, displayName, email, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        email:
+          type: string
+          format: email
+        avatarUrl:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [ONLINE, OFFLINE]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AuthPayload:
+      type: object
+      required: [user, accessToken]
+      properties:
+        user:
+          $ref: "#/components/schemas/PublicUser"
+        accessToken:
+          type: string
+
+    AccessTokenPayload:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [fail, error]
+        message:
+          type: string

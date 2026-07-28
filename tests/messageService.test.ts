@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import createMessageService from "../src/services/messageService.js";
+import createMessageService from "../src/modules/message/message.service.js";
 
 import type {
   CreateMessageInput,
   MessageRecord,
 } from "../src/contracts/message.js";
-import type { MessageRepository } from "../src/repositories/messageRepository.js";
+import type { MessageRepository } from "../src/modules/message/message.repository.js";
 
 describe("messageService", () => {
   test("lists messages through the repository", async () => {

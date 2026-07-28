@@ -1,6 +1,6 @@
 import { Schema, model } from "mongoose";
 
-import type { CreateMessageInput } from "../contracts/message.js";
+import type { CreateMessageInput } from "../../contracts/message.js";
 
 const messageSchema = new Schema<CreateMessageInput>(
   {
@@ -20,4 +20,6 @@ const messageSchema = new Schema<CreateMessageInput>(
   },
 );
 
-export default model<CreateMessageInput>("Message", messageSchema);
+const MessageModel = model<CreateMessageInput>("Message", messageSchema);
+
+export default MessageModel;

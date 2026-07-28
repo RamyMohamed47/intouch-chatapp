@@ -161,7 +161,14 @@ describe("app", () => {
       },
     });
 
-    assert.equal(response.headers.get("access-control-allow-origin"), "*");
+    assert.equal(
+      response.headers.get("access-control-allow-origin"),
+      "http://localhost:5173",
+    );
+    assert.equal(
+      response.headers.get("access-control-allow-credentials"),
+      "true",
+    );
   });
 
   test("does not expose API resources outside the versioned API mount", async () => {

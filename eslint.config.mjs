@@ -8,6 +8,7 @@ export default tseslint.config(
     ignores: [
       ".agents/**",
       "dist/**",
+      "packages/*/dist/**",
       "node_modules/**",
       "coverage/**",
       "eslint.config.mjs",
@@ -28,7 +29,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["tests/**/*.ts"],
+    files: ["tests/**/*.ts", "packages/*/tests/**/*.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-floating-promises": "off",

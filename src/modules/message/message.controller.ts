@@ -1,9 +1,9 @@
 import type { RequestHandler } from "express";
 
-import type { MessageBroadcaster } from "../broadcasting/messageBroadcaster.js";
-import type { CreateMessageInput } from "../contracts/message.js";
-import type { MessageService } from "../services/messageService.js";
-import catchAsync from "../utils/catchAsync.js";
+import type { MessageBroadcaster } from "../../broadcasting/messageBroadcaster.js";
+import type { CreateMessageInput } from "../../contracts/message.js";
+import catchAsync from "../../utils/catchAsync.js";
+import type { MessageService } from "./message.service.js";
 
 export interface MessageController {
   getAllMessages: RequestHandler;

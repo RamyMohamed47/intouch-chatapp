@@ -14,6 +14,8 @@ const getIncomingRequestId = (header: string | string[] | undefined) => {
   return requestId?.trim() ? requestId : undefined;
 };
 
+export const shouldAutoLogHttpRequests = false;
+
 const genReqId: NonNullable<Options<Request, Response>["genReqId"]> = (
   req,
   res,
@@ -26,27 +28,13 @@ const genReqId: NonNullable<Options<Request, Response>["genReqId"]> = (
   return requestId;
 };
 
-const customLogLevel: NonNullable<
-  Options<Request, Response>["customLogLevel"]
-> = (_req, res, err) => {
-  if (res.statusCode >= 500 || err) {
-    return "error";
-  }
-
-  if (res.statusCode >= 400) {
-    return "warn";
-  }
-
-  return "info";
-};
-
 const createHttpLogger = (
   logger: Logger = getLogger(),
 ): HttpLogger<Request, Response> => {
   const options: Options<Request, Response> = {
     logger,
     genReqId,
-    customLogLevel,
+    autoLogging: shouldAutoLogHttpRequests,
   };
 
   return pinoHttp<Request, Response>(options);
