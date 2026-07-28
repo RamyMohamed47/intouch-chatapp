@@ -12,4 +12,9 @@ const connectDatabase = async (
   logger.info("DB connection successful");
 };
 
+export const disconnectDatabase = async (logger: Logger = getLogger()) => {
+  await mongoose.disconnect();
+  logger.info("DB connection closed");
+};
+
 export default connectDatabase;

@@ -20,6 +20,23 @@ export interface RefreshTokenManager {
   hash(token: string): string;
 }
 
+export interface GoogleIdentity {
+  providerAccountId: string;
+  email: string;
+  displayName: string;
+  avatarUrl?: string;
+}
+
+export interface GoogleOAuthClient {
+  getAuthorizationUrl(state: string): string;
+  exchangeCode(code: string): Promise<GoogleIdentity>;
+}
+
+export interface OAuthStateManager {
+  create(): string;
+  verify(receivedState: string, expectedState: string): boolean;
+}
+
 export interface AuthResult {
   user: PublicUser;
   accessToken: string;
@@ -28,6 +45,10 @@ export interface AuthResult {
 
 export interface RefreshResult {
   accessToken: string;
+  refreshToken: string;
+}
+
+export interface GoogleAuthResult {
   refreshToken: string;
 }
 

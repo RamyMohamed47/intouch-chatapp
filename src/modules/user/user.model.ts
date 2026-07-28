@@ -76,4 +76,15 @@ const userSchema = new Schema<User>(
   },
 );
 
+userSchema.index(
+  {
+    "loginProviders.provider": 1,
+    "loginProviders.providerAccountId": 1,
+  },
+  {
+    name: "unique_login_provider_account",
+    unique: true,
+  },
+);
+
 export const UserModel = model<User>("User", userSchema);

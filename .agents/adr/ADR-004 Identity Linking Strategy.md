@@ -28,10 +28,12 @@ Authentication methods are linked to the existing account instead of creating du
 
 For the MVP, OAuth provider information will be stored directly on the `User` document.
 
-Example fields:
+Provider credentials are embedded in the `loginProviders` array. Each provider
+entry stores its provider type, provider account ID, link time, last-use time,
+and provider-specific credential data when required.
 
-- passwordHash
-- googleProviderId
+For Google, `providerAccountId` stores the stable Google `sub` claim. The pair
+of provider type and provider account ID is uniquely indexed across users.
 
 Future OAuth providers (GitHub, Microsoft, etc.) may introduce additional provider fields or be migrated to a dedicated OAuthAccount collection if the authentication system grows in complexity.
 
@@ -84,7 +86,8 @@ Users authenticate through Google OAuth.
 
 After Google verifies the user's identity:
 
-- Find the user by email.
+- Find the user by the Google `sub` provider ID first.
+- If the provider is not linked, find the user by verified email.
 - Link the provider if necessary.
 - Authenticate the existing account.
 

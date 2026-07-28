@@ -1,14 +1,23 @@
+export type ErrorCode =
+  | "VALIDATION_ERROR"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "TOO_MANY_REQUESTS"
+  | "INTERNAL_SERVER_ERROR";
+
 class AppError extends Error {
+  code: ErrorCode;
   statusCode: number;
-  status: "fail" | "error";
   isOperational: true;
 
-  constructor(message: string, statusCode: number) {
+  constructor(message: string, statusCode: number, code: ErrorCode) {
     super(message);
 
     this.name = new.target.name;
+    this.code = code;
     this.statusCode = statusCode;
-    this.status = `${statusCode}`.startsWith("4") ? "fail" : "error";
     this.isOperational = true;
 
     Error.captureStackTrace(this, this.constructor);

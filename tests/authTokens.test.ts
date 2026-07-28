@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import {
-  createBcryptPasswordHasher,
-  createJwtAccessTokenManager,
-  createRefreshTokenManager,
-} from "../src/modules/auth/auth.tokens.js";
+import { createJwtAccessTokenManager } from "../src/modules/auth/auth.access-token.js";
+import { createBcryptPasswordHasher } from "../src/modules/auth/auth.password.js";
+import { createRefreshTokenManager } from "../src/modules/auth/auth.refresh-token.js";
 
 describe("auth token primitives", () => {
   test("hashes and verifies passwords without retaining plaintext", async () => {

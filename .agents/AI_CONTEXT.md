@@ -41,6 +41,11 @@
 - Production browser traffic reaches Railway through the frontend's same-origin API proxy.
 - Refresh requests require an allowlisted Origin and `X-CSRF-Protection: 1`.
 - Shared request contracts are exported by the `@intouch/shared` workspace.
+- Google sign-in uses a backend-owned authorization-code redirect flow.
+- Google identities are keyed by the verified ID-token `sub` claim and linked
+  to existing users only through verified email addresses.
+- Google tokens are discarded after verification; InTouch continues to own JWT
+  access tokens and rotating refresh sessions.
 
 ## Multi-tenancy
 

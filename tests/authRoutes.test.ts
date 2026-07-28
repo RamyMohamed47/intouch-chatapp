@@ -18,6 +18,13 @@ const cookie = {
   secure: true,
   maxAgeMs: 30 * 24 * 60 * 60 * 1000,
 };
+const stateCookie = {
+  name: "intouch_google_oauth_state",
+  secure: true,
+  maxAgeMs: 10 * 60 * 1000,
+};
+const googleState = "google-oauth-state";
+const googleFrontendRedirectUrl = `${origin}/auth/callback`;
 const user: PublicUser = {
   id: "507f1f77bcf86cd799439011",
   username: "ramy_47",
@@ -28,6 +35,9 @@ const user: PublicUser = {
   updatedAt: new Date("2026-07-28T12:00:00.000Z"),
 };
 const authService: AuthService = {
+  getGoogleAuthorizationUrl: (state) =>
+    `https://accounts.google.test/oauth?state=${state}`,
+  loginWithGoogle: async () => ({ refreshToken: "google-refresh-token" }),
   register: async () => ({
     user,
     accessToken: "register-access-token",
@@ -44,6 +54,11 @@ const authService: AuthService = {
   }),
   getCurrentUser: async () => user,
 };
+const oauthStates = {
+  create: () => googleState,
+  verify: (receivedState: string, expectedState: string) =>
+    receivedState === expectedState,
+};
 const accessTokens: AccessTokenManager = {
   sign: async () => "unused",
   verify: async (token) => {
@@ -59,7 +74,11 @@ let server: http.Server;
 let baseUrl: string;
 
 before(async () => {
-  const controller = createAuthController(authService, cookie);
+  const controller = createAuthController(authService, cookie, {
+    frontendRedirectUrl: googleFrontendRedirectUrl,
+    stateCookie,
+    states: oauthStates,
+  });
   const middleware = createAuthMiddleware({
     accessTokens,
     cookie,
@@ -87,6 +106,86 @@ after(async () => {
 });
 
 describe("auth routes", () => {
+  test("starts Google OAuth with an HttpOnly state cookie", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/oauth/google`, {
+      redirect: "manual",
+    });
+    const setCookie = response.headers.get("set-cookie");
+
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get("location"),
+      `https://accounts.google.test/oauth?state=${googleState}`,
+    );
+    assert.ok(setCookie);
+    assert.match(setCookie, /intouch_google_oauth_state=google-oauth-state/);
+    assert.match(setCookie, /HttpOnly/i);
+    assert.match(setCookie, /Secure/i);
+    assert.match(setCookie, /SameSite=Lax/i);
+    assert.match(setCookie, /Path=\/api\/v1\/auth\/oauth\/google/i);
+    assert.match(setCookie, /Max-Age=600/i);
+  });
+
+  test("completes Google OAuth with a refresh cookie and safe redirect", async () => {
+    const response = await fetch(
+      `${baseUrl}/api/v1/auth/oauth/google/callback?code=google-code&state=${googleState}`,
+      {
+        headers: {
+          Cookie: `intouch_google_oauth_state=${googleState}`,
+        },
+        redirect: "manual",
+      },
+    );
+    const setCookie = response.headers.get("set-cookie");
+    const location = response.headers.get("location");
+
+    assert.equal(response.status, 302);
+    assert.equal(location, `${googleFrontendRedirectUrl}?googleAuth=success`);
+    assert.ok(setCookie);
+    assert.match(setCookie, /intouch_google_oauth_state=;/);
+    assert.match(setCookie, /intouch_refresh=google-refresh-token/);
+    assert.doesNotMatch(location ?? "", /google-code|accessToken|refreshToken/);
+  });
+
+  test("rejects a replayed Google callback with a generic redirect", async () => {
+    const response = await fetch(
+      `${baseUrl}/api/v1/auth/oauth/google/callback?code=google-code&state=${googleState}`,
+      { redirect: "manual" },
+    );
+
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get("location"),
+      `${googleFrontendRedirectUrl}?googleAuth=failed`,
+    );
+    assert.doesNotMatch(
+      response.headers.get("set-cookie") ?? "",
+      /intouch_refresh=/,
+    );
+  });
+
+  test("redirects cancelled Google authentication without creating a session", async () => {
+    const response = await fetch(
+      `${baseUrl}/api/v1/auth/oauth/google/callback?error=access_denied&state=${googleState}`,
+      {
+        headers: {
+          Cookie: `intouch_google_oauth_state=${googleState}`,
+        },
+        redirect: "manual",
+      },
+    );
+
+    assert.equal(response.status, 302);
+    assert.equal(
+      response.headers.get("location"),
+      `${googleFrontendRedirectUrl}?googleAuth=failed`,
+    );
+    assert.doesNotMatch(
+      response.headers.get("set-cookie") ?? "",
+      /intouch_refresh=/,
+    );
+  });
+
   test("registers with a secure HttpOnly cookie and no token in JSON", async () => {
     const response = await fetch(`${baseUrl}/api/v1/auth/register`, {
       method: "POST",
@@ -201,7 +300,11 @@ describe("auth routes", () => {
   });
 
   test("returns the standard error envelope after the registration limit", async () => {
-    const controller = createAuthController(authService, cookie);
+    const controller = createAuthController(authService, cookie, {
+      frontendRedirectUrl: googleFrontendRedirectUrl,
+      stateCookie,
+      states: oauthStates,
+    });
     const middleware = createAuthMiddleware({
       accessTokens,
       cookie,
@@ -252,8 +355,62 @@ describe("auth routes", () => {
 
       assert.equal(response.status, 429);
       assert.deepEqual(await response.json(), {
-        status: "fail",
-        message: "Too many registration attempts",
+        success: false,
+        error: {
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many registration attempts",
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        limitedServer.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
+  test("rate limits Google OAuth start attempts independently", async () => {
+    const controller = createAuthController(authService, cookie, {
+      frontendRedirectUrl: googleFrontendRedirectUrl,
+      stateCookie,
+      states: oauthStates,
+    });
+    const middleware = createAuthMiddleware({
+      accessTokens,
+      cookie,
+      allowedOrigins: [origin],
+    });
+    const limitedApp = createApp({
+      allowedOrigins: [origin],
+      authRouter: createAuthRouter(controller, middleware),
+    });
+    const limitedServer = http.createServer(limitedApp);
+
+    await new Promise<void>((resolve) => limitedServer.listen(0, resolve));
+    const address = limitedServer.address();
+    assert.ok(address && typeof address !== "string");
+    const limitedBaseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const response = await fetch(
+          `${limitedBaseUrl}/api/v1/auth/oauth/google`,
+          { redirect: "manual" },
+        );
+        assert.equal(response.status, 302);
+      }
+
+      const response = await fetch(
+        `${limitedBaseUrl}/api/v1/auth/oauth/google`,
+        { redirect: "manual" },
+      );
+
+      assert.equal(response.status, 429);
+      assert.deepEqual(await response.json(), {
+        success: false,
+        error: {
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many Google login attempts",
+        },
       });
     } finally {
       await new Promise<void>((resolve, reject) => {

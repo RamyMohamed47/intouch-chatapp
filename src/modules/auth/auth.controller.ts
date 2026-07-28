@@ -1,15 +1,33 @@
 import type { RequestHandler, Response } from "express";
 
 import catchAsync from "../../utils/catchAsync.js";
+import {
+  GoogleIdentityConflictError,
+  InvalidGoogleAuthenticationError,
+} from "./auth.errors.js";
 import type { LoginInput, RegisterInput } from "./auth.schemas.js";
 import type { AuthService } from "./auth.service.js";
-import type { AuthCookieConfig, AuthLocals } from "./auth.types.js";
+import type {
+  AuthCookieConfig,
+  AuthLocals,
+  OAuthStateManager,
+} from "./auth.types.js";
+
+const GOOGLE_OAUTH_PATH = "/api/v1/auth/oauth/google";
 
 export interface AuthController {
+  googleCallback: RequestHandler;
+  googleStart: RequestHandler;
   register: RequestHandler;
   login: RequestHandler;
   refresh: RequestHandler;
   me: RequestHandler;
+}
+
+export interface GoogleOAuthControllerConfig {
+  frontendRedirectUrl: string;
+  stateCookie: AuthCookieConfig;
+  states: OAuthStateManager;
 }
 
 const getCookieOptions = (cookie: AuthCookieConfig) => ({
@@ -37,10 +55,109 @@ const clearRefreshCookie = (res: Response, cookie: AuthCookieConfig) => {
   });
 };
 
+const getStateCookieOptions = (cookie: AuthCookieConfig) => ({
+  httpOnly: true,
+  secure: cookie.secure,
+  sameSite: "lax" as const,
+  path: GOOGLE_OAUTH_PATH,
+  maxAge: cookie.maxAgeMs,
+});
+
+const clearStateCookie = (res: Response, cookie: AuthCookieConfig) => {
+  res.clearCookie(cookie.name, {
+    httpOnly: true,
+    secure: cookie.secure,
+    sameSite: "lax",
+    path: GOOGLE_OAUTH_PATH,
+  });
+};
+
+const getCookie = (cookies: unknown, name: string) => {
+  if (typeof cookies !== "object" || cookies === null) {
+    return undefined;
+  }
+
+  const value = (cookies as Record<PropertyKey, unknown>)[name];
+  return typeof value === "string" ? value : undefined;
+};
+
+const getQueryString = (value: unknown) =>
+  typeof value === "string" ? value : undefined;
+
+const getFrontendRedirect = (
+  frontendRedirectUrl: string,
+  status: "failed" | "success",
+) => {
+  const url = new URL(frontendRedirectUrl);
+  url.searchParams.set("googleAuth", status);
+  return url.toString();
+};
+
+const isExpectedGoogleFailure = (error: unknown) =>
+  error instanceof InvalidGoogleAuthenticationError ||
+  error instanceof GoogleIdentityConflictError;
+
 const createAuthController = (
   authService: AuthService,
   cookie: AuthCookieConfig,
+  googleOAuth: GoogleOAuthControllerConfig,
 ): AuthController => ({
+  googleStart: (_req, res) => {
+    const state = googleOAuth.states.create();
+    const authorizationUrl = authService.getGoogleAuthorizationUrl(state);
+
+    res.cookie(
+      googleOAuth.stateCookie.name,
+      state,
+      getStateCookieOptions(googleOAuth.stateCookie),
+    );
+    res.redirect(302, authorizationUrl);
+  },
+
+  googleCallback: catchAsync(async (req, res) => {
+    const receivedState = getQueryString(req.query.state);
+    const expectedState = getCookie(
+      req.cookies as unknown,
+      googleOAuth.stateCookie.name,
+    );
+    const code = getQueryString(req.query.code);
+    const providerError = getQueryString(req.query.error);
+    const failureRedirect = getFrontendRedirect(
+      googleOAuth.frontendRedirectUrl,
+      "failed",
+    );
+
+    clearStateCookie(res, googleOAuth.stateCookie);
+
+    if (
+      providerError ||
+      !receivedState ||
+      !expectedState ||
+      !googleOAuth.states.verify(receivedState, expectedState) ||
+      !code
+    ) {
+      res.redirect(302, failureRedirect);
+      return;
+    }
+
+    try {
+      const result = await authService.loginWithGoogle(code);
+
+      setRefreshCookie(res, cookie, result.refreshToken);
+      res.redirect(
+        302,
+        getFrontendRedirect(googleOAuth.frontendRedirectUrl, "success"),
+      );
+    } catch (error) {
+      if (isExpectedGoogleFailure(error)) {
+        res.redirect(302, failureRedirect);
+        return;
+      }
+
+      throw error;
+    }
+  }),
+
   register: catchAsync(async (req, res) => {
     const result = await authService.register(req.body as RegisterInput);
 

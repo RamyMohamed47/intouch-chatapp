@@ -1,11 +1,12 @@
 import type { ErrorRequestHandler, Response } from "express";
 
 import { getLogger } from "../config/logger.js";
+import type { ErrorCode } from "../errors/AppError.js";
 import ValidationError from "../errors/ValidationError.js";
 
 interface OperationalError extends Error {
+  code?: ErrorCode;
   statusCode?: number;
-  status?: "fail" | "error";
   isOperational?: boolean;
 }
 
@@ -40,12 +41,16 @@ const getValidationErrorMessage = (err: ValidationErrorLike) =>
 
 const sendError = (err: OperationalError, res: Response) => {
   const statusCode = err.statusCode ?? 500;
-  const status = err.status ?? "error";
-  const message = err.isOperational ? err.message : "Something went wrong";
+  const isOperational = err.isOperational === true;
+  const code = isOperational ? err.code : "INTERNAL_SERVER_ERROR";
+  const message = isOperational ? err.message : "Something went wrong";
 
   res.status(statusCode).json({
-    status,
-    message,
+    success: false,
+    error: {
+      code: code ?? "INTERNAL_SERVER_ERROR",
+      message,
+    },
   });
 };
 

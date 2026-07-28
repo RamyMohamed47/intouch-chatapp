@@ -109,3 +109,6 @@ erDiagram
 
     User ||--o{ Notification : receives
 ```
+
+`LoginProvider.providerAccountId` stores the Google `sub` for Google identities.
+The pair of `provider` and `providerAccountId` is uniquely indexed across users.

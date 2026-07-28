@@ -49,7 +49,6 @@ const createMongooseAuthSessionRepository = (): AuthSessionRepository => ({
       .exec();
 
     if (!session) {
-      await AuthSessionModel.deleteOne({ _id: input.id }).exec();
       return null;
     }
 

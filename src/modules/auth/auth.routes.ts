@@ -44,6 +44,19 @@ const createAuthRouter = (
   const refreshLimit = rateLimitsEnabled
     ? createLimiter(15 * 60 * 1000, 60, "Too many refresh attempts")
     : noLimit;
+  const googleStartLimit = rateLimitsEnabled
+    ? createLimiter(15 * 60 * 1000, 10, "Too many Google login attempts")
+    : noLimit;
+  const googleCallbackLimit = rateLimitsEnabled
+    ? createLimiter(15 * 60 * 1000, 20, "Too many Google callback attempts")
+    : noLimit;
+
+  router.get("/oauth/google", googleStartLimit, controller.googleStart);
+  router.get(
+    "/oauth/google/callback",
+    googleCallbackLimit,
+    controller.googleCallback,
+  );
 
   router.post(
     "/register",

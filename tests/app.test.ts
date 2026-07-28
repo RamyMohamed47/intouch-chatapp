@@ -112,8 +112,11 @@ describe("app", () => {
 
     assert.equal(response.status, 404);
     assert.deepEqual(body, {
-      status: "fail",
-      message: "Cannot find / on this server",
+      success: false,
+      error: {
+        code: "NOT_FOUND",
+        message: "Cannot find / on this server",
+      },
     });
   });
 
@@ -123,8 +126,11 @@ describe("app", () => {
 
     assert.equal(response.status, 404);
     assert.deepEqual(body, {
-      status: "fail",
-      message: "Cannot find /not-found on this server",
+      success: false,
+      error: {
+        code: "NOT_FOUND",
+        message: "Cannot find /not-found on this server",
+      },
     });
   });
 
@@ -177,8 +183,11 @@ describe("app", () => {
 
     assert.equal(response.status, 404);
     assert.deepEqual(body, {
-      status: "fail",
-      message: "Cannot find /messages on this server",
+      success: false,
+      error: {
+        code: "NOT_FOUND",
+        message: "Cannot find /messages on this server",
+      },
     });
   });
 

@@ -18,3 +18,19 @@ export class InvalidRefreshTokenError extends UnauthorizedError {
     super("Invalid or expired refresh token");
   }
 }
+
+export class InvalidGoogleAuthenticationError extends UnauthorizedError {
+  constructor(options?: ErrorOptions) {
+    super("Google authentication failed");
+
+    if (options?.cause !== undefined) {
+      this.cause = options.cause;
+    }
+  }
+}
+
+export class GoogleIdentityConflictError extends ConflictError {
+  constructor() {
+    super("Google account cannot be linked");
+  }
+}

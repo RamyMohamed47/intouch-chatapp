@@ -36,15 +36,18 @@ const noopNext: NextFunction = () => {};
 
 describe("handleError", () => {
   test("sends operational errors to the client", () => {
-    const err = new AppError("Message not found", 404);
+    const err = new AppError("Message not found", 404, "NOT_FOUND");
     const res = createResponse();
 
     handleError(err, {} as Request, res as unknown as Response, noopNext);
 
     assert.equal(res.statusCode, 404);
     assert.deepEqual(res.body, {
-      status: "fail",
-      message: "Message not found",
+      success: false,
+      error: {
+        code: "NOT_FOUND",
+        message: "Message not found",
+      },
     });
   });
 
@@ -56,8 +59,11 @@ describe("handleError", () => {
 
     assert.equal(res.statusCode, 500);
     assert.deepEqual(res.body, {
-      status: "error",
-      message: "Something went wrong",
+      success: false,
+      error: {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Something went wrong",
+      },
     });
   });
 
@@ -75,8 +81,11 @@ describe("handleError", () => {
 
     assert.equal(res.statusCode, 400);
     assert.deepEqual(res.body, {
-      status: "fail",
-      message: "Name is required. Message is required",
+      success: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Name is required. Message is required",
+      },
     });
   });
 });
