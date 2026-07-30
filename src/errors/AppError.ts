@@ -5,6 +5,7 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "TOO_MANY_REQUESTS"
+  | "SERVICE_UNAVAILABLE"
   | "INTERNAL_SERVER_ERROR";
 
 class AppError extends Error {

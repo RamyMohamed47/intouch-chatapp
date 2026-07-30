@@ -5,7 +5,7 @@ import TooManyRequestsError from "../../errors/TooManyRequestsError.js";
 import type { AuthController } from "./auth.controller.js";
 import type { AuthMiddleware } from "./auth.middleware.js";
 import { loginSchema, registerSchema } from "./auth.schemas.js";
-import { validateBody } from "./auth.middleware.js";
+import { validateBody } from "../../middleware/validateRequest.js";
 
 const createLimiter = (
   windowMs: number,

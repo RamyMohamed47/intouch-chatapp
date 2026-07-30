@@ -44,6 +44,24 @@ The server reads `config.env` from the project root. Required values:
 - `GOOGLE_OAUTH_CALLBACK_URL`
 - `GOOGLE_OAUTH_FRONTEND_REDIRECT_URL`
 
+`DATABASE` must connect to a MongoDB replica set or sharded cluster because
+organization creation and deletion use transactions. Atlas deployments support
+transactions. A standalone MongoDB server is rejected during startup.
+
+For local development, initialize MongoDB as a single-node replica set and use
+a URI containing the replica-set name, for example:
+
+```dotenv
+DATABASE=mongodb://127.0.0.1:27017/intouch?replicaSet=rs0
+DB_PASSWORD=unused
+```
+
+Start `mongod` with `--replSet rs0`, then initialize it once from `mongosh`:
+
+```javascript
+rs.initiate();
+```
+
 Optional:
 
 - `ACCESS_TOKEN_AUDIENCE`, defaults to `intouch-client`
@@ -83,6 +101,18 @@ access JWT. A failed or cancelled flow redirects with `googleAuth=failed`.
 
 Only `openid`, `email`, and `profile` are requested. Google access and refresh
 tokens are not stored.
+
+## Organization Memberships
+
+Organization owners can invite an existing registered user by email through
+`POST /api/v1/organizations/:id/invitations`. Invitations remain pending for
+seven days. No email is sent; authenticated recipients discover them through
+`GET /api/v1/invitations`, then accept or decline them.
+
+Authenticated users can join public organizations directly through
+`POST /api/v1/organizations/:id/join`. Private organizations require invitation
+acceptance. Invitation acceptance and public joining create `MEMBER`
+memberships; ownership transfer is not supported.
 
 ## Authentication Proxy
 

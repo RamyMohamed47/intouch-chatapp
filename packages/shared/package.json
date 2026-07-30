@@ -7,6 +7,14 @@
     "./auth": {
       "types": "./dist/auth/index.d.ts",
       "import": "./dist/auth/index.js"
+    },
+    "./organizations": {
+      "types": "./dist/organizations/index.d.ts",
+      "import": "./dist/organizations/index.js"
+    },
+    "./memberships": {
+      "types": "./dist/memberships/index.d.ts",
+      "import": "./dist/memberships/index.js"
     }
   },
   "scripts": {

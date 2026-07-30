@@ -85,3 +85,9 @@ May be replaced with HTTP 400 for simplicity.
 ## 500 Internal Server Error
 
 Unexpected server error.
+
+---
+
+## 503 Service Unavailable
+
+An upstream service is temporarily unavailable.

@@ -13,6 +13,7 @@ import type {
   SocketData,
 } from "./contracts/socket.js";
 import createAuthModule from "./modules/auth/index.js";
+import createOrganizationModule from "./modules/organizations/index.js";
 import configureSocket from "./sockets/socket.js";
 
 loadEnvFile();
@@ -155,10 +156,16 @@ const auth = createAuthModule({
     },
   },
 });
+const organizations = createOrganizationModule({
+  requireAccessToken: auth.requireAccessToken,
+});
 const app = createApp({
   allowedOrigins: config.clientOrigins,
   authRouter: auth.router,
+  invitationRouter: organizations.invitationRouter,
   messageBroadcaster,
+  organizationAccessRouter: organizations.accessRouter,
+  organizationRouter: organizations.router,
   trustProxy: config.trustProxy,
 });
 const server = http.createServer(app);

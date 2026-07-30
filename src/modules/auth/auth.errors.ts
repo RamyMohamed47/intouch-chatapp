@@ -1,4 +1,5 @@
 import ConflictError from "../../errors/ConflictError.js";
+import ServiceUnavailableError from "../../errors/ServiceUnavailableError.js";
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
 
 export class DuplicateIdentityError extends ConflictError {
@@ -32,5 +33,11 @@ export class InvalidGoogleAuthenticationError extends UnauthorizedError {
 export class GoogleIdentityConflictError extends ConflictError {
   constructor() {
     super("Google account cannot be linked");
+  }
+}
+
+export class GoogleProviderUnavailableError extends ServiceUnavailableError {
+  constructor() {
+    super("Google authentication is temporarily unavailable");
   }
 }

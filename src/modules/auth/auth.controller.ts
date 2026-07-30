@@ -3,6 +3,7 @@ import type { RequestHandler, Response } from "express";
 import catchAsync from "../../utils/catchAsync.js";
 import {
   GoogleIdentityConflictError,
+  GoogleProviderUnavailableError,
   InvalidGoogleAuthenticationError,
 } from "./auth.errors.js";
 import type { LoginInput, RegisterInput } from "./auth.schemas.js";
@@ -95,7 +96,8 @@ const getFrontendRedirect = (
 
 const isExpectedGoogleFailure = (error: unknown) =>
   error instanceof InvalidGoogleAuthenticationError ||
-  error instanceof GoogleIdentityConflictError;
+  error instanceof GoogleIdentityConflictError ||
+  error instanceof GoogleProviderUnavailableError;
 
 const createAuthController = (
   authService: AuthService,

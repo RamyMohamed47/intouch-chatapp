@@ -3,8 +3,14 @@ import { describe, test } from "node:test";
 
 import type { GenerateAuthUrlOpts, TokenPayload } from "google-auth-library";
 
-import { InvalidGoogleAuthenticationError } from "../src/modules/auth/auth.errors.js";
-import { createGoogleOAuthClient } from "../src/modules/auth/auth.google.js";
+import {
+  GoogleProviderUnavailableError,
+  InvalidGoogleAuthenticationError,
+} from "../src/modules/auth/auth.errors.js";
+import {
+  createGoogleOAuthClient,
+  type GoogleOAuthFailureDetails,
+} from "../src/modules/auth/auth.google.js";
 import { createOAuthStateManager } from "../src/modules/auth/auth.oauth-state.js";
 
 const config = {
@@ -96,17 +102,72 @@ describe("Google OAuth client", () => {
   });
 
   test("maps provider exchange failures to a generic auth error", async () => {
-    const client = createGoogleOAuthClient(config, {
-      ...createSdk(),
-      getToken: async () => {
-        throw new Error("invalid_grant from Google");
+    const diagnostics: GoogleOAuthFailureDetails[] = [];
+    const client = createGoogleOAuthClient(
+      config,
+      {
+        ...createSdk(),
+        getToken: async () => {
+          throw new Error("invalid_grant from Google");
+        },
       },
-    });
+      { providerUnavailable: (details) => diagnostics.push(details) },
+    );
 
     await assert.rejects(client.exchangeCode("expired-code"), {
       message: "Google authentication failed",
       statusCode: 401,
     });
+    assert.deepEqual(diagnostics, []);
+  });
+
+  test("reports sanitized network outages separately", async () => {
+    const diagnostics: GoogleOAuthFailureDetails[] = [];
+    const networkError = Object.assign(new Error("request timed out"), {
+      code: "ETIMEDOUT",
+    });
+    const client = createGoogleOAuthClient(
+      config,
+      {
+        ...createSdk(),
+        getToken: async () => {
+          throw networkError;
+        },
+      },
+      { providerUnavailable: (details) => diagnostics.push(details) },
+    );
+
+    await assert.rejects(
+      client.exchangeCode("authorization-code"),
+      GoogleProviderUnavailableError,
+    );
+    assert.deepEqual(diagnostics, [
+      { operation: "code_exchange", networkCode: "ETIMEDOUT" },
+    ]);
+  });
+
+  test("reports Google service failures during ID-token verification", async () => {
+    const diagnostics: GoogleOAuthFailureDetails[] = [];
+    const client = createGoogleOAuthClient(
+      config,
+      {
+        ...createSdk(),
+        verifyIdToken: async () => {
+          throw Object.assign(new Error("Google unavailable"), {
+            response: { status: 503 },
+          });
+        },
+      },
+      { providerUnavailable: (details) => diagnostics.push(details) },
+    );
+
+    await assert.rejects(
+      client.exchangeCode("authorization-code"),
+      GoogleProviderUnavailableError,
+    );
+    assert.deepEqual(diagnostics, [
+      { operation: "id_token_verification", responseStatus: 503 },
+    ]);
   });
 });
 

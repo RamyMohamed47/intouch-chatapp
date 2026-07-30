@@ -23,14 +23,20 @@ import {
 export interface AppDependencies {
   allowedOrigins?: readonly string[];
   authRouter?: Router;
+  invitationRouter?: Router;
   messageBroadcaster?: MessageBroadcaster;
+  organizationAccessRouter?: Router;
+  organizationRouter?: Router;
   trustProxy?: boolean | number;
 }
 
 const createApp = ({
   allowedOrigins = ["http://localhost:5173"],
   authRouter,
+  invitationRouter,
   messageBroadcaster = createNoopMessageBroadcaster(),
+  organizationAccessRouter,
+  organizationRouter,
   trustProxy = false,
 }: AppDependencies = {}) => {
   const app = express();
@@ -73,6 +79,18 @@ const createApp = ({
 
   if (authRouter) {
     app.use("/api/v1/auth", authRouter);
+  }
+
+  if (organizationRouter) {
+    app.use("/api/v1/organizations", organizationRouter);
+  }
+
+  if (organizationAccessRouter) {
+    app.use("/api/v1/organizations", organizationAccessRouter);
+  }
+
+  if (invitationRouter) {
+    app.use("/api/v1/invitations", invitationRouter);
   }
 
   app.use("/api/v1/messages", createMessageRouter(messageController));

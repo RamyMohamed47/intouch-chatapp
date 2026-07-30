@@ -4,6 +4,7 @@ import { after, before, describe, test } from "node:test";
 
 import createApp from "../src/app.js";
 import createAuthController from "../src/modules/auth/auth.controller.js";
+import { GoogleProviderUnavailableError } from "../src/modules/auth/auth.errors.js";
 import createAuthMiddleware from "../src/modules/auth/auth.middleware.js";
 import createAuthRouter from "../src/modules/auth/auth.routes.js";
 import type { AuthService } from "../src/modules/auth/auth.service.js";
@@ -34,10 +35,17 @@ const user: PublicUser = {
   createdAt: new Date("2026-07-28T12:00:00.000Z"),
   updatedAt: new Date("2026-07-28T12:00:00.000Z"),
 };
+let googleLoginError: Error | undefined;
 const authService: AuthService = {
   getGoogleAuthorizationUrl: (state) =>
     `https://accounts.google.test/oauth?state=${state}`,
-  loginWithGoogle: async () => ({ refreshToken: "google-refresh-token" }),
+  loginWithGoogle: async () => {
+    if (googleLoginError) {
+      throw googleLoginError;
+    }
+
+    return { refreshToken: "google-refresh-token" };
+  },
   register: async () => ({
     user,
     accessToken: "register-access-token",
@@ -184,6 +192,30 @@ describe("auth routes", () => {
       response.headers.get("set-cookie") ?? "",
       /intouch_refresh=/,
     );
+  });
+
+  test("preserves the generic redirect during a Google provider outage", async () => {
+    googleLoginError = new GoogleProviderUnavailableError();
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/v1/auth/oauth/google/callback?code=google-code&state=${googleState}`,
+        {
+          headers: {
+            Cookie: `intouch_google_oauth_state=${googleState}`,
+          },
+          redirect: "manual",
+        },
+      );
+
+      assert.equal(response.status, 302);
+      assert.equal(
+        response.headers.get("location"),
+        `${googleFrontendRedirectUrl}?googleAuth=failed`,
+      );
+    } finally {
+      googleLoginError = undefined;
+    }
   });
 
   test("registers with a secure HttpOnly cookie and no token in JSON", async () => {

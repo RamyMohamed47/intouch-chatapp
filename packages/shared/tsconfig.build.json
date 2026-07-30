@@ -7,6 +7,6 @@
     "outDir": "dist",
     "sourceMap": true
   },
-  "include": ["auth/**/*.ts"],
+  "include": ["auth/**/*.ts", "memberships/**/*.ts", "organizations/**/*.ts"],
   "exclude": ["tests/**/*.ts"]
 }

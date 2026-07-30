@@ -3,5 +3,10 @@
   "compilerOptions": {
     "rootDir": "."
   },
-  "include": ["auth/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "auth/**/*.ts",
+    "memberships/**/*.ts",
+    "organizations/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }

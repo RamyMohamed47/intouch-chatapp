@@ -108,6 +108,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /auth/refresh:
     post:
@@ -148,6 +150,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/OrganizationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
     post:
       tags: [Organizations]
@@ -157,72 +161,152 @@ paths:
       responses:
         "201":
           $ref: "#/components/responses/OrganizationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
-  /organizations/{organizationId}:
+  /organizations/{id}:
     get:
       tags: [Organizations]
       summary: Get organization
       parameters:
-        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/OrganizationResourceId"
       responses:
         "200":
           $ref: "#/components/responses/OrganizationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
     patch:
       tags: [Organizations]
       summary: Update organization
       parameters:
-        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/OrganizationResourceId"
       requestBody:
         $ref: "#/components/requestBodies/UpdateOrganizationRequest"
       responses:
         "200":
           $ref: "#/components/responses/OrganizationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
     delete:
       tags: [Organizations]
       summary: Delete organization
       parameters:
-        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/OrganizationResourceId"
       responses:
         "204":
           description: Organization deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   #
   # Memberships
   #
 
-  /organizations/{organizationId}/members:
-    get:
-      tags: [Memberships]
-      summary: List organization members
-      parameters:
-        - $ref: "#/components/parameters/OrganizationId"
-      responses:
-        "200":
-          $ref: "#/components/responses/MembershipListResponse"
-
+  /organizations/{id}/invitations:
     post:
       tags: [Memberships]
-      summary: Invite or add member
+      summary: Invite a registered user
       parameters:
-        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/OrganizationResourceId"
       requestBody:
-        $ref: "#/components/requestBodies/AddMemberRequest"
+        $ref: "#/components/requestBodies/InviteMemberRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/InvitationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /organizations/{id}/join:
+    post:
+      tags: [Memberships]
+      summary: Join a public organization
+      parameters:
+        - $ref: "#/components/parameters/OrganizationResourceId"
       responses:
         "201":
           $ref: "#/components/responses/MembershipResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
-  /organizations/{organizationId}/members/{memberId}:
+  /invitations:
+    get:
+      tags: [Memberships]
+      summary: List current user's pending invitations
+      responses:
+        "200":
+          $ref: "#/components/responses/InvitationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /invitations/{invitationId}/accept:
+    post:
+      tags: [Memberships]
+      summary: Accept a pending invitation
+      parameters:
+        - $ref: "#/components/parameters/InvitationId"
+      responses:
+        "201":
+          $ref: "#/components/responses/MembershipResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /invitations/{invitationId}:
     delete:
       tags: [Memberships]
-      summary: Remove member
+      summary: Decline a pending invitation
       parameters:
-        - $ref: "#/components/parameters/OrganizationId"
-        - $ref: "#/components/parameters/MemberId"
+        - $ref: "#/components/parameters/InvitationId"
       responses:
         "204":
-          description: Member removed
+          description: Invitation declined
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   #
   # Categories
@@ -315,6 +399,14 @@ components:
 
   parameters:
 
+    OrganizationResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-fA-F0-9]{24}$"
+
     RefreshCsrfHeader:
       name: X-CSRF-Protection
       in: header
@@ -329,6 +421,14 @@ components:
       required: true
       schema:
         type: string
+
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-fA-F0-9]{24}$"
 
     ConversationId:
       name: conversationId
@@ -378,12 +478,27 @@ components:
 
     CreateOrganizationRequest:
       description: Defined by shared Zod contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateOrganizationInput"
 
     UpdateOrganizationRequest:
       description: Defined by shared Zod contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateOrganizationInput"
 
-    AddMemberRequest:
+    InviteMemberRequest:
       description: Defined by shared Zod contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InviteMemberInput"
 
   responses:
 
@@ -455,15 +570,62 @@ components:
 
     OrganizationResponse:
       description: Organization returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [organization]
+            properties:
+              organization:
+                $ref: "#/components/schemas/PublicOrganization"
 
     OrganizationListResponse:
       description: List of organizations.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [organizations]
+            properties:
+              organizations:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublicOrganization"
 
     MembershipResponse:
       description: Membership returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [membership]
+            properties:
+              membership:
+                $ref: "#/components/schemas/Membership"
 
-    MembershipListResponse:
-      description: List of memberships.
+    InvitationResponse:
+      description: Invitation returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [invitation]
+            properties:
+              invitation:
+                $ref: "#/components/schemas/Invitation"
+
+    InvitationListResponse:
+      description: List of pending invitations.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [invitations]
+            properties:
+              invitations:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invitation"
 
     ValidationError:
       description: Validation failed.
@@ -514,7 +676,149 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
 
+    ServiceUnavailable:
+      description: An upstream authentication provider is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
+
+    InviteMemberInput:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    Membership:
+      type: object
+      required: [id, userId, organizationId, role, joinedAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        organizationId:
+          type: string
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+        joinedAt:
+          type: string
+          format: date-time
+
+    InvitationOrganizationSummary:
+      type: object
+      required: [id, name, slug, visibility]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        logoUrl:
+          type: string
+          format: uri
+        visibility:
+          type: string
+          enum: [PRIVATE, PUBLIC]
+
+    Invitation:
+      type: object
+      required:
+        - id
+        - organizationId
+        - invitedUserId
+        - invitedByUserId
+        - expiresAt
+        - createdAt
+        - organization
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        invitedUserId:
+          type: string
+        invitedByUserId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        organization:
+          $ref: "#/components/schemas/InvitationOrganizationSummary"
+
+    CreateOrganizationInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        logoUrl:
+          type: string
+          format: uri
+        visibility:
+          type: string
+          enum: [PRIVATE, PUBLIC]
+          default: PRIVATE
+
+    UpdateOrganizationInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        logoUrl:
+          oneOf:
+            - type: string
+              format: uri
+            - type: "null"
+        visibility:
+          type: string
+          enum: [PRIVATE, PUBLIC]
+
+    PublicOrganization:
+      type: object
+      required:
+        [id, name, slug, visibility, currentUserRole, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        logoUrl:
+          type: string
+          format: uri
+        visibility:
+          type: string
+          enum: [PRIVATE, PUBLIC]
+        currentUserRole:
+          oneOf:
+            - type: string
+              enum: [OWNER, MEMBER]
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     RegisterInput:
       type: object
@@ -617,6 +921,7 @@ components:
                 - NOT_FOUND
                 - CONFLICT
                 - TOO_MANY_REQUESTS
+                - SERVICE_UNAVAILABLE
                 - INTERNAL_SERVER_ERROR
             message:
               type: string

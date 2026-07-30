@@ -1,3 +1,4 @@
+import { getLogger } from "../../config/logger.js";
 import createMongooseUserRepository from "../user/user.repository.js";
 import { createJwtAccessTokenManager } from "./auth.access-token.js";
 import createAuthController from "./auth.controller.js";
@@ -28,6 +29,7 @@ export interface AuthModuleConfig {
 }
 
 const createAuthModule = (config: AuthModuleConfig) => {
+  const logger = getLogger();
   const users = createMongooseUserRepository();
   const sessions = createMongooseAuthSessionRepository();
   const passwords = createBcryptPasswordHasher();
@@ -37,7 +39,14 @@ const createAuthModule = (config: AuthModuleConfig) => {
     audience: config.accessTokenAudience,
   });
   const refreshTokens = createRefreshTokenManager();
-  const googleOAuth = createGoogleOAuthClient(config.googleOAuth);
+  const googleOAuth = createGoogleOAuthClient(config.googleOAuth, undefined, {
+    providerUnavailable(details) {
+      logger.error(
+        { provider: "google", ...details },
+        "OAuth provider unavailable",
+      );
+    },
+  });
   const oauthStates = createOAuthStateManager();
   const service = createAuthService({
     users,
@@ -63,7 +72,7 @@ const createAuthModule = (config: AuthModuleConfig) => {
       : { rateLimitsEnabled: config.rateLimitsEnabled }),
   });
 
-  return { router };
+  return { requireAccessToken: middleware.requireAccessToken, router };
 };
 
 export default createAuthModule;
