@@ -1,0 +1,156 @@
+import assert from "node:assert/strict";
+import { after, before, describe, test } from "node:test";
+import http from "node:http";
+
+import {
+  ConversationType,
+  ConversationVisibility,
+} from "@intouch/shared/conversations";
+import { Server } from "socket.io";
+import { io as createClient, type Socket } from "socket.io-client";
+
+import createSocketRealtimeGateway from "../src/broadcasting/socketRealtimeGateway.js";
+import type {
+  ClientToServerEvents,
+  InterServerEvents,
+  ServerToClientEvents,
+  SocketData,
+} from "../src/contracts/socket.js";
+import type { AccessTokenManager } from "../src/modules/auth/auth.types.js";
+import { ConversationNotFoundError } from "../src/modules/conversations/conversation.errors.js";
+import type { ConversationRecord } from "../src/modules/conversations/conversation.types.js";
+import {
+  MessageType,
+  type MessageRecord,
+} from "../src/modules/message/message.types.js";
+import configureSocket from "../src/sockets/socket.js";
+
+const firstConversationId = "507f1f77bcf86cd799439011";
+const secondConversationId = "507f1f77bcf86cd799439012";
+const now = new Date("2026-08-03T00:00:00.000Z");
+const server = http.createServer();
+const io = new Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>(server);
+const accessTokens: AccessTokenManager = {
+  getExpiration: () => Math.floor(Date.now() / 1_000) + 60,
+  sign: async () => "good-token",
+  verify: async (token) => {
+    if (token !== "good-token") throw new Error("invalid token");
+    return { userId: "507f1f77bcf86cd799439099" };
+  },
+};
+const conversation = (id: string): ConversationRecord => ({
+  id,
+  organizationId: "507f1f77bcf86cd799439090",
+  categoryId: "507f1f77bcf86cd799439091",
+  name: "general",
+  type: ConversationType.CHANNEL,
+  visibility: ConversationVisibility.PUBLIC,
+  position: 0,
+  createdAt: now,
+  updatedAt: now,
+});
+const conversations = {
+  getAccessible: async (_userId: string, conversationId: string) => {
+    if (
+      conversationId === firstConversationId ||
+      conversationId === secondConversationId
+    ) {
+      return conversation(conversationId);
+    }
+    throw new ConversationNotFoundError();
+  },
+};
+const gateway = createSocketRealtimeGateway();
+let baseUrl: string;
+const clients: Socket[] = [];
+
+before(async () => {
+  configureSocket(io, accessTokens, conversations);
+  gateway.setSocketServer(io);
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("No test port");
+  baseUrl = `http://127.0.0.1:${address.port}`;
+});
+
+after(async () => {
+  for (const client of clients) client.disconnect();
+  await new Promise<void>((resolve) => {
+    io.close(() => resolve());
+  });
+});
+
+const connect = (token = "good-token") =>
+  new Promise<Socket>((resolve, reject) => {
+    const client = createClient(baseUrl, {
+      auth: { accessToken: token },
+      transports: ["websocket"],
+      forceNew: true,
+    });
+    clients.push(client);
+    client.once("connect", () => resolve(client));
+    client.once("connect_error", reject);
+  });
+
+const join = (client: Socket, conversationId: string) =>
+  new Promise<{ success: boolean }>((resolve) => {
+    client.emit("conversation:join", { conversationId }, resolve);
+  });
+
+describe("authenticated conversation sockets", () => {
+  test("rejects invalid access tokens", async () => {
+    await assert.rejects(
+      connect("bad-token"),
+      /Invalid or expired access token/,
+    );
+  });
+
+  test("authorizes joins and isolates message events by room", async () => {
+    const firstClient = await connect();
+    const secondClient = await connect();
+    assert.deepEqual(await join(firstClient, firstConversationId), {
+      success: true,
+    });
+    assert.deepEqual(await join(secondClient, secondConversationId), {
+      success: true,
+    });
+
+    let secondClientReceived = false;
+    secondClient.on("message:created", () => {
+      secondClientReceived = true;
+    });
+    const received = new Promise<MessageRecord>((resolve) => {
+      firstClient.once("message:created", resolve);
+    });
+    const message: MessageRecord = {
+      id: "507f1f77bcf86cd799439020",
+      conversationId: firstConversationId,
+      senderId: "507f1f77bcf86cd799439099",
+      content: "hello",
+      messageType: MessageType.TEXT,
+      editedAt: null,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    gateway.messageCreated(message);
+    assert.deepEqual(await received, {
+      ...message,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(secondClientReceived, false);
+  });
+
+  test("returns a standard acknowledgement for inaccessible rooms", async () => {
+    const client = await connect();
+    const result = await join(client, "507f1f77bcf86cd799439088");
+    assert.equal(result.success, false);
+  });
+});

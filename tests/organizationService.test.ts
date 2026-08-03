@@ -21,6 +21,7 @@ import createOrganizationPolicy from "../src/modules/organizations/organization.
 import createOrganizationService from "../src/modules/organizations/organization.service.js";
 import type { OrganizationRecord } from "../src/modules/organizations/organization.types.js";
 import type { OrganizationUnitOfWork } from "../src/modules/organizations/organization.unit-of-work.js";
+import { emptyCommunicationContext } from "./unitOfWorkContext.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const organizationId = "507f1f77bcf86cd799439012";
@@ -75,6 +76,7 @@ const createMemberships = (
   createMember: async () => membership(MembershipRole.MEMBER),
   findForUser: async () => membership(),
   listForUser: async () => [membership()],
+  listForOrganization: async () => [membership()],
   deleteForOrganization: async () => 1,
   ...overrides,
 });
@@ -96,7 +98,13 @@ const createUnitOfWork = (
   organizations: OrganizationRepository,
   memberships: MembershipService,
 ): OrganizationUnitOfWork => ({
-  run: (work) => work({ organizations, memberships, invitations }),
+  run: (work) =>
+    work({
+      ...emptyCommunicationContext,
+      organizations,
+      memberships,
+      invitations,
+    }),
 });
 
 const createService = (

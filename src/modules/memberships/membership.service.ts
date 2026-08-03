@@ -26,6 +26,10 @@ const createMembershipService = (repository: MembershipRepository) => ({
     return repository.findByUser(userId);
   },
 
+  listForOrganization(organizationId: string) {
+    return repository.findByOrganization(organizationId);
+  },
+
   deleteForOrganization(organizationId: string) {
     return repository.deleteByOrganizationId(organizationId);
   },

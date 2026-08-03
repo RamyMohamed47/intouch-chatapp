@@ -5,27 +5,21 @@ import express from "express";
 import type { Router } from "express";
 import helmet from "helmet";
 
-import {
-  createNoopMessageBroadcaster,
-  type MessageBroadcaster,
-} from "./broadcasting/messageBroadcaster.js";
 import NotFoundError from "./errors/NotFoundError.js";
 import ForbiddenError from "./errors/ForbiddenError.js";
 import handleError from "./middleware/errorHandler.js";
 import createHttpLogger from "./middleware/httpLogger.js";
-import {
-  createMessageController,
-  createMessageRouter,
-  createMessageService,
-  createMongooseMessageRepository,
-} from "./modules/message/index.js";
 
 export interface AppDependencies {
   allowedOrigins?: readonly string[];
   authRouter?: Router;
+  categoryRouter?: Router;
+  conversationMessageRouter?: Router;
+  conversationRouter?: Router;
   invitationRouter?: Router;
-  messageBroadcaster?: MessageBroadcaster;
+  messageRouter?: Router;
   organizationAccessRouter?: Router;
+  organizationConversationRouter?: Router;
   organizationRouter?: Router;
   trustProxy?: boolean | number;
 }
@@ -33,19 +27,17 @@ export interface AppDependencies {
 const createApp = ({
   allowedOrigins = ["http://localhost:5173"],
   authRouter,
+  categoryRouter,
+  conversationMessageRouter,
+  conversationRouter,
   invitationRouter,
-  messageBroadcaster = createNoopMessageBroadcaster(),
+  messageRouter,
   organizationAccessRouter,
+  organizationConversationRouter,
   organizationRouter,
   trustProxy = false,
 }: AppDependencies = {}) => {
   const app = express();
-  const messageRepository = createMongooseMessageRepository();
-  const messageService = createMessageService(messageRepository);
-  const messageController = createMessageController(
-    messageService,
-    messageBroadcaster,
-  );
 
   app.set("trust proxy", trustProxy);
   app.use(helmet());
@@ -89,11 +81,29 @@ const createApp = ({
     app.use("/api/v1/organizations", organizationAccessRouter);
   }
 
+  if (categoryRouter) {
+    app.use("/api/v1/organizations", categoryRouter);
+  }
+
+  if (organizationConversationRouter) {
+    app.use("/api/v1/organizations", organizationConversationRouter);
+  }
+
+  if (conversationRouter) {
+    app.use("/api/v1/conversations", conversationRouter);
+  }
+
+  if (conversationMessageRouter) {
+    app.use("/api/v1/conversations", conversationMessageRouter);
+  }
+
   if (invitationRouter) {
     app.use("/api/v1/invitations", invitationRouter);
   }
 
-  app.use("/api/v1/messages", createMessageRouter(messageController));
+  if (messageRouter) {
+    app.use("/api/v1/messages", messageRouter);
+  }
 
   app.use((req, _res, next) => {
     next(new NotFoundError(`Cannot find ${req.originalUrl} on this server`));

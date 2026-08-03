@@ -1,30 +1,13 @@
-import type { MessageRecord } from "../contracts/message.js";
-import type { InTouchSocketServer } from "../contracts/socket.js";
+import type { MessageRecord } from "../modules/message/message.types.js";
 
 export interface MessageBroadcaster {
-  broadcastMessage(message: MessageRecord): void;
-}
-
-export interface SocketMessageBroadcaster extends MessageBroadcaster {
-  setSocketServer(io: InTouchSocketServer): void;
+  messageCreated(message: MessageRecord): void;
+  messageDeleted(message: MessageRecord): void;
+  messageUpdated(message: MessageRecord): void;
 }
 
 export const createNoopMessageBroadcaster = (): MessageBroadcaster => ({
-  broadcastMessage() {},
+  messageCreated() {},
+  messageDeleted() {},
+  messageUpdated() {},
 });
-
-const createSocketMessageBroadcaster = (): SocketMessageBroadcaster => {
-  let io: InTouchSocketServer | undefined;
-
-  return {
-    setSocketServer(socketServer) {
-      io = socketServer;
-    },
-
-    broadcastMessage(message) {
-      io?.emit("message", message);
-    },
-  };
-};
-
-export default createSocketMessageBroadcaster;

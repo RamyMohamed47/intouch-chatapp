@@ -1,25 +1,33 @@
 import { Schema, model } from "mongoose";
 
-import type { CreateMessageInput } from "../../contracts/message.js";
+import { MessageType, type Message } from "./message.types.js";
 
-const messageSchema = new Schema<CreateMessageInput>(
+const messageSchema = new Schema<Message>(
   {
-    name: {
-      type: String,
+    conversationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Conversation",
       required: true,
-      trim: true,
     },
-    message: {
+    senderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    content: { type: String, default: null, maxlength: 4_000 },
+    messageType: {
       type: String,
+      enum: Object.values(MessageType),
+      default: MessageType.TEXT,
       required: true,
-      trim: true,
     },
+    editedAt: { type: Date, default: null },
+    deletedAt: { type: Date, default: null },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
-const MessageModel = model<CreateMessageInput>("Message", messageSchema);
+messageSchema.index(
+  { conversationId: 1, _id: -1 },
+  { name: "messages_by_conversation_cursor" },
+);
+
+const MessageModel = model<Message>("Message", messageSchema);
 
 export default MessageModel;

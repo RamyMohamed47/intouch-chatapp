@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import InvitationModel from "../src/modules/invitations/invitation.model.js";
+import CategoryModel from "../src/modules/categories/category.model.js";
+import ConversationParticipantModel from "../src/modules/conversations/conversation-participant.model.js";
+import ConversationModel from "../src/modules/conversations/conversation.model.js";
 import MembershipModel from "../src/modules/memberships/membership.model.js";
 import { MembershipRole } from "../src/modules/memberships/membership.types.js";
 import OrganizationModel from "../src/modules/organizations/organization.model.js";
+import MessageModel from "../src/modules/message/message.model.js";
 
 describe("organization persistence indexes", () => {
   test("enforces unique organization slugs", () => {
@@ -52,5 +56,39 @@ describe("organization persistence indexes", () => {
     assert.ok(recipientIndex);
     assert.ok(expiryIndex);
     assert.equal(expiryIndex[1].expireAfterSeconds, 0);
+  });
+
+  test("indexes ordered categories and unique names per organization", () => {
+    const indexes = CategoryModel.schema.indexes();
+    const uniqueName = indexes.find(
+      ([, options]) => options.name === "unique_category_name_per_organization",
+    );
+    const ordering = indexes.find(
+      ([, options]) => options.name === "categories_by_position",
+    );
+    assert.equal(uniqueName?.[1].unique, true);
+    assert.ok(ordering);
+  });
+
+  test("indexes channel names, participants, and message cursors", () => {
+    const conversationName = ConversationModel.schema
+      .indexes()
+      .find(
+        ([, options]) =>
+          options.name === "unique_conversation_name_per_category",
+      );
+    const participant = ConversationParticipantModel.schema
+      .indexes()
+      .find(
+        ([, options]) => options.name === "unique_conversation_participant",
+      );
+    const messageCursor = MessageModel.schema
+      .indexes()
+      .find(
+        ([, options]) => options.name === "messages_by_conversation_cursor",
+      );
+    assert.equal(conversationName?.[1].unique, true);
+    assert.equal(participant?.[1].unique, true);
+    assert.ok(messageCursor);
   });
 });

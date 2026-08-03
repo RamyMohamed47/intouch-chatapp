@@ -12,6 +12,7 @@ export interface PasswordHasher {
 export interface AccessTokenManager {
   sign(userId: string): Promise<string>;
   verify(token: string): Promise<AccessTokenClaims>;
+  getExpiration?(token: string): number | null;
 }
 
 export interface RefreshTokenManager {

@@ -32,9 +32,13 @@ const formatIssues = (issues: SafeParseFailure["error"]["issues"]) =>
 const validate = <T>(
   schema: RequestSchema<T>,
   read: (request: Parameters<RequestHandler>[0]) => unknown,
-  write: (request: Parameters<RequestHandler>[0], value: T) => void,
+  write: (
+    request: Parameters<RequestHandler>[0],
+    response: Parameters<RequestHandler>[1],
+    value: T,
+  ) => void,
 ): RequestHandler =>
-  function validateRequest(req, _res, next) {
+  function validateRequest(req, res, next) {
     const result = schema.safeParse(read(req));
 
     if (!result.success) {
@@ -42,7 +46,7 @@ const validate = <T>(
       return;
     }
 
-    write(req, result.data);
+    write(req, res, result.data);
     next();
   };
 
@@ -50,7 +54,7 @@ export const validateBody = <T>(schema: RequestSchema<T>): RequestHandler =>
   validate(
     schema,
     (req) => req.body,
-    (req, value) => {
+    (req, _res, value) => {
       req.body = value;
     },
   );
@@ -59,7 +63,16 @@ export const validateParams = <T>(schema: RequestSchema<T>): RequestHandler =>
   validate(
     schema,
     (req) => req.params,
-    (req, value) => {
+    (req, _res, value) => {
       req.params = value as typeof req.params;
+    },
+  );
+
+export const validateQuery = <T>(schema: RequestSchema<T>): RequestHandler =>
+  validate(
+    schema,
+    (req) => req.query,
+    (_req, res, value) => {
+      res.locals.validatedQuery = value;
     },
   );

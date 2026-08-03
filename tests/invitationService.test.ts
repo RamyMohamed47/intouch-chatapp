@@ -25,6 +25,7 @@ import type { OrganizationRecord } from "../src/modules/organizations/organizati
 import type { OrganizationUnitOfWork } from "../src/modules/organizations/organization.unit-of-work.js";
 import type { UserRepository } from "../src/modules/user/user.repository.js";
 import { UserStatus, type PublicUser } from "../src/modules/user/user.types.js";
+import { emptyCommunicationContext } from "./unitOfWorkContext.js";
 
 const now = new Date("2026-07-30T00:00:00.000Z");
 const inviterUserId = "507f1f77bcf86cd799439011";
@@ -177,6 +178,7 @@ const createHarness = ({
     findForUser: async (userId) =>
       userId === inviterUserId ? ownerMembership : targetMembership,
     listForUser: async () => [],
+    listForOrganization: async () => [ownerMembership],
     deleteForOrganization: async () => 0,
   };
   const users: UserRepository = {
@@ -186,13 +188,20 @@ const createHarness = ({
     findPasswordUserByEmail: async () => null,
     findPublicByEmail: async () => (invitedUserExists ? invitedUser : null),
     findPublicById: async () => invitedUser,
+    findPublicByIds: async () => [invitedUser],
     linkGoogleProvider: async () => invitedUser,
     touchPasswordProvider: async () => undefined,
     useGoogleProvider: async () => invitedUser,
     usernameExists: async () => false,
   };
   const unitOfWork: OrganizationUnitOfWork = {
-    run: (work) => work({ organizations, memberships, invitations }),
+    run: (work) =>
+      work({
+        ...emptyCommunicationContext,
+        organizations,
+        memberships,
+        invitations,
+      }),
   };
   const service = createInvitationService({
     invitations,

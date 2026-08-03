@@ -114,6 +114,29 @@ Authenticated users can join public organizations directly through
 acceptance. Invitation acceptance and public joining create `MEMBER`
 memberships; ownership transfer is not supported.
 
+## Categories And Channels
+
+Organization owners manage ordered categories through
+`/api/v1/organizations/:organizationId/categories` and channel conversations
+through `/api/v1/organizations/:organizationId/conversations`. Every channel is
+a `Conversation` with `type: CHANNEL` and belongs to one category.
+
+Public channels are available to all current organization members. Private
+channels require an explicit participant record in addition to organization
+membership. Owners list organization members at
+`GET /api/v1/organizations/:organizationId/members` and manage private-channel
+participants under `/api/v1/conversations/:conversationId/participants`.
+
+Message history and creation are scoped to
+`/api/v1/conversations/:conversationId/messages`. Message edits and redacted
+deletions use `/api/v1/messages/:messageId`. History uses a `before` message-ID
+cursor and a `limit` from 1 to 100.
+
+Socket.IO clients authenticate with `auth: { accessToken }`, then emit
+`conversation:join` before receiving `message:created`, `message:updated`, and
+`message:deleted` events for that room. REST remains the only message-write
+transport. See `.agents/sockets/Socket Events.md` for event contracts.
+
 ## Authentication Proxy
 
 Production browser requests should use the frontend's same-origin `/api` proxy,

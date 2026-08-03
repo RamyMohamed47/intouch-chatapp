@@ -47,6 +47,17 @@ const createOrganizationPolicy = () => {
     assertOwner,
     assertCanInvite: assertOwner,
 
+    assertMember(
+      organization: OrganizationRecord | null,
+      membership: MembershipRecord | null,
+    ) {
+      if (!organization || !membership) {
+        throw new OrganizationNotFoundError();
+      }
+
+      return organization;
+    },
+
     assertCanJoinPublic(
       organization: OrganizationRecord | null,
       membership: MembershipRecord | null,

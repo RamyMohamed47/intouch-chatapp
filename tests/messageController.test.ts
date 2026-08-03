@@ -3,13 +3,29 @@ import { describe, test } from "node:test";
 
 import type { NextFunction, Request, Response } from "express";
 
-import type { MessageBroadcaster } from "../src/broadcasting/messageBroadcaster.js";
-import type { MessageRecord } from "../src/contracts/message.js";
 import createMessageController from "../src/modules/message/message.controller.js";
 import type { MessageService } from "../src/modules/message/message.service.js";
+import {
+  MessageType,
+  type MessageRecord,
+} from "../src/modules/message/message.types.js";
+
+const now = new Date("2026-08-03T00:00:00.000Z");
+const message: MessageRecord = {
+  id: "507f1f77bcf86cd799439013",
+  conversationId: "507f1f77bcf86cd799439012",
+  senderId: "507f1f77bcf86cd799439011",
+  content: "Hello",
+  messageType: MessageType.TEXT,
+  editedAt: null,
+  deletedAt: null,
+  createdAt: now,
+  updatedAt: now,
+};
 
 interface MockResponse {
   body: unknown;
+  locals: Record<string, unknown>;
   statusCode: number | null;
   status(code: number): MockResponse;
   json(body: unknown): MockResponse;
@@ -17,84 +33,66 @@ interface MockResponse {
 
 const createResponse = (): MockResponse => ({
   body: null,
+  locals: { userId: message.senderId },
   statusCode: null,
-
   status(code) {
     this.statusCode = code;
     return this;
   },
-
   json(body) {
     this.body = body;
     return this;
   },
 });
 
+const createService = (
+  overrides: Partial<MessageService> = {},
+): MessageService => ({
+  list: async () => ({ messages: [], nextCursor: null }),
+  create: async () => message,
+  update: async () => message,
+  delete: async () => undefined,
+  ...overrides,
+});
+
 describe("messageController", () => {
-  test("sends created messages and broadcasts once", async () => {
-    const created: MessageRecord = {
-      _id: "message-1",
-      name: "Ramy",
-      message: "Hello",
-    };
-    const service: MessageService = {
-      getAllMessages: async () => [],
-      createMessage: async () => created,
-    };
-    const broadcastedMessages: MessageRecord[] = [];
-    const broadcaster: MessageBroadcaster = {
-      broadcastMessage(message) {
-        broadcastedMessages.push(message);
-      },
-    };
-    const controller = createMessageController(service, broadcaster);
+  test("returns the created conversation message", async () => {
+    const controller = createMessageController(createService());
     const req = {
-      body: {
-        name: "Ramy",
-        message: "Hello",
-      },
-    } as Request;
+      body: { content: "Hello" },
+      params: { conversationId: message.conversationId },
+    } as unknown as Request;
     const res = createResponse();
-    const next: NextFunction = (err?: unknown) => {
-      throw err instanceof Error ? err : new Error("Unexpected next call");
+    const next: NextFunction = (error?: unknown) => {
+      if (error instanceof Error) throw error;
+      if (error !== undefined) throw new Error("Unexpected non-error value");
     };
 
-    await controller.createMessage(req, res as unknown as Response, next);
+    await controller.create(req, res as unknown as Response, next);
 
     assert.equal(res.statusCode, 201);
-    assert.equal(res.body, created);
-    assert.deepEqual(broadcastedMessages, [created]);
+    assert.deepEqual(res.body, { message });
   });
 
-  test("passes create failures to the async error pipeline without broadcasting", async () => {
+  test("passes service failures to the error pipeline", async () => {
     const failure = new Error("Repository failed");
-    const service: MessageService = {
-      getAllMessages: async () => [],
-      createMessage: async () => {
-        throw failure;
-      },
-    };
-    let broadcastCount = 0;
-    const broadcaster: MessageBroadcaster = {
-      broadcastMessage() {
-        broadcastCount += 1;
-      },
-    };
-    const controller = createMessageController(service, broadcaster);
+    const controller = createMessageController(
+      createService({
+        create: async () => {
+          throw failure;
+        },
+      }),
+    );
     const req = {
-      body: {
-        name: "Ramy",
-        message: "Hello",
-      },
-    } as Request;
+      body: { content: "Hello" },
+      params: { conversationId: message.conversationId },
+    } as unknown as Request;
     const res = createResponse();
     const nextError = await new Promise<unknown>((resolve) => {
-      controller.createMessage(req, res as unknown as Response, resolve);
+      controller.create(req, res as unknown as Response, resolve);
     });
 
     assert.equal(nextError, failure);
-    assert.equal(broadcastCount, 0);
     assert.equal(res.statusCode, null);
-    assert.equal(res.body, null);
   });
 });

@@ -26,6 +26,7 @@ import createMongooseOrganizationUnitOfWork, {
 } from "../src/modules/organizations/organization.unit-of-work.js";
 import type { UserRepository } from "../src/modules/user/user.repository.js";
 import { UserStatus, type PublicUser } from "../src/modules/user/user.types.js";
+import { emptyCommunicationContext } from "./unitOfWorkContext.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const invitedUserId = "507f1f77bcf86cd799439099";
@@ -79,6 +80,7 @@ const users: UserRepository = {
   findPasswordUserByEmail: async () => null,
   findPublicByEmail: async () => invitedUser,
   findPublicById: async () => invitedUser,
+  findPublicByIds: async () => [invitedUser],
   linkGoogleProvider: async () => invitedUser,
   touchPasswordProvider: async () => undefined,
   useGoogleProvider: async () => invitedUser,
@@ -112,10 +114,12 @@ describe("organization transactions", () => {
             },
             findForUser: async () => null,
             listForUser: async () => [],
+            listForOrganization: async () => [],
             deleteForOrganization: async () => 0,
           };
 
           return work({
+            ...emptyCommunicationContext,
             organizations: createMongooseOrganizationRepository(session),
             memberships: failingMemberships,
             invitations: createMongooseInvitationRepository(session),
@@ -147,6 +151,7 @@ describe("organization transactions", () => {
           const organizations = createMongooseOrganizationRepository(session);
 
           return work({
+            ...emptyCommunicationContext,
             organizations: {
               ...organizations,
               deleteById: async () => {
@@ -208,6 +213,7 @@ describe("organization transactions", () => {
           const invitations = createMongooseInvitationRepository(session);
 
           return work({
+            ...emptyCommunicationContext,
             organizations: createMongooseOrganizationRepository(session),
             memberships: createMembershipService(
               createMongooseMembershipRepository(session),
@@ -251,6 +257,7 @@ describe("organization transactions", () => {
           const invitations = createMongooseInvitationRepository(session);
 
           return work({
+            ...emptyCommunicationContext,
             organizations: createMongooseOrganizationRepository(session),
             memberships: createMembershipService(
               createMongooseMembershipRepository(session),

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { jwtVerify, SignJWT } from "jose";
+import { decodeJwt, jwtVerify, SignJWT } from "jose";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
 import type { AccessTokenManager } from "./auth.types.js";
@@ -21,6 +21,10 @@ export const createJwtAccessTokenManager = ({
   const key = new TextEncoder().encode(secret);
 
   return {
+    getExpiration(token) {
+      return decodeJwt(token).exp ?? null;
+    },
+
     sign(userId) {
       return new SignJWT({ type: "access" })
         .setProtectedHeader({ alg: "HS256" })

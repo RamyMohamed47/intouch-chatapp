@@ -316,19 +316,92 @@ paths:
     get:
       tags: [Categories]
       summary: List categories
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CategoryListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
     post:
       tags: [Categories]
       summary: Create category
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        $ref: "#/components/requestBodies/CreateCategoryRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/CategoryResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /organizations/{organizationId}/categories/{categoryId}:
     patch:
       tags: [Categories]
       summary: Update category
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/CategoryId"
+      requestBody:
+        $ref: "#/components/requestBodies/UpdateCategoryRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/CategoryResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
     delete:
       tags: [Categories]
       summary: Delete category
+      description: A category containing channels cannot be deleted.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/CategoryId"
+      responses:
+        "204":
+          description: Category deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /organizations/{organizationId}/members:
+    get:
+      tags: [Memberships]
+      summary: List organization members for participant selection
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/OrganizationMemberListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   #
   # Conversations
@@ -338,23 +411,151 @@ paths:
     get:
       tags: [Conversations]
       summary: List conversations
+      description: Returns public channels and private channels available to the caller.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            pattern: "^[a-fA-F0-9]{24}$"
+      responses:
+        "200":
+          $ref: "#/components/responses/ConversationListResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
     post:
       tags: [Conversations]
-      summary: Create conversation
+      summary: Create channel conversation
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        $ref: "#/components/requestBodies/CreateConversationRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/ConversationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /conversations/{conversationId}:
     get:
       tags: [Conversations]
       summary: Get conversation
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/ConversationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
     patch:
       tags: [Conversations]
       summary: Update conversation
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        $ref: "#/components/requestBodies/UpdateConversationRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ConversationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
     delete:
       tags: [Conversations]
       summary: Delete conversation
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "204":
+          description: Conversation and dependent records deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /conversations/{conversationId}/participants:
+    get:
+      tags: [Conversations]
+      summary: List private-channel participants
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/ParticipantListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    post:
+      tags: [Conversations]
+      summary: Add a private-channel participant
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        $ref: "#/components/requestBodies/AddParticipantRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/ParticipantResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /conversations/{conversationId}/participants/{userId}:
+    delete:
+      tags: [Conversations]
+      summary: Remove a private-channel participant
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Participant removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   #
   # Messages
@@ -364,19 +565,83 @@ paths:
     get:
       tags: [Messages]
       summary: Get message history
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - name: before
+          in: query
+          schema:
+            type: string
+            pattern: "^[a-fA-F0-9]{24}$"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageListResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
     post:
       tags: [Messages]
       summary: Create message
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        $ref: "#/components/requestBodies/CreateMessageRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/MessageResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /messages/{messageId}:
     patch:
       tags: [Messages]
       summary: Edit message
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      requestBody:
+        $ref: "#/components/requestBodies/UpdateMessageRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
     delete:
       tags: [Messages]
       summary: Delete message
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      responses:
+        "204":
+          description: Message redacted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
 
@@ -421,6 +686,7 @@ components:
       required: true
       schema:
         type: string
+        pattern: "^[a-fA-F0-9]{24}$"
 
     InvitationId:
       name: invitationId
@@ -436,6 +702,7 @@ components:
       required: true
       schema:
         type: string
+        pattern: "^[a-fA-F0-9]{24}$"
 
     CategoryId:
       name: categoryId
@@ -443,6 +710,15 @@ components:
       required: true
       schema:
         type: string
+        pattern: "^[a-fA-F0-9]{24}$"
+
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-fA-F0-9]{24}$"
 
     MemberId:
       name: memberId
@@ -457,6 +733,7 @@ components:
       required: true
       schema:
         type: string
+        pattern: "^[a-fA-F0-9]{24}$"
 
   requestBodies:
 
@@ -499,6 +776,62 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/InviteMemberInput"
+
+    CreateCategoryRequest:
+      description: Defined by the shared category contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateCategoryInput"
+
+    UpdateCategoryRequest:
+      description: Defined by the shared category contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateCategoryInput"
+
+    CreateConversationRequest:
+      description: Defined by the shared conversation contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateConversationInput"
+
+    UpdateConversationRequest:
+      description: Defined by the shared conversation contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateConversationInput"
+
+    AddParticipantRequest:
+      description: Defined by the shared conversation contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AddParticipantInput"
+
+    CreateMessageRequest:
+      description: Defined by the shared message contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MessageContentInput"
+
+    UpdateMessageRequest:
+      description: Defined by the shared message contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MessageContentInput"
 
   responses:
 
@@ -627,6 +960,119 @@ components:
                 items:
                   $ref: "#/components/schemas/Invitation"
 
+    CategoryResponse:
+      description: Category returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [category]
+            properties:
+              category:
+                $ref: "#/components/schemas/Category"
+
+    CategoryListResponse:
+      description: Ordered category list.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [categories]
+            properties:
+              categories:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+
+    ConversationResponse:
+      description: Conversation returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [conversation]
+            properties:
+              conversation:
+                $ref: "#/components/schemas/Conversation"
+
+    ConversationListResponse:
+      description: Accessible conversation list.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [conversations]
+            properties:
+              conversations:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+
+    OrganizationMemberListResponse:
+      description: Organization member list.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [members]
+            properties:
+              members:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrganizationMember"
+
+    ParticipantResponse:
+      description: Conversation participant returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [participant]
+            properties:
+              participant:
+                $ref: "#/components/schemas/ConversationParticipant"
+
+    ParticipantListResponse:
+      description: Private-channel participant list.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [participants]
+            properties:
+              participants:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConversationParticipantView"
+
+    MessageResponse:
+      description: Message returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message]
+            properties:
+              message:
+                $ref: "#/components/schemas/Message"
+
+    MessageListResponse:
+      description: Cursor-paginated message history, newest first.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [messages, nextCursor]
+            properties:
+              messages:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+              nextCursor:
+                oneOf:
+                  - type: string
+                  - type: "null"
+
     ValidationError:
       description: Validation failed.
       content:
@@ -684,6 +1130,228 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
+
+    CreateCategoryInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    UpdateCategoryInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        position:
+          type: integer
+          minimum: 0
+
+    Category:
+      type: object
+      required: [id, organizationId, name, position, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        name:
+          type: string
+        position:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateConversationInput:
+      type: object
+      additionalProperties: false
+      required: [categoryId, name]
+      properties:
+        categoryId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        visibility:
+          type: string
+          enum: [PUBLIC, PRIVATE]
+          default: PUBLIC
+
+    UpdateConversationInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        categoryId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        visibility:
+          type: string
+          enum: [PUBLIC, PRIVATE]
+        position:
+          type: integer
+          minimum: 0
+
+    Conversation:
+      type: object
+      required:
+        [id, organizationId, categoryId, name, type, visibility, position, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        categoryId:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          const: CHANNEL
+        visibility:
+          type: string
+          enum: [PUBLIC, PRIVATE]
+        position:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AddParticipantInput:
+      type: object
+      additionalProperties: false
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+
+    ConversationParticipant:
+      type: object
+      required:
+        [id, organizationId, conversationId, userId, addedByUserId, joinedAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        conversationId:
+          type: string
+        userId:
+          type: string
+        addedByUserId:
+          type: string
+        joinedAt:
+          type: string
+          format: date-time
+
+    ConversationParticipantView:
+      allOf:
+        - $ref: "#/components/schemas/ConversationParticipant"
+        - type: object
+          required: [user]
+          properties:
+            user:
+              $ref: "#/components/schemas/MemberUser"
+
+    MemberUser:
+      type: object
+      required: [id, username, displayName, status]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [ONLINE, OFFLINE]
+
+    OrganizationMember:
+      type: object
+      required: [membershipId, role, joinedAt, user]
+      properties:
+        membershipId:
+          type: string
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+        joinedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/MemberUser"
+
+    MessageContentInput:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 4000
+
+    Message:
+      type: object
+      required:
+        [id, conversationId, senderId, content, messageType, editedAt, deletedAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        conversationId:
+          type: string
+        senderId:
+          type: string
+        content:
+          oneOf:
+            - type: string
+            - type: "null"
+        messageType:
+          type: string
+          const: TEXT
+        editedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        deletedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     InviteMemberInput:
       type: object

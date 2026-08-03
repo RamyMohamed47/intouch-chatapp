@@ -37,6 +37,7 @@ export interface UserRepository {
   findPasswordUserByEmail(email: string): Promise<PasswordUser | null>;
   findPublicByEmail(email: string): Promise<PublicUser | null>;
   findPublicById(userId: string): Promise<PublicUser | null>;
+  findPublicByIds(userIds: readonly string[]): Promise<PublicUser[]>;
   linkGoogleProvider(
     userId: string,
     providerAccountId: string,
@@ -176,6 +177,18 @@ const createMongooseUserRepository = (): UserRepository => ({
     const user = await UserModel.findById(userId).lean<UserRecord>().exec();
 
     return user ? toPublicUser(user) : null;
+  },
+
+  async findPublicByIds(userIds) {
+    if (userIds.length === 0) {
+      return [];
+    }
+
+    const users = await UserModel.find({ _id: { $in: userIds } })
+      .lean<UserRecord[]>()
+      .exec();
+
+    return users.map(toPublicUser);
   },
 
   async linkGoogleProvider(userId, providerAccountId, usedAt) {

@@ -72,7 +72,11 @@ const createAuthModule = (config: AuthModuleConfig) => {
       : { rateLimitsEnabled: config.rateLimitsEnabled }),
   });
 
-  return { requireAccessToken: middleware.requireAccessToken, router };
+  return {
+    accessTokens,
+    requireAccessToken: middleware.requireAccessToken,
+    router,
+  };
 };
 
 export default createAuthModule;

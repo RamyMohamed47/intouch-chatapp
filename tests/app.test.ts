@@ -191,16 +191,9 @@ describe("app", () => {
     });
   });
 
-  test("mounts the messages resource under the versioned API", async () => {
-    const response = await fetch(`${baseUrl}/api/v1/messages`, {
-      method: "OPTIONS",
-    });
-    const allowedMethods = response.headers.get("allow");
-
-    assert.equal(response.status, 200);
-    assert.ok(allowedMethods);
-    assert.match(allowedMethods, /GET/);
-    assert.match(allowedMethods, /POST/);
+  test("removes the prototype collection-wide messages resource", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/messages`);
+    assert.equal(response.status, 404);
   });
 
   test("serves the Socket.IO client script without falling through to Express", async () => {

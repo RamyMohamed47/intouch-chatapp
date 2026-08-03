@@ -26,6 +26,7 @@ export interface MembershipRepository {
     organizationId: string,
   ): Promise<MembershipRecord | null>;
   findByUser(userId: string): Promise<MembershipRecord[]>;
+  findByOrganization(organizationId: string): Promise<MembershipRecord[]>;
   deleteByOrganizationId(organizationId: string): Promise<number>;
 }
 
@@ -95,6 +96,18 @@ const createMongooseMembershipRepository = (
 
     const memberships = await query.exec();
     return memberships.map(toMembershipRecord);
+  },
+
+  async findByOrganization(organizationId) {
+    const query = MembershipModel.find({ organizationId })
+      .sort({ joinedAt: 1, _id: 1 })
+      .lean<MembershipDocument[]>();
+
+    if (session) {
+      query.session(session);
+    }
+
+    return (await query.exec()).map(toMembershipRecord);
   },
 
   async deleteByOrganizationId(organizationId) {

@@ -2,7 +2,7 @@ import http from "node:http";
 import { Server } from "socket.io";
 
 import createApp from "./app.js";
-import createSocketMessageBroadcaster from "./broadcasting/messageBroadcaster.js";
+import createSocketRealtimeGateway from "./broadcasting/socketRealtimeGateway.js";
 import { loadConfig, loadEnvFile } from "./config/env.js";
 import connectDatabase, { disconnectDatabase } from "./config/database.js";
 import { getLogger } from "./config/logger.js";
@@ -133,7 +133,7 @@ process.once("SIGINT", () => {
 });
 
 const config = loadConfig();
-const messageBroadcaster = createSocketMessageBroadcaster();
+const realtimeGateway = createSocketRealtimeGateway();
 const auth = createAuthModule({
   accessTokenSecret: config.accessTokenSecret,
   accessTokenIssuer: config.accessTokenIssuer,
@@ -157,14 +157,20 @@ const auth = createAuthModule({
   },
 });
 const organizations = createOrganizationModule({
+  conversationRealtime: realtimeGateway,
+  messageBroadcaster: realtimeGateway,
   requireAccessToken: auth.requireAccessToken,
 });
 const app = createApp({
   allowedOrigins: config.clientOrigins,
   authRouter: auth.router,
+  categoryRouter: organizations.categoryRouter,
+  conversationMessageRouter: organizations.conversationMessageRouter,
+  conversationRouter: organizations.conversationRouter,
   invitationRouter: organizations.invitationRouter,
-  messageBroadcaster,
+  messageRouter: organizations.messageRouter,
   organizationAccessRouter: organizations.accessRouter,
+  organizationConversationRouter: organizations.organizationConversationRouter,
   organizationRouter: organizations.router,
   trustProxy: config.trustProxy,
 });
@@ -174,12 +180,22 @@ const io = new Server<
   ServerToClientEvents,
   InterServerEvents,
   SocketData
->(server);
+>(server, {
+  cors: {
+    credentials: true,
+    origin: [...config.clientOrigins],
+  },
+});
 resources.server = server;
 resources.io = io;
 
-messageBroadcaster.setSocketServer(io);
-configureSocket(io, logger);
+realtimeGateway.setSocketServer(io);
+configureSocket(
+  io,
+  auth.accessTokens,
+  organizations.conversationService,
+  logger,
+);
 
 try {
   await connectDatabase(config.databaseUri, logger);

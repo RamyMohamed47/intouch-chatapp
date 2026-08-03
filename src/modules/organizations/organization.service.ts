@@ -10,6 +10,7 @@ import {
   type MembershipRecord,
   type MembershipService,
 } from "../memberships/index.js";
+import type { ConversationRealtime } from "../conversations/conversation.realtime.js";
 import {
   OrganizationConflictError,
   OrganizationNotFoundError,
@@ -35,6 +36,7 @@ export interface OrganizationServiceDependencies {
   policy: OrganizationPolicy;
   createSlugSuffix?: () => string;
   maxSlugAttempts?: number;
+  realtime?: ConversationRealtime;
 }
 
 const normalizeSlug = (name: string) => {
@@ -80,6 +82,7 @@ const createOrganizationService = ({
   policy,
   createSlugSuffix = defaultCreateSlugSuffix,
   maxSlugAttempts = DEFAULT_MAX_SLUG_ATTEMPTS,
+  realtime,
 }: OrganizationServiceDependencies) => ({
   async create(userId: string, input: CreateOrganizationInput) {
     const baseSlug = normalizeSlug(input.name);
@@ -175,6 +178,7 @@ const createOrganizationService = ({
   },
 
   async delete(userId: string, organizationId: string) {
+    let deletedConversationIds: string[] = [];
     await unitOfWork.run(async (context) => {
       const organization = await context.organizations.findById(organizationId);
       const membership = await context.memberships.findForUser(
@@ -183,6 +187,15 @@ const createOrganizationService = ({
       );
       policy.assertOwner(organization, membership);
 
+      const conversationIds =
+        await context.conversations.listIdsByOrganization(organizationId);
+      deletedConversationIds = conversationIds;
+      await context.messages.deleteByConversationIds(conversationIds);
+      await context.conversationParticipants.deleteByOrganizationId(
+        organizationId,
+      );
+      await context.conversations.deleteByOrganizationId(organizationId);
+      await context.categories.deleteByOrganizationId(organizationId);
       await context.memberships.deleteForOrganization(organizationId);
       await context.invitations.deleteByOrganizationId(organizationId);
       const deleted = await context.organizations.deleteById(organizationId);
@@ -191,6 +204,13 @@ const createOrganizationService = ({
         throw new OrganizationNotFoundError();
       }
     });
+    if (realtime) {
+      await Promise.all(
+        deletedConversationIds.map((conversationId) =>
+          realtime.closeConversation(conversationId),
+        ),
+      );
+    }
   },
 });
 

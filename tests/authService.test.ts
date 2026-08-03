@@ -82,6 +82,7 @@ const createHarness = () => {
     findPasswordUserByEmail: async () => passwordUser,
     findPublicByEmail: async () => emailUser,
     findPublicById: async (userId) => (userId === user.id ? user : null),
+    findPublicByIds: async () => [user],
     linkGoogleProvider: async (userId, providerAccountId, usedAt) => {
       linkedGoogleProvider = { userId, providerAccountId, usedAt };
       return linkGoogleResult;

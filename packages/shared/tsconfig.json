@@ -5,7 +5,10 @@
   },
   "include": [
     "auth/**/*.ts",
+    "categories/**/*.ts",
+    "conversations/**/*.ts",
     "memberships/**/*.ts",
+    "messages/**/*.ts",
     "organizations/**/*.ts",
     "tests/**/*.ts"
   ]

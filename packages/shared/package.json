@@ -15,6 +15,18 @@
     "./memberships": {
       "types": "./dist/memberships/index.d.ts",
       "import": "./dist/memberships/index.js"
+    },
+    "./categories": {
+      "types": "./dist/categories/index.d.ts",
+      "import": "./dist/categories/index.js"
+    },
+    "./conversations": {
+      "types": "./dist/conversations/index.d.ts",
+      "import": "./dist/conversations/index.js"
+    },
+    "./messages": {
+      "types": "./dist/messages/index.d.ts",
+      "import": "./dist/messages/index.js"
     }
   },
   "scripts": {

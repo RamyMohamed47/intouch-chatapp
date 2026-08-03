@@ -1,16 +1,53 @@
-import express from "express";
+import express, { type RequestHandler } from "express";
 
+import {
+  validateBody,
+  validateParams,
+  validateQuery,
+} from "../../middleware/validateRequest.js";
 import type { MessageController } from "./message.controller.js";
+import {
+  conversationMessagesParamsSchema,
+  createMessageSchema,
+  messageHistoryQuerySchema,
+  messageParamsSchema,
+  updateMessageSchema,
+} from "./message.schemas.js";
 
-const createMessageRouter = (messageController: MessageController) => {
+export const createConversationMessageRouter = (
+  controller: MessageController,
+  requireAccessToken: RequestHandler,
+) => {
   const router = express.Router();
-
+  router.use(requireAccessToken);
   router
-    .route("/")
-    .get(messageController.getAllMessages)
-    .post(messageController.createMessage);
-
+    .route("/:conversationId/messages")
+    .get(
+      validateParams(conversationMessagesParamsSchema),
+      validateQuery(messageHistoryQuerySchema),
+      controller.list,
+    )
+    .post(
+      validateParams(conversationMessagesParamsSchema),
+      validateBody(createMessageSchema),
+      controller.create,
+    );
   return router;
 };
 
-export default createMessageRouter;
+export const createMessageRouter = (
+  controller: MessageController,
+  requireAccessToken: RequestHandler,
+) => {
+  const router = express.Router();
+  router.use(requireAccessToken);
+  router
+    .route("/:messageId")
+    .patch(
+      validateParams(messageParamsSchema),
+      validateBody(updateMessageSchema),
+      controller.update,
+    )
+    .delete(validateParams(messageParamsSchema), controller.delete);
+  return router;
+};

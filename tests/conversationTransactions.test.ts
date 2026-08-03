@@ -1,0 +1,285 @@
+import assert from "node:assert/strict";
+import { after, before, beforeEach, describe, test } from "node:test";
+
+import { ConversationVisibility } from "@intouch/shared/conversations";
+import { OrganizationVisibility } from "@intouch/shared/organizations";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
+import mongoose from "mongoose";
+
+import CategoryModel from "../src/modules/categories/category.model.js";
+import createMongooseCategoryRepository from "../src/modules/categories/category.repository.js";
+import createCategoryService from "../src/modules/categories/category.service.js";
+import ConversationParticipantModel from "../src/modules/conversations/conversation-participant.model.js";
+import createMongooseConversationParticipantRepository from "../src/modules/conversations/conversation-participant.repository.js";
+import ConversationModel from "../src/modules/conversations/conversation.model.js";
+import createConversationPolicy from "../src/modules/conversations/conversation.policy.js";
+import { createNoopConversationRealtime } from "../src/modules/conversations/conversation.realtime.js";
+import createMongooseConversationRepository from "../src/modules/conversations/conversation.repository.js";
+import createConversationService from "../src/modules/conversations/conversation.service.js";
+import createMongooseInvitationRepository from "../src/modules/invitations/invitation.repository.js";
+import MembershipModel from "../src/modules/memberships/membership.model.js";
+import createMongooseMembershipRepository from "../src/modules/memberships/membership.repository.js";
+import createMembershipService from "../src/modules/memberships/membership.service.js";
+import MessageModel from "../src/modules/message/message.model.js";
+import createMongooseMessageRepository from "../src/modules/message/message.repository.js";
+import { MessageType } from "../src/modules/message/message.types.js";
+import OrganizationModel from "../src/modules/organizations/organization.model.js";
+import createOrganizationPolicy from "../src/modules/organizations/organization.policy.js";
+import createMongooseOrganizationRepository from "../src/modules/organizations/organization.repository.js";
+import createOrganizationService from "../src/modules/organizations/organization.service.js";
+import createMongooseOrganizationUnitOfWork, {
+  type OrganizationUnitOfWork,
+} from "../src/modules/organizations/organization.unit-of-work.js";
+import createMongooseUserRepository from "../src/modules/user/user.repository.js";
+
+const ownerId = "507f1f77bcf86cd799439011";
+const memberId = "507f1f77bcf86cd799439012";
+let replicaSet: MongoMemoryReplSet;
+
+before(async () => {
+  replicaSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+  await mongoose.connect(replicaSet.getUri("intouch-conversations"));
+  await Promise.all([
+    OrganizationModel.syncIndexes(),
+    MembershipModel.syncIndexes(),
+    CategoryModel.syncIndexes(),
+    ConversationModel.syncIndexes(),
+    ConversationParticipantModel.syncIndexes(),
+    MessageModel.syncIndexes(),
+  ]);
+});
+
+beforeEach(async () => {
+  await Promise.all([
+    OrganizationModel.deleteMany({}).exec(),
+    MembershipModel.deleteMany({}).exec(),
+    CategoryModel.deleteMany({}).exec(),
+    ConversationModel.deleteMany({}).exec(),
+    ConversationParticipantModel.deleteMany({}).exec(),
+    MessageModel.deleteMany({}).exec(),
+  ]);
+});
+
+after(async () => {
+  await mongoose.disconnect();
+  await replicaSet.stop();
+});
+
+const createHarness = (unitOfWork = createMongooseOrganizationUnitOfWork()) => {
+  const organizations = createMongooseOrganizationRepository();
+  const memberships = createMembershipService(
+    createMongooseMembershipRepository(),
+  );
+  const categories = createMongooseCategoryRepository();
+  const conversations = createMongooseConversationRepository();
+  const participants = createMongooseConversationParticipantRepository();
+  const organizationPolicy = createOrganizationPolicy();
+  return {
+    organizationService: createOrganizationService({
+      organizations,
+      memberships,
+      unitOfWork,
+      policy: organizationPolicy,
+    }),
+    categoryService: createCategoryService({
+      categories,
+      memberships,
+      organizations,
+      policy: organizationPolicy,
+      unitOfWork,
+    }),
+    conversationService: createConversationService({
+      categories,
+      conversations,
+      memberships,
+      organizations,
+      participants,
+      policy: createConversationPolicy(),
+      organizationPolicy,
+      realtime: createNoopConversationRealtime(),
+      unitOfWork,
+      users: createMongooseUserRepository(),
+    }),
+    memberships,
+  };
+};
+
+const createOrganizationAndCategory = async () => {
+  const harness = createHarness();
+  const organization = await harness.organizationService.create(ownerId, {
+    name: "Product Team",
+    visibility: OrganizationVisibility.PRIVATE,
+  });
+  const category = await harness.categoryService.create(
+    ownerId,
+    organization.id,
+    { name: "Product" },
+  );
+  return { ...harness, category, organization };
+};
+
+describe("category and conversation transactions", () => {
+  test("creates a private channel and owner participant atomically", async () => {
+    const { category, conversationService, organization } =
+      await createOrganizationAndCategory();
+    const conversation = await conversationService.create(
+      ownerId,
+      organization.id,
+      {
+        categoryId: category.id,
+        name: "Leadership",
+        visibility: ConversationVisibility.PRIVATE,
+      },
+    );
+    assert.equal(conversation.position, 0);
+    assert.equal(await ConversationModel.countDocuments(), 1);
+    assert.equal(await ConversationParticipantModel.countDocuments(), 1);
+  });
+
+  test("rolls back a private channel when owner participation fails", async () => {
+    const base = await createOrganizationAndCategory();
+    const failingUnitOfWork: OrganizationUnitOfWork = {
+      run: (work) =>
+        mongoose.connection.transaction((session) => {
+          const participantRepository =
+            createMongooseConversationParticipantRepository(session);
+          return work({
+            categories: createMongooseCategoryRepository(session),
+            conversations: createMongooseConversationRepository(session),
+            conversationParticipants: {
+              ...participantRepository,
+              create: async () => {
+                throw new Error("forced participant failure");
+              },
+            },
+            invitations: createMongooseInvitationRepository(session),
+            memberships: createMembershipService(
+              createMongooseMembershipRepository(session),
+            ),
+            messages: createMongooseMessageRepository(session),
+            organizations: createMongooseOrganizationRepository(session),
+          });
+        }),
+    };
+    const service = createHarness(failingUnitOfWork).conversationService;
+    await assert.rejects(
+      service.create(ownerId, base.organization.id, {
+        categoryId: base.category.id,
+        name: "Rollback",
+        visibility: ConversationVisibility.PRIVATE,
+      }),
+      /forced participant failure/,
+    );
+    assert.equal(await ConversationModel.countDocuments(), 0);
+  });
+
+  test("resets participants across visibility transitions", async () => {
+    const { category, conversationService, memberships, organization } =
+      await createOrganizationAndCategory();
+    await memberships.createMember(memberId, organization.id);
+    const conversation = await conversationService.create(
+      ownerId,
+      organization.id,
+      {
+        categoryId: category.id,
+        name: "Leadership",
+        visibility: ConversationVisibility.PRIVATE,
+      },
+    );
+    await conversationService.addParticipant(
+      ownerId,
+      conversation.id,
+      memberId,
+    );
+    assert.equal(await ConversationParticipantModel.countDocuments(), 2);
+    await conversationService.update(ownerId, conversation.id, {
+      visibility: ConversationVisibility.PUBLIC,
+    });
+    assert.equal(await ConversationParticipantModel.countDocuments(), 0);
+    await conversationService.update(ownerId, conversation.id, {
+      visibility: ConversationVisibility.PRIVATE,
+    });
+    const remaining = await ConversationParticipantModel.find({}).lean().exec();
+    assert.equal(remaining.length, 1);
+    assert.equal(remaining[0]?.userId.toString(), ownerId);
+  });
+
+  test("rejects nonempty category deletion and cascades channel messages", async () => {
+    const { category, categoryService, conversationService, organization } =
+      await createOrganizationAndCategory();
+    const conversation = await conversationService.create(
+      ownerId,
+      organization.id,
+      {
+        categoryId: category.id,
+        name: "General",
+        visibility: ConversationVisibility.PUBLIC,
+      },
+    );
+    await createMongooseMessageRepository().create({
+      conversationId: conversation.id,
+      senderId: ownerId,
+      content: "hello",
+      messageType: MessageType.TEXT,
+    });
+    await assert.rejects(
+      categoryService.delete(ownerId, organization.id, category.id),
+      /Category must be empty/,
+    );
+    await conversationService.delete(ownerId, conversation.id);
+    assert.equal(await MessageModel.countDocuments(), 0);
+    await categoryService.delete(ownerId, organization.id, category.id);
+    assert.equal(await CategoryModel.countDocuments(), 0);
+  });
+
+  test("reorders categories transactionally", async () => {
+    const { category, categoryService, organization } =
+      await createOrganizationAndCategory();
+    const second = await categoryService.create(ownerId, organization.id, {
+      name: "Engineering",
+    });
+    const moved = await categoryService.update(
+      ownerId,
+      organization.id,
+      second.id,
+      { position: 0 },
+    );
+    const categories = await categoryService.list(ownerId, organization.id);
+    assert.equal(moved.position, 0);
+    assert.deepEqual(
+      categories.map(({ id, position }) => ({ id, position })),
+      [
+        { id: second.id, position: 0 },
+        { id: category.id, position: 1 },
+      ],
+    );
+  });
+
+  test("deletes communication data with its organization", async () => {
+    const { category, conversationService, organization, organizationService } =
+      await createOrganizationAndCategory();
+    const conversation = await conversationService.create(
+      ownerId,
+      organization.id,
+      {
+        categoryId: category.id,
+        name: "Private",
+        visibility: ConversationVisibility.PRIVATE,
+      },
+    );
+    await createMongooseMessageRepository().create({
+      conversationId: conversation.id,
+      senderId: ownerId,
+      content: "temporary",
+      messageType: MessageType.TEXT,
+    });
+
+    await organizationService.delete(ownerId, organization.id);
+
+    assert.equal(await OrganizationModel.countDocuments(), 0);
+    assert.equal(await CategoryModel.countDocuments(), 0);
+    assert.equal(await ConversationModel.countDocuments(), 0);
+    assert.equal(await ConversationParticipantModel.countDocuments(), 0);
+    assert.equal(await MessageModel.countDocuments(), 0);
+  });
+});

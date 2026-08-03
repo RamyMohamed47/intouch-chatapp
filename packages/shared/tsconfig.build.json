@@ -7,6 +7,13 @@
     "outDir": "dist",
     "sourceMap": true
   },
-  "include": ["auth/**/*.ts", "memberships/**/*.ts", "organizations/**/*.ts"],
+  "include": [
+    "auth/**/*.ts",
+    "categories/**/*.ts",
+    "conversations/**/*.ts",
+    "memberships/**/*.ts",
+    "messages/**/*.ts",
+    "organizations/**/*.ts"
+  ],
   "exclude": ["tests/**/*.ts"]
 }

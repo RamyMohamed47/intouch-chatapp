@@ -16,6 +16,7 @@ import createOrganizationPolicy from "../src/modules/organizations/organization.
 import type { OrganizationRepository } from "../src/modules/organizations/organization.repository.js";
 import type { OrganizationRecord } from "../src/modules/organizations/organization.types.js";
 import type { OrganizationUnitOfWork } from "../src/modules/organizations/organization.unit-of-work.js";
+import { emptyCommunicationContext } from "./unitOfWorkContext.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const organizationId = "507f1f77bcf86cd799439012";
@@ -54,6 +55,7 @@ const createService = (
     }),
     findForUser: async () => existingMembership,
     listForUser: async () => [],
+    listForOrganization: async () => [],
     deleteForOrganization: async () => 0,
   };
   const invitations: InvitationRepository = {
@@ -72,7 +74,13 @@ const createService = (
     deleteByOrganizationId: async () => 0,
   };
   const unitOfWork: OrganizationUnitOfWork = {
-    run: (work) => work({ organizations, memberships, invitations }),
+    run: (work) =>
+      work({
+        ...emptyCommunicationContext,
+        organizations,
+        memberships,
+        invitations,
+      }),
   };
 
   return {
