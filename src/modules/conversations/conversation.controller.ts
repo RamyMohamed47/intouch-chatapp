@@ -29,7 +29,6 @@ export interface ConversationController {
   getById: RequestHandler;
   update: RequestHandler;
   delete: RequestHandler;
-  listOrganizationMembers: RequestHandler;
   listParticipants: RequestHandler;
   addParticipant: RequestHandler;
   removeParticipant: RequestHandler;
@@ -86,16 +85,6 @@ const createConversationController = (
     const { conversationId } = req.params as unknown as ConversationParams;
     await service.delete(getUserId(res.locals as AuthLocals), conversationId);
     res.status(204).send();
-  }),
-
-  listOrganizationMembers: catchAsync(async (req, res) => {
-    const { organizationId } =
-      req.params as unknown as OrganizationConversationsParams;
-    const members = await service.listOrganizationMembers(
-      getUserId(res.locals as AuthLocals),
-      organizationId,
-    );
-    res.status(200).json({ members });
   }),
 
   listParticipants: catchAsync(async (req, res) => {

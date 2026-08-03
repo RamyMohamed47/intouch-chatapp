@@ -34,9 +34,16 @@ export interface ConversationParticipantRepository {
   listByConversation(
     conversationId: string,
   ): Promise<ConversationParticipantRecord[]>;
+  listByConversationIds(
+    conversationIds: readonly string[],
+  ): Promise<ConversationParticipantRecord[]>;
   listConversationIdsForUser(
     userId: string,
     conversationIds: readonly string[],
+  ): Promise<string[]>;
+  listConversationIdsForUserInOrganization(
+    userId: string,
+    organizationId: string,
   ): Promise<string[]>;
   delete(conversationId: string, userId: string): Promise<boolean>;
   deleteByConversationId(conversationId: string): Promise<number>;
@@ -103,12 +110,33 @@ const createMongooseConversationParticipantRepository = (
     return (await query.exec()).map(toParticipantRecord);
   },
 
+  async listByConversationIds(conversationIds) {
+    if (conversationIds.length === 0) return [];
+    const query = ConversationParticipantModel.find({
+      conversationId: { $in: conversationIds },
+    })
+      .sort({ conversationId: 1, joinedAt: 1, _id: 1 })
+      .lean<ParticipantDocument[]>();
+    if (session) query.session(session);
+    return (await query.exec()).map(toParticipantRecord);
+  },
+
   async listConversationIdsForUser(userId, conversationIds) {
     if (conversationIds.length === 0) return [];
     const query = ConversationParticipantModel.find({
       userId,
       conversationId: { $in: conversationIds },
     })
+      .select("conversationId")
+      .lean<{ conversationId: Types.ObjectId }[]>();
+    if (session) query.session(session);
+    return (await query.exec()).map(({ conversationId }) =>
+      conversationId.toString(),
+    );
+  },
+
+  async listConversationIdsForUserInOrganization(userId, organizationId) {
+    const query = ConversationParticipantModel.find({ userId, organizationId })
       .select("conversationId")
       .lean<{ conversationId: Types.ObjectId }[]>();
     if (session) query.session(session);

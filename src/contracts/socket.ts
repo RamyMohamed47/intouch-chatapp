@@ -1,10 +1,15 @@
 import type { Server } from "socket.io";
 
 import type { MessageRecord } from "../modules/message/message.types.js";
+import type {
+  ConversationSocketInput,
+  OrganizationSocketInput,
+} from "@intouch/shared/realtime";
+import type { PresenceView } from "../modules/presence/presence.types.js";
+import type { ReadReceiptEvent } from "../modules/read-receipts/read-receipt.realtime.js";
+import type { TypingUpdate } from "../modules/typing/typing.realtime.js";
 
-export interface ConversationSocketInput {
-  conversationId: string;
-}
+export type { ConversationSocketInput, OrganizationSocketInput };
 
 export type SocketAcknowledgement = (
   result:
@@ -21,6 +26,22 @@ export interface ClientToServerEvents {
     input: ConversationSocketInput,
     acknowledge: SocketAcknowledgement,
   ) => void;
+  "organization:subscribe": (
+    input: OrganizationSocketInput,
+    acknowledge: SocketAcknowledgement,
+  ) => void;
+  "organization:unsubscribe": (
+    input: OrganizationSocketInput,
+    acknowledge: SocketAcknowledgement,
+  ) => void;
+  "typing:start": (
+    input: ConversationSocketInput,
+    acknowledge: SocketAcknowledgement,
+  ) => void;
+  "typing:stop": (
+    input: ConversationSocketInput,
+    acknowledge: SocketAcknowledgement,
+  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -28,6 +49,9 @@ export interface ServerToClientEvents {
   "message:created": (message: MessageRecord) => void;
   "message:deleted": (message: MessageRecord) => void;
   "message:updated": (message: MessageRecord) => void;
+  "presence:updated": (presence: PresenceView) => void;
+  "typing:updated": (update: TypingUpdate) => void;
+  "read-receipt:updated": (receipt: ReadReceiptEvent) => void;
 }
 
 export type InterServerEvents = Record<string, never>;

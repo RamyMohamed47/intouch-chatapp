@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const ConversationType = {
   CHANNEL: "CHANNEL",
+  DIRECT: "DIRECT",
 } as const;
 
 export const ConversationVisibility = {
@@ -53,6 +54,19 @@ export const listConversationsQuerySchema = z
   })
   .strict();
 
+export const createDirectMessageSchema = z
+  .object({
+    recipientUserId: mongoIdSchema,
+  })
+  .strict();
+
+export const listDirectMessagesQuerySchema = z
+  .object({
+    before: z.string().trim().min(1).max(512).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(30),
+  })
+  .strict();
+
 export type CreateConversationInput = z.infer<typeof createConversationSchema>;
 export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
 export type AddConversationParticipantInput = z.infer<
@@ -60,4 +74,10 @@ export type AddConversationParticipantInput = z.infer<
 >;
 export type ListConversationsQuery = z.infer<
   typeof listConversationsQuerySchema
+>;
+export type CreateDirectMessageInput = z.infer<
+  typeof createDirectMessageSchema
+>;
+export type ListDirectMessagesQuery = z.infer<
+  typeof listDirectMessagesQuerySchema
 >;

@@ -1,3 +1,5 @@
+import type { ClientSession } from "mongoose";
+
 import { AuthSessionModel } from "./auth.model.js";
 
 export interface CreateAuthSessionInput {
@@ -20,18 +22,25 @@ export interface AuthSessionRepository {
   deleteById(sessionId: string): Promise<void>;
 }
 
-const createMongooseAuthSessionRepository = (): AuthSessionRepository => ({
+const createMongooseAuthSessionRepository = (
+  session?: ClientSession,
+): AuthSessionRepository => ({
   async create(input) {
-    await AuthSessionModel.create({
-      _id: input.id,
-      userId: input.userId,
-      tokenHash: input.tokenHash,
-      expiresAt: input.expiresAt,
-    });
+    await AuthSessionModel.create(
+      [
+        {
+          _id: input.id,
+          userId: input.userId,
+          tokenHash: input.tokenHash,
+          expiresAt: input.expiresAt,
+        },
+      ],
+      session ? { session } : {},
+    );
   },
 
   async rotate(input) {
-    const session = await AuthSessionModel.findOneAndUpdate(
+    const query = AuthSessionModel.findOneAndUpdate(
       {
         _id: input.id,
         tokenHash: input.currentTokenHash,
@@ -45,18 +54,21 @@ const createMongooseAuthSessionRepository = (): AuthSessionRepository => ({
       },
     )
       .select("userId")
-      .lean<{ userId: { toString(): string } }>()
-      .exec();
+      .lean<{ userId: { toString(): string } }>();
+    if (session) query.session(session);
+    const authSession = await query.exec();
 
-    if (!session) {
+    if (!authSession) {
       return null;
     }
 
-    return session.userId.toString();
+    return authSession.userId.toString();
   },
 
   async deleteById(sessionId) {
-    await AuthSessionModel.deleteOne({ _id: sessionId }).exec();
+    const query = AuthSessionModel.deleteOne({ _id: sessionId });
+    if (session) query.session(session);
+    await query.exec();
   },
 });
 

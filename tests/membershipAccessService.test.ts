@@ -39,6 +39,7 @@ const createService = (
     create: async () => organization,
     findById: async () => organization,
     findByIds: async () => [organization],
+    lockForMutation: async () => true,
     updateById: async () => organization,
     deleteById: async () => true,
   };

@@ -10,6 +10,7 @@ import { createRefreshTokenManager } from "./auth.refresh-token.js";
 import createMongooseAuthSessionRepository from "./auth.repository.js";
 import createAuthRouter from "./auth.routes.js";
 import createAuthService from "./auth.service.js";
+import createMongooseAuthUnitOfWork from "./auth.unit-of-work.js";
 import type { AuthCookieConfig } from "./auth.types.js";
 
 export interface AuthModuleConfig {
@@ -32,6 +33,7 @@ const createAuthModule = (config: AuthModuleConfig) => {
   const logger = getLogger();
   const users = createMongooseUserRepository();
   const sessions = createMongooseAuthSessionRepository();
+  const unitOfWork = createMongooseAuthUnitOfWork();
   const passwords = createBcryptPasswordHasher();
   const accessTokens = createJwtAccessTokenManager({
     secret: config.accessTokenSecret,
@@ -55,6 +57,7 @@ const createAuthModule = (config: AuthModuleConfig) => {
     accessTokens,
     googleOAuth,
     refreshTokens,
+    unitOfWork,
   });
   const controller = createAuthController(service, config.cookie, {
     frontendRedirectUrl: config.googleOAuth.frontendRedirectUrl,
@@ -90,6 +93,8 @@ export { createBcryptPasswordHasher } from "./auth.password.js";
 export { createGoogleOAuthClient } from "./auth.google.js";
 export { createOAuthStateManager } from "./auth.oauth-state.js";
 export { createRefreshTokenManager } from "./auth.refresh-token.js";
+export { default as createMongooseAuthUnitOfWork } from "./auth.unit-of-work.js";
 export type { AuthController } from "./auth.controller.js";
 export type { AuthMiddleware } from "./auth.middleware.js";
 export type { AuthService } from "./auth.service.js";
+export type { AuthUnitOfWork } from "./auth.unit-of-work.js";

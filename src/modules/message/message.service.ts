@@ -6,8 +6,10 @@ import type {
 
 import type { MessageBroadcaster } from "../../broadcasting/messageBroadcaster.js";
 import type { ConversationService } from "../conversations/conversation.service.js";
+import { ConversationNotFoundError } from "../conversations/conversation.errors.js";
 import type { ConversationPolicy } from "../conversations/conversation.policy.js";
 import type { MembershipService } from "../memberships/index.js";
+import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
 import { MessageNotFoundError } from "./message.errors.js";
 import type { MessageRepository } from "./message.repository.js";
 import { MessageType, type MessagePage } from "./message.types.js";
@@ -18,9 +20,13 @@ export interface MessageServiceDependencies {
     ConversationPolicy,
     "assertMessageDeletable" | "assertMessageEditable"
   >;
-  conversations: Pick<ConversationService, "getAccessible">;
+  conversations: Pick<
+    ConversationService,
+    "getAccessible" | "getAccessibleInContext"
+  >;
   memberships: Pick<MembershipService, "findForUser">;
   messages: MessageRepository;
+  unitOfWork: OrganizationUnitOfWork;
 }
 
 const createMessageService = ({
@@ -29,6 +35,7 @@ const createMessageService = ({
   conversations,
   memberships,
   messages,
+  unitOfWork,
 }: MessageServiceDependencies) => ({
   async list(
     userId: string,
@@ -54,12 +61,34 @@ const createMessageService = ({
     conversationId: string,
     input: CreateMessageInput,
   ) {
-    await conversations.getAccessible(userId, conversationId);
-    const message = await messages.create({
-      conversationId,
-      senderId: userId,
-      content: input.content,
-      messageType: MessageType.TEXT,
+    const message = await unitOfWork.run(async (context) => {
+      const conversation = await conversations.getAccessibleInContext(
+        userId,
+        conversationId,
+        context,
+      );
+      if (
+        !(await context.organizations.lockForMutation(
+          conversation.organizationId,
+        ))
+      ) {
+        throw new ConversationNotFoundError();
+      }
+      const created = await context.messages.create({
+        conversationId,
+        senderId: userId,
+        content: input.content,
+        messageType: MessageType.TEXT,
+      });
+      if (
+        !(await context.conversations.touchActivity(
+          conversationId,
+          created.createdAt,
+        ))
+      ) {
+        throw new ConversationNotFoundError();
+      }
+      return created;
     });
     broadcaster.messageCreated(message);
     return message;
@@ -91,7 +120,12 @@ const createMessageService = ({
       userId,
       conversation.organizationId,
     );
-    conversationPolicy.assertMessageDeletable(existing, userId, membership);
+    conversationPolicy.assertMessageDeletable(
+      existing,
+      conversation,
+      userId,
+      membership,
+    );
     if (existing.deletedAt) return;
     const message = await messages.redact(messageId, new Date());
     if (!message) throw new MessageNotFoundError();

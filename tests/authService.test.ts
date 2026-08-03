@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { InvalidRefreshTokenError } from "../src/modules/auth/auth.errors.js";
 import type { AuthSessionRepository } from "../src/modules/auth/auth.repository.js";
 import createAuthService from "../src/modules/auth/auth.service.js";
+import type { AuthUnitOfWork } from "../src/modules/auth/auth.unit-of-work.js";
 import { createRefreshTokenManager } from "../src/modules/auth/auth.refresh-token.js";
 import type {
   AccessTokenManager,
@@ -18,7 +19,6 @@ import type {
 } from "../src/modules/user/user.repository.js";
 import { UserIdentityConflictError } from "../src/modules/user/user.errors.js";
 import {
-  UserStatus,
   type PasswordUser,
   type PublicUser,
 } from "../src/modules/user/user.types.js";
@@ -29,7 +29,6 @@ const user: PublicUser = {
   username: "ramy_47",
   displayName: "Ramy Mohamed",
   email: "ramy@example.com",
-  status: UserStatus.OFFLINE,
   createdAt: now,
   updatedAt: now,
 };
@@ -83,6 +82,7 @@ const createHarness = () => {
     findPublicByEmail: async () => emailUser,
     findPublicById: async (userId) => (userId === user.id ? user : null),
     findPublicByIds: async () => [user],
+    findLastSeenByIds: async () => [],
     linkGoogleProvider: async (userId, providerAccountId, usedAt) => {
       linkedGoogleProvider = { userId, providerAccountId, usedAt };
       return linkGoogleResult;
@@ -91,6 +91,7 @@ const createHarness = () => {
     useGoogleProvider: async () =>
       googleProviderResults?.shift() ?? googleProviderUser,
     usernameExists: async (username) => existingUsernames.has(username),
+    updateLastSeen: async () => undefined,
   };
   const sessions: AuthSessionRepository = {
     create: async (input) => {
@@ -132,6 +133,9 @@ const createHarness = () => {
     exchangeCode: async () => googleIdentity,
   };
   const refreshTokens = createRefreshTokenManager();
+  const unitOfWork: AuthUnitOfWork = {
+    run: (work) => work({ sessions, users }),
+  };
   const service = createAuthService({
     users,
     sessions,
@@ -139,6 +143,7 @@ const createHarness = () => {
     accessTokens,
     googleOAuth,
     refreshTokens,
+    unitOfWork,
     now: () => now,
     usernameSuffix: () => "deadbeef",
   });

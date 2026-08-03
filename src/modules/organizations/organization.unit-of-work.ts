@@ -20,6 +20,9 @@ import {
 import createMongooseMessageRepository, {
   type MessageRepository,
 } from "../message/message.repository.js";
+import createMongooseConversationReadStateRepository, {
+  type ConversationReadStateRepository,
+} from "../read-receipts/read-receipt.repository.js";
 import createMongooseOrganizationRepository, {
   type OrganizationRepository,
 } from "./organization.repository.js";
@@ -32,6 +35,7 @@ export interface OrganizationWorkContext {
   memberships: MembershipService;
   invitations: InvitationRepository;
   messages: MessageRepository;
+  conversationReadStates: ConversationReadStateRepository;
 }
 
 export interface OrganizationUnitOfWork {
@@ -51,6 +55,8 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
       const conversationParticipants =
         createMongooseConversationParticipantRepository(session);
       const messages = createMongooseMessageRepository(session);
+      const conversationReadStates =
+        createMongooseConversationReadStateRepository(session);
 
       return work({
         categories,
@@ -59,6 +65,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
         invitations,
         memberships,
         messages,
+        conversationReadStates,
         organizations,
       });
     });

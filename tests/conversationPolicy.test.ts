@@ -117,19 +117,66 @@ describe("conversation policy", () => {
       updatedAt: now,
     };
     assert.equal(
-      policy.assertMessageDeletable(message, userId, member),
+      policy.assertMessageDeletable(message, conversation, userId, member),
       message,
     );
     assert.throws(
-      () => policy.assertMessageDeletable(message, "other-user", member),
+      () =>
+        policy.assertMessageDeletable(
+          message,
+          conversation,
+          "other-user",
+          member,
+        ),
       MessageForbiddenError,
     );
     assert.equal(
-      policy.assertMessageDeletable(message, "other-user", {
+      policy.assertMessageDeletable(message, conversation, "other-user", {
         ...member,
         role: MembershipRole.OWNER,
       }),
       message,
+    );
+  });
+
+  test("requires DM participation and never grants owner message moderation", () => {
+    const directConversation: ConversationRecord = {
+      id: "507f1f77bcf86cd799439018",
+      organizationId,
+      type: ConversationType.DIRECT,
+      directParticipantKey: "pair",
+      createdAt: now,
+      updatedAt: now,
+    };
+    const message: MessageRecord = {
+      id: "507f1f77bcf86cd799439019",
+      conversationId: directConversation.id,
+      senderId: "another-user",
+      content: "private",
+      messageType: MessageType.TEXT,
+      editedAt: null,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    assert.throws(
+      () => policy.assertAccessible(directConversation, member, null),
+      ConversationNotFoundError,
+    );
+    assert.equal(
+      policy.assertAccessible(directConversation, member, {
+        ...participant,
+        conversationId: directConversation.id,
+      }),
+      directConversation,
+    );
+    assert.throws(
+      () =>
+        policy.assertMessageDeletable(message, directConversation, userId, {
+          ...member,
+          role: MembershipRole.OWNER,
+        }),
+      MessageForbiddenError,
     );
   });
 });

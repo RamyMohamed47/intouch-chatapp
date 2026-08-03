@@ -4,11 +4,6 @@ export enum AuthProvider {
   GITHUB = "GITHUB",
 }
 
-export enum UserStatus {
-  ONLINE = "ONLINE",
-  OFFLINE = "OFFLINE",
-}
-
 export interface LoginProvider {
   provider: AuthProvider;
   providerAccountId: string;
@@ -23,7 +18,7 @@ export interface User {
   displayName: string;
   email: string;
   avatarUrl?: string;
-  status: UserStatus;
+  lastSeenAt?: Date;
   loginProviders: LoginProvider[];
   createdAt: Date;
   updatedAt: Date;
@@ -35,7 +30,6 @@ export interface PublicUser {
   displayName: string;
   email: string;
   avatarUrl?: string;
-  status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
 }

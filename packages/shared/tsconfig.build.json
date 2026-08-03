@@ -13,7 +13,8 @@
     "conversations/**/*.ts",
     "memberships/**/*.ts",
     "messages/**/*.ts",
-    "organizations/**/*.ts"
+    "organizations/**/*.ts",
+    "realtime/**/*.ts"
   ],
   "exclude": ["tests/**/*.ts"]
 }

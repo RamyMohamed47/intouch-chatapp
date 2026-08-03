@@ -11,6 +11,7 @@ export interface Organization {
   slug: string;
   logoUrl?: string;
   visibility: OrganizationVisibilityType;
+  mutationVersion?: number;
   createdAt: Date;
   updatedAt: Date;
 }

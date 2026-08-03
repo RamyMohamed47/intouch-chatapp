@@ -16,6 +16,7 @@ import {
   MessageType,
   type MessageRecord,
 } from "../src/modules/message/message.types.js";
+import { createTestUnitOfWork } from "./unitOfWorkContext.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const conversationId = "507f1f77bcf86cd799439012";
@@ -76,6 +77,7 @@ const createService = (
     conversationPolicy: createConversationPolicy(),
     conversations: {
       getAccessible: async () => conversation,
+      getAccessibleInContext: async () => conversation,
     },
     memberships: {
       findForUser: async () => ({
@@ -87,6 +89,26 @@ const createService = (
       }),
     },
     messages: repository,
+    unitOfWork: createTestUnitOfWork({
+      conversations: {
+        create: async () => {
+          throw new Error("unused");
+        },
+        findById: async () => conversation,
+        findByIds: async () => [],
+        findDirectByParticipantKey: async () => null,
+        listDirectForParticipant: async () => [],
+        listByOrganization: async () => [],
+        listIdsByOrganization: async () => [],
+        countByCategory: async () => 0,
+        updateById: async () => null,
+        touchActivity: async () => true,
+        shiftPositions: async () => undefined,
+        deleteById: async () => false,
+        deleteByOrganizationId: async () => 0,
+      },
+      messages: repository,
+    }),
   });
 
 describe("messageService", () => {

@@ -22,6 +22,11 @@ const createOrganizationAccessRouter = (
     validateParams(organizationIdParamsSchema),
     membershipController.joinPublic,
   );
+  router.get(
+    "/:id/members",
+    validateParams(organizationIdParamsSchema),
+    membershipController.listMembers,
+  );
   router.post(
     "/:id/invitations",
     validateParams(organizationIdParamsSchema),

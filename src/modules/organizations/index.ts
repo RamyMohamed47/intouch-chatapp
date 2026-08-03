@@ -2,6 +2,11 @@ import type { RequestHandler } from "express";
 
 import type { MessageBroadcaster } from "../../broadcasting/messageBroadcaster.js";
 import {
+  createDirectMessageController,
+  createDirectMessageRouter,
+  createDirectMessageService,
+} from "../direct-messages/index.js";
+import {
   createCategoryController,
   createCategoryRouter,
   createCategoryService,
@@ -26,6 +31,7 @@ import {
 import {
   createMembershipAccessService,
   createMembershipController,
+  createMembershipDirectoryService,
   createMembershipService,
   createMongooseMembershipRepository,
   createOrganizationAccessRouter,
@@ -35,8 +41,20 @@ import {
   createMessageController,
   createMessageRouter,
   createMessageService,
+  createMongooseConversationSummaryRepository,
   createMongooseMessageRepository,
 } from "../message/index.js";
+import {
+  createMongooseConversationReadStateRepository,
+  createReadReceiptController,
+  createReadReceiptRouter,
+  createReadReceiptService,
+  type ReadReceiptRealtime,
+} from "../read-receipts/index.js";
+import {
+  createPresenceService,
+  type PresenceRealtime,
+} from "../presence/index.js";
 import { createMongooseUserRepository } from "../user/index.js";
 import createOrganizationController from "./organization.controller.js";
 import createOrganizationPolicy from "./organization.policy.js";
@@ -48,12 +66,16 @@ import createMongooseOrganizationUnitOfWork from "./organization.unit-of-work.js
 export interface OrganizationModuleDependencies {
   conversationRealtime: ConversationRealtime;
   messageBroadcaster: MessageBroadcaster;
+  presenceRealtime: PresenceRealtime;
+  readReceiptRealtime: ReadReceiptRealtime;
   requireAccessToken: RequestHandler;
 }
 
 const createOrganizationModule = ({
   conversationRealtime,
   messageBroadcaster,
+  presenceRealtime,
+  readReceiptRealtime,
   requireAccessToken,
 }: OrganizationModuleDependencies) => {
   const categories = createMongooseCategoryRepository();
@@ -61,6 +83,9 @@ const createOrganizationModule = ({
   const conversationParticipants =
     createMongooseConversationParticipantRepository();
   const messages = createMongooseMessageRepository();
+  const conversationReadStates =
+    createMongooseConversationReadStateRepository();
+  const conversationSummaries = createMongooseConversationSummaryRepository();
   const organizations = createMongooseOrganizationRepository();
   const invitations = createMongooseInvitationRepository();
   const memberships = createMembershipService(
@@ -70,6 +95,18 @@ const createOrganizationModule = ({
   const unitOfWork = createMongooseOrganizationUnitOfWork();
   const policy = createOrganizationPolicy();
   const conversationPolicy = createConversationPolicy();
+  const presenceService = createPresenceService({
+    memberships,
+    realtime: presenceRealtime,
+    users,
+  });
+  const membershipDirectory = createMembershipDirectoryService({
+    memberships,
+    organizations,
+    policy,
+    presence: presenceService,
+    users,
+  });
   const service = createOrganizationService({
     organizations,
     memberships,
@@ -89,6 +126,7 @@ const createOrganizationModule = ({
     categories,
     conversations,
     memberships,
+    conversationSummaries,
     organizations,
     participants: conversationParticipants,
     policy: conversationPolicy,
@@ -103,11 +141,29 @@ const createOrganizationModule = ({
     conversations: conversationService,
     memberships,
     messages,
+    unitOfWork,
+  });
+  const directMessageService = createDirectMessageService({
+    conversations,
+    memberships,
+    organizations,
+    organizationPolicy: policy,
+    summaries: conversationService,
+    unitOfWork,
+  });
+  const readReceiptService = createReadReceiptService({
+    conversations: conversationService,
+    messages,
+    readStates: conversationReadStates,
+    realtime: readReceiptRealtime,
   });
   const categoryController = createCategoryController(categoryService);
   const conversationController =
     createConversationController(conversationService);
   const messageController = createMessageController(messageService);
+  const directMessageController =
+    createDirectMessageController(directMessageService);
+  const readReceiptController = createReadReceiptController(readReceiptService);
   const invitationService = createInvitationService({
     invitations,
     organizations,
@@ -122,6 +178,7 @@ const createOrganizationModule = ({
   const invitationController = createInvitationController(invitationService);
   const membershipController = createMembershipController(
     membershipAccessService,
+    membershipDirectory,
   );
   const router = createOrganizationRouter(controller, requireAccessToken);
   const accessRouter = createOrganizationAccessRouter(
@@ -145,6 +202,14 @@ const createOrganizationModule = ({
     conversationController,
     requireAccessToken,
   );
+  const directMessageRouter = createDirectMessageRouter(
+    directMessageController,
+    requireAccessToken,
+  );
+  const readReceiptRouter = createReadReceiptRouter(
+    readReceiptController,
+    requireAccessToken,
+  );
   const conversationMessageRouter = createConversationMessageRouter(
     messageController,
     requireAccessToken,
@@ -160,9 +225,13 @@ const createOrganizationModule = ({
     conversationMessageRouter,
     conversationRouter,
     conversationService,
+    directMessageRouter,
     invitationRouter,
     messageRouter,
+    membershipDirectory,
     organizationConversationRouter,
+    presenceService,
+    readReceiptRouter,
     router,
   };
 };

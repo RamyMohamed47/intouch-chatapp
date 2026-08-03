@@ -6,7 +6,7 @@ export type {
   CreatePasswordUserInput,
   UserRepository,
 } from "./user.repository.js";
-export { AuthProvider, UserStatus } from "./user.types.js";
+export { AuthProvider } from "./user.types.js";
 export type {
   LoginProvider,
   PasswordUser,

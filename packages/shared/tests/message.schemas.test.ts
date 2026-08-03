@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   createMessageSchema,
   messageHistoryQuerySchema,
+  updateReadReceiptSchema,
 } from "../messages/index.js";
 
 describe("shared message schemas", () => {
@@ -28,6 +29,21 @@ describe("shared message schemas", () => {
     );
     assert.equal(
       messageHistoryQuerySchema.safeParse({ limit: 101 }).success,
+      false,
+    );
+  });
+
+  test("requires a strict message ID for receipt advancement", () => {
+    const messageId = "507f1f77bcf86cd799439011";
+    assert.deepEqual(updateReadReceiptSchema.parse({ messageId }), {
+      messageId,
+    });
+    assert.equal(
+      updateReadReceiptSchema.safeParse({ messageId, extra: true }).success,
+      false,
+    );
+    assert.equal(
+      updateReadReceiptSchema.safeParse({ messageId: "invalid" }).success,
       false,
     );
   });

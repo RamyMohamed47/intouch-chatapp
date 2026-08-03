@@ -12,6 +12,7 @@ import {
   InvalidRefreshTokenError,
 } from "./auth.errors.js";
 import type { AuthSessionRepository } from "./auth.repository.js";
+import type { AuthUnitOfWork } from "./auth.unit-of-work.js";
 import type {
   AccessTokenManager,
   AuthResult,
@@ -33,6 +34,7 @@ export interface AuthServiceDependencies {
   accessTokens: AccessTokenManager;
   googleOAuth: GoogleOAuthClient;
   refreshTokens: RefreshTokenManager;
+  unitOfWork: AuthUnitOfWork;
   now?: () => Date;
   usernameSuffix?: () => string;
 }
@@ -44,14 +46,18 @@ const createAuthService = ({
   accessTokens,
   googleOAuth,
   refreshTokens,
+  unitOfWork,
   now = () => new Date(),
   usernameSuffix = () => randomBytes(4).toString("hex"),
 }: AuthServiceDependencies) => {
-  const issueRefreshSession = async (user: AuthResult["user"]) => {
+  const issueRefreshSession = async (
+    user: AuthResult["user"],
+    sessionRepository: AuthSessionRepository,
+  ) => {
     const createdAt = now();
     const refreshToken = refreshTokens.create();
 
-    await sessions.create({
+    await sessionRepository.create({
       id: refreshToken.sessionId,
       userId: user.id,
       tokenHash: refreshTokens.hash(refreshToken.token),
@@ -63,10 +69,11 @@ const createAuthService = ({
 
   const issueAuthentication = async (
     user: AuthResult["user"],
+    sessionRepository: AuthSessionRepository,
   ): Promise<AuthResult> => ({
     user,
     accessToken: await accessTokens.sign(user.id),
-    refreshToken: await issueRefreshSession(user),
+    refreshToken: await issueRefreshSession(user, sessionRepository),
   });
 
   const getUsernameBase = (email: string) => {
@@ -98,12 +105,13 @@ const createAuthService = ({
   };
 
   const linkGoogleIdentity = async (
+    userRepository: UserRepository,
     user: AuthResult["user"],
     identity: GoogleIdentity,
     usedAt: Date,
   ) => {
     try {
-      const linkedUser = await users.linkGoogleProvider(
+      const linkedUser = await userRepository.linkGoogleProvider(
         user.id,
         identity.providerAccountId,
         usedAt,
@@ -118,7 +126,7 @@ const createAuthService = ({
       }
     }
 
-    const providerUser = await users.useGoogleProvider(
+    const providerUser = await userRepository.useGoogleProvider(
       identity.providerAccountId,
       usedAt,
     );
@@ -130,9 +138,12 @@ const createAuthService = ({
     throw new GoogleIdentityConflictError();
   };
 
-  const resolveGoogleUser = async (identity: GoogleIdentity) => {
+  const resolveGoogleUser = async (
+    userRepository: UserRepository,
+    identity: GoogleIdentity,
+  ) => {
     const usedAt = now();
-    const providerUser = await users.useGoogleProvider(
+    const providerUser = await userRepository.useGoogleProvider(
       identity.providerAccountId,
       usedAt,
     );
@@ -141,21 +152,21 @@ const createAuthService = ({
       return providerUser;
     }
 
-    const emailUser = await users.findPublicByEmail(identity.email);
+    const emailUser = await userRepository.findPublicByEmail(identity.email);
 
     if (emailUser) {
-      return linkGoogleIdentity(emailUser, identity, usedAt);
+      return linkGoogleIdentity(userRepository, emailUser, identity, usedAt);
     }
 
     for (let attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt += 1) {
       const username = getUsernameCandidate(identity.email, attempt);
 
-      if (await users.usernameExists(username)) {
+      if (await userRepository.usernameExists(username)) {
         continue;
       }
 
       try {
-        return await users.createGoogleUser({
+        return await userRepository.createGoogleUser({
           username,
           displayName: identity.displayName,
           email: identity.email,
@@ -168,7 +179,7 @@ const createAuthService = ({
           throw error;
         }
 
-        const racedProviderUser = await users.useGoogleProvider(
+        const racedProviderUser = await userRepository.useGoogleProvider(
           identity.providerAccountId,
           usedAt,
         );
@@ -177,10 +188,17 @@ const createAuthService = ({
           return racedProviderUser;
         }
 
-        const racedEmailUser = await users.findPublicByEmail(identity.email);
+        const racedEmailUser = await userRepository.findPublicByEmail(
+          identity.email,
+        );
 
         if (racedEmailUser) {
-          return linkGoogleIdentity(racedEmailUser, identity, usedAt);
+          return linkGoogleIdentity(
+            userRepository,
+            racedEmailUser,
+            identity,
+            usedAt,
+          );
         }
       }
     }
@@ -195,27 +213,33 @@ const createAuthService = ({
 
     async loginWithGoogle(code: string): Promise<GoogleAuthResult> {
       const identity = await googleOAuth.exchangeCode(code);
-      const user = await resolveGoogleUser(identity);
-
-      return { refreshToken: await issueRefreshSession(user) };
+      return unitOfWork.run(async (context) => {
+        const user = await resolveGoogleUser(context.users, identity);
+        return {
+          refreshToken: await issueRefreshSession(user, context.sessions),
+        };
+      });
     },
 
     async register(input: RegisterInput): Promise<AuthResult> {
-      if (await users.hasIdentityConflict(input.email, input.username)) {
-        throw new DuplicateIdentityError();
-      }
-
       const passwordHash = await passwords.hash(input.password);
 
       try {
-        const user = await users.createPasswordUser({
-          username: input.username,
-          displayName: input.displayName,
-          email: input.email,
-          passwordHash,
-        });
+        return await unitOfWork.run(async (context) => {
+          if (
+            await context.users.hasIdentityConflict(input.email, input.username)
+          ) {
+            throw new DuplicateIdentityError();
+          }
+          const user = await context.users.createPasswordUser({
+            username: input.username,
+            displayName: input.displayName,
+            email: input.email,
+            passwordHash,
+          });
 
-        return issueAuthentication(user);
+          return issueAuthentication(user, context.sessions);
+        });
       } catch (error) {
         if (error instanceof UserIdentityConflictError) {
           throw new DuplicateIdentityError();
@@ -235,9 +259,10 @@ const createAuthService = ({
         throw new InvalidCredentialsError();
       }
 
-      await users.touchPasswordProvider(passwordUser.user.id, now());
-
-      return issueAuthentication(passwordUser.user);
+      return unitOfWork.run(async (context) => {
+        await context.users.touchPasswordProvider(passwordUser.user.id, now());
+        return issueAuthentication(passwordUser.user, context.sessions);
+      });
     },
 
     async refresh(token: string): Promise<RefreshResult> {

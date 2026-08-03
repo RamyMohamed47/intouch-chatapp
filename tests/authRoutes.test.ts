@@ -9,7 +9,7 @@ import createAuthMiddleware from "../src/modules/auth/auth.middleware.js";
 import createAuthRouter from "../src/modules/auth/auth.routes.js";
 import type { AuthService } from "../src/modules/auth/auth.service.js";
 import type { AccessTokenManager } from "../src/modules/auth/auth.types.js";
-import { UserStatus, type PublicUser } from "../src/modules/user/user.types.js";
+import type { PublicUser } from "../src/modules/user/user.types.js";
 
 process.env.NODE_ENV = "test";
 
@@ -31,7 +31,6 @@ const user: PublicUser = {
   username: "ramy_47",
   displayName: "Ramy Mohamed",
   email: "ramy@example.com",
-  status: UserStatus.OFFLINE,
   createdAt: new Date("2026-07-28T12:00:00.000Z"),
   updatedAt: new Date("2026-07-28T12:00:00.000Z"),
 };

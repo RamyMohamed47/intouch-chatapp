@@ -25,7 +25,7 @@ import createMongooseOrganizationUnitOfWork, {
   type OrganizationUnitOfWork,
 } from "../src/modules/organizations/organization.unit-of-work.js";
 import type { UserRepository } from "../src/modules/user/user.repository.js";
-import { UserStatus, type PublicUser } from "../src/modules/user/user.types.js";
+import type { PublicUser } from "../src/modules/user/user.types.js";
 import { emptyCommunicationContext } from "./unitOfWorkContext.js";
 
 const userId = "507f1f77bcf86cd799439011";
@@ -69,7 +69,6 @@ const invitedUser: PublicUser = {
   username: "invited_user",
   displayName: "Invited User",
   email: "invited@example.com",
-  status: UserStatus.OFFLINE,
   createdAt: now,
   updatedAt: now,
 };
@@ -81,10 +80,12 @@ const users: UserRepository = {
   findPublicByEmail: async () => invitedUser,
   findPublicById: async () => invitedUser,
   findPublicByIds: async () => [invitedUser],
+  findLastSeenByIds: async () => [],
   linkGoogleProvider: async () => invitedUser,
   touchPasswordProvider: async () => undefined,
   useGoogleProvider: async () => invitedUser,
   usernameExists: async () => false,
+  updateLastSeen: async () => undefined,
 };
 
 describe("organization transactions", () => {

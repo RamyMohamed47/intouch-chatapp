@@ -24,6 +24,7 @@ export interface OrganizationRepository {
   create(input: CreateOrganizationRecordInput): Promise<OrganizationRecord>;
   findById(organizationId: string): Promise<OrganizationRecord | null>;
   findByIds(organizationIds: readonly string[]): Promise<OrganizationRecord[]>;
+  lockForMutation(organizationId: string): Promise<boolean>;
   updateById(
     organizationId: string,
     input: UpdateOrganizationRecordInput,
@@ -110,6 +111,16 @@ const createMongooseOrganizationRepository = (
 
     const organizations = await query.exec();
     return organizations.map(toOrganizationRecord);
+  },
+
+  async lockForMutation(organizationId) {
+    const query = OrganizationModel.updateOne(
+      { _id: organizationId },
+      { $inc: { mutationVersion: 1 } },
+      { timestamps: false },
+    );
+    if (session) query.session(session);
+    return (await query.exec()).matchedCount === 1;
   },
 
   async updateById(organizationId, input) {

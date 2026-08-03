@@ -24,7 +24,7 @@ import type { OrganizationRepository } from "../src/modules/organizations/organi
 import type { OrganizationRecord } from "../src/modules/organizations/organization.types.js";
 import type { OrganizationUnitOfWork } from "../src/modules/organizations/organization.unit-of-work.js";
 import type { UserRepository } from "../src/modules/user/user.repository.js";
-import { UserStatus, type PublicUser } from "../src/modules/user/user.types.js";
+import type { PublicUser } from "../src/modules/user/user.types.js";
 import { emptyCommunicationContext } from "./unitOfWorkContext.js";
 
 const now = new Date("2026-07-30T00:00:00.000Z");
@@ -46,7 +46,6 @@ const invitedUser: PublicUser = {
   username: "new_member",
   displayName: "New Member",
   email: "member@example.com",
-  status: UserStatus.OFFLINE,
   createdAt: now,
   updatedAt: now,
 };
@@ -160,6 +159,7 @@ const createHarness = ({
     create: async () => organization,
     findById: async () => organization,
     findByIds: async () => [organization],
+    lockForMutation: async () => true,
     updateById: async () => organization,
     deleteById: async () => true,
   };
@@ -189,10 +189,12 @@ const createHarness = ({
     findPublicByEmail: async () => (invitedUserExists ? invitedUser : null),
     findPublicById: async () => invitedUser,
     findPublicByIds: async () => [invitedUser],
+    findLastSeenByIds: async () => [],
     linkGoogleProvider: async () => invitedUser,
     touchPasswordProvider: async () => undefined,
     useGoogleProvider: async () => invitedUser,
     usernameExists: async () => false,
+    updateLastSeen: async () => undefined,
   };
   const unitOfWork: OrganizationUnitOfWork = {
     run: (work) =>

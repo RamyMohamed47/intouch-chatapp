@@ -3,6 +3,11 @@ export type { MessageController } from "./message.controller.js";
 export { default as MessageModel } from "./message.model.js";
 export { default as createMongooseMessageRepository } from "./message.repository.js";
 export type { MessageRepository } from "./message.repository.js";
+export { default as createMongooseConversationSummaryRepository } from "./conversation-summary.repository.js";
+export type {
+  ConversationSummaryRepository,
+  ConversationSummaryState,
+} from "./conversation-summary.repository.js";
 export {
   createConversationMessageRouter,
   createMessageRouter,

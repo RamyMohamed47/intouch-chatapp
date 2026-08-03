@@ -16,11 +16,13 @@ export interface AppDependencies {
   categoryRouter?: Router;
   conversationMessageRouter?: Router;
   conversationRouter?: Router;
+  directMessageRouter?: Router;
   invitationRouter?: Router;
   messageRouter?: Router;
   organizationAccessRouter?: Router;
   organizationConversationRouter?: Router;
   organizationRouter?: Router;
+  readReceiptRouter?: Router;
   trustProxy?: boolean | number;
 }
 
@@ -30,11 +32,13 @@ const createApp = ({
   categoryRouter,
   conversationMessageRouter,
   conversationRouter,
+  directMessageRouter,
   invitationRouter,
   messageRouter,
   organizationAccessRouter,
   organizationConversationRouter,
   organizationRouter,
+  readReceiptRouter,
   trustProxy = false,
 }: AppDependencies = {}) => {
   const app = express();
@@ -89,12 +93,20 @@ const createApp = ({
     app.use("/api/v1/organizations", organizationConversationRouter);
   }
 
+  if (directMessageRouter) {
+    app.use("/api/v1/organizations", directMessageRouter);
+  }
+
   if (conversationRouter) {
     app.use("/api/v1/conversations", conversationRouter);
   }
 
   if (conversationMessageRouter) {
     app.use("/api/v1/conversations", conversationMessageRouter);
+  }
+
+  if (readReceiptRouter) {
+    app.use("/api/v1/conversations", readReceiptRouter);
   }
 
   if (invitationRouter) {

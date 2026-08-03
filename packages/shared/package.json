@@ -27,6 +27,10 @@
     "./messages": {
       "types": "./dist/messages/index.d.ts",
       "import": "./dist/messages/index.js"
+    },
+    "./realtime": {
+      "types": "./dist/realtime/index.d.ts",
+      "import": "./dist/realtime/index.js"
     }
   },
   "scripts": {

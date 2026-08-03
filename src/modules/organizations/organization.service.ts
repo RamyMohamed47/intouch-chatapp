@@ -161,20 +161,28 @@ const createOrganizationService = ({
     organizationId: string,
     input: UpdateOrganizationInput,
   ) {
-    const organization = await organizations.findById(organizationId);
-    const membership = await memberships.findForUser(userId, organizationId);
-    policy.assertOwner(organization, membership);
+    return unitOfWork.run(async (context) => {
+      const organization = await context.organizations.findById(organizationId);
+      const membership = await context.memberships.findForUser(
+        userId,
+        organizationId,
+      );
+      policy.assertOwner(organization, membership);
+      if (!(await context.organizations.lockForMutation(organizationId))) {
+        throw new OrganizationNotFoundError();
+      }
 
-    const updatedOrganization = await organizations.updateById(
-      organizationId,
-      input,
-    );
+      const updatedOrganization = await context.organizations.updateById(
+        organizationId,
+        input,
+      );
 
-    if (!updatedOrganization) {
-      throw new OrganizationNotFoundError();
-    }
+      if (!updatedOrganization) {
+        throw new OrganizationNotFoundError();
+      }
 
-    return withCurrentUserRole(updatedOrganization, membership);
+      return withCurrentUserRole(updatedOrganization, membership);
+    });
   },
 
   async delete(userId: string, organizationId: string) {
@@ -186,11 +194,17 @@ const createOrganizationService = ({
         organizationId,
       );
       policy.assertOwner(organization, membership);
+      if (!(await context.organizations.lockForMutation(organizationId))) {
+        throw new OrganizationNotFoundError();
+      }
 
       const conversationIds =
         await context.conversations.listIdsByOrganization(organizationId);
       deletedConversationIds = conversationIds;
       await context.messages.deleteByConversationIds(conversationIds);
+      await context.conversationReadStates.deleteByOrganizationId(
+        organizationId,
+      );
       await context.conversationParticipants.deleteByOrganizationId(
         organizationId,
       );

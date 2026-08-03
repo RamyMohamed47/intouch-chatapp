@@ -24,9 +24,15 @@ import {
   type MessageRecord,
 } from "../src/modules/message/message.types.js";
 import configureSocket from "../src/sockets/socket.js";
+import createTypingService from "../src/modules/typing/typing.service.js";
+import { PresenceStatus } from "../src/modules/presence/presence.types.js";
 
 const firstConversationId = "507f1f77bcf86cd799439011";
 const secondConversationId = "507f1f77bcf86cd799439012";
+const revokedDuringJoinConversationId = "507f1f77bcf86cd799439087";
+const organizationId = "507f1f77bcf86cd799439090";
+const firstUserId = "507f1f77bcf86cd799439099";
+const secondUserId = "507f1f77bcf86cd799439098";
 const now = new Date("2026-08-03T00:00:00.000Z");
 const server = http.createServer();
 const io = new Server<
@@ -39,13 +45,14 @@ const accessTokens: AccessTokenManager = {
   getExpiration: () => Math.floor(Date.now() / 1_000) + 60,
   sign: async () => "good-token",
   verify: async (token) => {
-    if (token !== "good-token") throw new Error("invalid token");
-    return { userId: "507f1f77bcf86cd799439099" };
+    if (token === "good-token") return { userId: firstUserId };
+    if (token === "second-token") return { userId: secondUserId };
+    throw new Error("invalid token");
   },
 };
 const conversation = (id: string): ConversationRecord => ({
   id,
-  organizationId: "507f1f77bcf86cd799439090",
+  organizationId,
   categoryId: "507f1f77bcf86cd799439091",
   name: "general",
   type: ConversationType.CHANNEL,
@@ -56,6 +63,13 @@ const conversation = (id: string): ConversationRecord => ({
 });
 const conversations = {
   getAccessible: async (_userId: string, conversationId: string) => {
+    if (conversationId === revokedDuringJoinConversationId) {
+      raceAuthorizationChecks += 1;
+      if (raceAuthorizationChecks === 1) {
+        return conversation(conversationId);
+      }
+      throw new ConversationNotFoundError();
+    }
     if (
       conversationId === firstConversationId ||
       conversationId === secondConversationId
@@ -65,12 +79,22 @@ const conversations = {
     throw new ConversationNotFoundError();
   },
 };
+let raceAuthorizationChecks = 0;
 const gateway = createSocketRealtimeGateway();
+const typing = createTypingService({ realtime: gateway, timeoutMs: 50 });
 let baseUrl: string;
 const clients: Socket[] = [];
 
 before(async () => {
-  configureSocket(io, accessTokens, conversations);
+  gateway.setTypingService(typing);
+  configureSocket(io, accessTokens, conversations, undefined, {
+    memberships: { assertMember: async () => undefined },
+    presence: {
+      markOnline: async () => undefined,
+      markOffline: async () => undefined,
+    },
+    typing,
+  });
   gateway.setSocketServer(io);
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const address = server.address();
@@ -152,5 +176,86 @@ describe("authenticated conversation sockets", () => {
     const client = await connect();
     const result = await join(client, "507f1f77bcf86cd799439088");
     assert.equal(result.success, false);
+  });
+
+  test("leaves a room when access is revoked while joining", async () => {
+    raceAuthorizationChecks = 0;
+    const client = await connect();
+    const result = await join(client, revokedDuringJoinConversationId);
+    assert.equal(result.success, false);
+
+    let received = false;
+    client.on("message:created", () => {
+      received = true;
+    });
+    gateway.messageCreated({
+      id: "507f1f77bcf86cd799439021",
+      conversationId: revokedDuringJoinConversationId,
+      senderId: secondUserId,
+      content: "private",
+      messageType: MessageType.TEXT,
+      editedAt: null,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(received, false);
+  });
+
+  test("scopes presence subscriptions to organization rooms", async () => {
+    const subscribed = await connect();
+    const outside = await connect("second-token");
+    const subscription = await new Promise<{ success: boolean }>((resolve) => {
+      subscribed.emit("organization:subscribe", { organizationId }, resolve);
+    });
+    assert.equal(subscription.success, true);
+    let outsideReceived = false;
+    outside.on("presence:updated", () => {
+      outsideReceived = true;
+    });
+    const received = new Promise<unknown>((resolve) => {
+      subscribed.once("presence:updated", resolve);
+    });
+    gateway.presenceUpdated([organizationId], {
+      userId: secondUserId,
+      status: PresenceStatus.ONLINE,
+      lastSeenAt: null,
+    });
+    await received;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(outsideReceived, false);
+  });
+
+  test("broadcasts typing only to other users in the joined conversation", async () => {
+    const author = await connect();
+    const peer = await connect("second-token");
+    await join(author, firstConversationId);
+    await join(peer, firstConversationId);
+    let authorReceived = false;
+    author.on("typing:updated", () => {
+      authorReceived = true;
+    });
+    const received = new Promise<{
+      conversationId: string;
+      userId: string;
+      isTyping: boolean;
+    }>((resolve) => peer.once("typing:updated", resolve));
+    const acknowledgement = await new Promise<{ success: boolean }>(
+      (resolve) => {
+        author.emit(
+          "typing:start",
+          { conversationId: firstConversationId },
+          resolve,
+        );
+      },
+    );
+    assert.equal(acknowledgement.success, true);
+    assert.deepEqual(await received, {
+      conversationId: firstConversationId,
+      userId: firstUserId,
+      isTyping: true,
+    });
+    assert.equal(authorReceived, false);
   });
 });

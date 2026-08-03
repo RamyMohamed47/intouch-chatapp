@@ -15,6 +15,7 @@ import type {
 import createAuthModule from "./modules/auth/index.js";
 import createOrganizationModule from "./modules/organizations/index.js";
 import configureSocket from "./sockets/socket.js";
+import { createTypingService } from "./modules/typing/index.js";
 
 loadEnvFile();
 
@@ -134,6 +135,8 @@ process.once("SIGINT", () => {
 
 const config = loadConfig();
 const realtimeGateway = createSocketRealtimeGateway();
+const typingService = createTypingService({ realtime: realtimeGateway });
+realtimeGateway.setTypingService(typingService);
 const auth = createAuthModule({
   accessTokenSecret: config.accessTokenSecret,
   accessTokenIssuer: config.accessTokenIssuer,
@@ -159,6 +162,8 @@ const auth = createAuthModule({
 const organizations = createOrganizationModule({
   conversationRealtime: realtimeGateway,
   messageBroadcaster: realtimeGateway,
+  presenceRealtime: realtimeGateway,
+  readReceiptRealtime: realtimeGateway,
   requireAccessToken: auth.requireAccessToken,
 });
 const app = createApp({
@@ -167,11 +172,13 @@ const app = createApp({
   categoryRouter: organizations.categoryRouter,
   conversationMessageRouter: organizations.conversationMessageRouter,
   conversationRouter: organizations.conversationRouter,
+  directMessageRouter: organizations.directMessageRouter,
   invitationRouter: organizations.invitationRouter,
   messageRouter: organizations.messageRouter,
   organizationAccessRouter: organizations.accessRouter,
   organizationConversationRouter: organizations.organizationConversationRouter,
   organizationRouter: organizations.router,
+  readReceiptRouter: organizations.readReceiptRouter,
   trustProxy: config.trustProxy,
 });
 const server = http.createServer(app);
@@ -195,6 +202,11 @@ configureSocket(
   auth.accessTokens,
   organizations.conversationService,
   logger,
+  {
+    memberships: organizations.membershipDirectory,
+    presence: organizations.presenceService,
+    typing: typingService,
+  },
 );
 
 try {

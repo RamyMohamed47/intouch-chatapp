@@ -32,6 +32,7 @@
     "test": "npm run build:shared && tsx --test tests/*.test.ts packages/shared/tests/*.test.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "migrate:remove-user-status": "tsx src/migrations/removeLegacyUserStatus.ts",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build"

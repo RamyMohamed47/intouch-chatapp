@@ -3,6 +3,8 @@ export {
   ConversationType,
   ConversationVisibility,
   createConversationSchema,
+  createDirectMessageSchema,
+  listDirectMessagesQuerySchema,
   listConversationsQuerySchema,
   updateConversationSchema,
 } from "./conversation.schema.js";
@@ -11,6 +13,8 @@ export type {
   ConversationTypeValue,
   ConversationVisibilityType,
   CreateConversationInput,
+  CreateDirectMessageInput,
+  ListDirectMessagesQuery,
   ListConversationsQuery,
   UpdateConversationInput,
 } from "./conversation.schema.js";

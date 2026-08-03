@@ -1,4 +1,7 @@
-import { ConversationVisibility } from "@intouch/shared/conversations";
+import {
+  ConversationType,
+  ConversationVisibility,
+} from "@intouch/shared/conversations";
 
 import { MembershipRole, type MembershipRecord } from "../memberships/index.js";
 import type { MessageRecord } from "../message/message.types.js";
@@ -12,9 +15,11 @@ import {
   ConversationForbiddenError,
   ConversationNotFoundError,
 } from "./conversation.errors.js";
-import type {
-  ConversationParticipantRecord,
-  ConversationRecord,
+import {
+  isChannelConversation,
+  type ChannelConversationRecord,
+  type ConversationParticipantRecord,
+  type ConversationRecord,
 } from "./conversation.types.js";
 
 const createConversationPolicy = () => {
@@ -22,10 +27,11 @@ const createConversationPolicy = () => {
     conversation: ConversationRecord | null,
     membership: MembershipRecord | null,
     participant: ConversationParticipantRecord | null = null,
-  ) => {
+  ): ChannelConversationRecord => {
     if (
       !conversation ||
       !membership ||
+      !isChannelConversation(conversation) ||
       (conversation.visibility === ConversationVisibility.PRIVATE &&
         membership.role !== MembershipRole.OWNER &&
         !participant)
@@ -47,8 +53,10 @@ const createConversationPolicy = () => {
       if (
         !conversation ||
         !membership ||
-        (conversation.visibility === ConversationVisibility.PRIVATE &&
-          !participant)
+        (conversation.type === ConversationType.DIRECT
+          ? !participant
+          : conversation.visibility === ConversationVisibility.PRIVATE &&
+            !participant)
       ) {
         throw new ConversationNotFoundError();
       }
@@ -85,13 +93,15 @@ const createConversationPolicy = () => {
 
     assertMessageDeletable(
       message: MessageRecord | null,
+      conversation: ConversationRecord,
       userId: string,
       membership: MembershipRecord | null,
     ) {
       if (!message) throw new MessageNotFoundError();
       if (
         message.senderId !== userId &&
-        membership?.role !== MembershipRole.OWNER
+        (conversation.type === ConversationType.DIRECT ||
+          membership?.role !== MembershipRole.OWNER)
       ) {
         throw new MessageForbiddenError();
       }

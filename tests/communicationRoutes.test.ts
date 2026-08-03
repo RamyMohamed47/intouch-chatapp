@@ -51,6 +51,12 @@ const conversation = {
   createdAt: now,
   updatedAt: now,
 };
+const conversationSummary = {
+  ...conversation,
+  lastMessage: null,
+  unreadCount: 0,
+  readReceipt: null,
+};
 const message = {
   id: messageId,
   conversationId,
@@ -79,15 +85,16 @@ const categories: CategoryService = {
 
 const conversations: ConversationService = {
   getAccessible: async () => conversation,
+  getAccessibleInContext: async () => conversation,
+  summarize: async () => [conversationSummary],
   create: async (_userId, _organizationId, input) => {
     receivedVisibility = input.visibility;
     return conversation;
   },
-  list: async () => [conversation],
-  getById: async () => conversation,
+  list: async () => [conversationSummary],
+  getById: async () => conversationSummary,
   update: async () => conversation,
   delete: async () => undefined,
-  listOrganizationMembers: async () => [],
   listParticipants: async () => [],
   addParticipant: async () => ({
     id: "507f1f77bcf86cd799439016",

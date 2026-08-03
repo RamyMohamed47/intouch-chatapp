@@ -5,6 +5,8 @@ import {
   ConversationVisibility,
   addConversationParticipantSchema,
   createConversationSchema,
+  createDirectMessageSchema,
+  listDirectMessagesQuerySchema,
   updateConversationSchema,
 } from "../conversations/index.js";
 
@@ -55,6 +57,27 @@ describe("shared conversation schemas", () => {
         name: "General",
         extra: 1,
       }).success,
+      false,
+    );
+  });
+
+  test("validates direct-message creation and pagination", () => {
+    assert.deepEqual(
+      createDirectMessageSchema.parse({ recipientUserId: categoryId }),
+      { recipientUserId: categoryId },
+    );
+    assert.deepEqual(listDirectMessagesQuerySchema.parse({ limit: "30" }), {
+      limit: 30,
+    });
+    assert.equal(
+      createDirectMessageSchema.safeParse({
+        recipientUserId: categoryId,
+        extra: true,
+      }).success,
+      false,
+    );
+    assert.equal(
+      listDirectMessagesQuerySchema.safeParse({ limit: 101 }).success,
       false,
     );
   });

@@ -13,9 +13,13 @@ import {
 } from "../memberships/index.js";
 import type { OrganizationRepository } from "../organizations/organization.repository.js";
 import type { OrganizationPolicy } from "../organizations/organization.policy.js";
-import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
+import type {
+  OrganizationUnitOfWork,
+  OrganizationWorkContext,
+} from "../organizations/organization.unit-of-work.js";
 import type { UserRepository } from "../user/user.repository.js";
 import type { PublicUser } from "../user/user.types.js";
+import type { ConversationSummaryRepository } from "../message/conversation-summary.repository.js";
 import normalizeNameKey from "../../utils/normalizeNameKey.js";
 import {
   ConversationConflictError,
@@ -34,14 +38,17 @@ import {
 import type { ConversationPolicy } from "./conversation.policy.js";
 import type { ConversationRealtime } from "./conversation.realtime.js";
 import type {
+  ConversationRecord,
+  ConversationSummary,
   ConversationParticipantView,
-  OrganizationMemberView,
 } from "./conversation.types.js";
+import { isChannelConversation } from "./conversation.types.js";
 
 export interface ConversationServiceDependencies {
   categories: CategoryRepository;
   conversations: ConversationRepository;
   memberships: MembershipService;
+  conversationSummaries: ConversationSummaryRepository;
   organizations: OrganizationRepository;
   participants: ConversationParticipantRepository;
   policy: ConversationPolicy;
@@ -65,7 +72,6 @@ const toMemberUser = (user: PublicUser) => ({
   id: user.id,
   username: user.username,
   displayName: user.displayName,
-  status: user.status,
   ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
 });
 
@@ -73,6 +79,7 @@ const createConversationService = ({
   categories,
   conversations,
   memberships,
+  conversationSummaries,
   organizations,
   participants,
   policy,
@@ -81,18 +88,105 @@ const createConversationService = ({
   unitOfWork,
   users,
 }: ConversationServiceDependencies) => {
-  const getAccess = async (userId: string, conversationId: string) => {
-    const conversation = await conversations.findById(conversationId);
+  const getAccessFrom = async (
+    userId: string,
+    conversationId: string,
+    repositories: Pick<
+      OrganizationWorkContext,
+      "conversations" | "conversationParticipants" | "memberships"
+    >,
+  ) => {
+    const conversation =
+      await repositories.conversations.findById(conversationId);
     if (!conversation) throw new ConversationNotFoundError();
     const [membership, participant] = await Promise.all([
-      memberships.findForUser(userId, conversation.organizationId),
-      participants.find(conversationId, userId),
+      repositories.memberships.findForUser(userId, conversation.organizationId),
+      repositories.conversationParticipants.find(conversationId, userId),
     ]);
     return policy.assertAccessible(conversation, membership, participant);
   };
 
+  const getAccess = (userId: string, conversationId: string) =>
+    getAccessFrom(userId, conversationId, {
+      conversations,
+      conversationParticipants: participants,
+      memberships,
+    });
+
+  const summarize = async (
+    userId: string,
+    records: readonly ConversationRecord[],
+  ): Promise<ConversationSummary[]> => {
+    const states = await conversationSummaries.getStates(
+      records.map(({ id }) => id),
+      userId,
+    );
+    const statesByConversation = new Map(
+      states.map((state) => [state.conversationId, state]),
+    );
+    const directIds = records
+      .filter(({ type }) => type === ConversationType.DIRECT)
+      .map(({ id }) => id);
+    const directParticipants =
+      await participants.listByConversationIds(directIds);
+    const peerIdByConversation = new Map<string, string>();
+    for (const participant of directParticipants) {
+      if (participant.userId !== userId) {
+        peerIdByConversation.set(
+          participant.conversationId,
+          participant.userId,
+        );
+      }
+    }
+    const peers = await users.findPublicByIds([
+      ...new Set(peerIdByConversation.values()),
+    ]);
+    const peersById = new Map(peers.map((peer) => [peer.id, peer]));
+
+    return records.map((conversation) => {
+      const state = statesByConversation.get(conversation.id);
+      const receipt = state?.readReceipt;
+      const summary: ConversationSummary = {
+        id: conversation.id,
+        organizationId: conversation.organizationId,
+        type: conversation.type,
+        createdAt: conversation.createdAt,
+        updatedAt: conversation.updatedAt,
+        lastMessage: state?.lastMessage ?? null,
+        unreadCount: state?.unreadCount ?? 0,
+        readReceipt: receipt
+          ? {
+              id: receipt.id,
+              conversationId: receipt.conversationId,
+              userId: receipt.userId,
+              lastReadMessageId: receipt.lastReadMessageId,
+              lastReadAt: receipt.lastReadAt,
+            }
+          : null,
+      };
+      if (conversation.categoryId !== undefined) {
+        summary.categoryId = conversation.categoryId;
+      }
+      if (conversation.name !== undefined) summary.name = conversation.name;
+      if (conversation.visibility !== undefined) {
+        summary.visibility = conversation.visibility;
+      }
+      if (conversation.position !== undefined) {
+        summary.position = conversation.position;
+      }
+      const peerId = peerIdByConversation.get(conversation.id);
+      const peer = peerId ? peersById.get(peerId) : undefined;
+      if (peer) summary.peer = toMemberUser(peer);
+      return summary;
+    });
+  };
+
   return {
     getAccessible: getAccess,
+
+    getAccessibleInContext: getAccessFrom,
+
+    summarize,
 
     async create(
       userId: string,
@@ -108,6 +202,9 @@ const createConversationService = ({
             organizationId,
           );
           organizationPolicy.assertOwner(organization, membership);
+          if (!(await context.organizations.lockForMutation(organizationId))) {
+            throw new ConversationNotFoundError();
+          }
           const category = await context.categories.findById(input.categoryId);
           if (!category || category.organizationId !== organizationId) {
             throw new CategoryNotFoundError();
@@ -152,10 +249,11 @@ const createConversationService = ({
         }
       }
 
-      const [organizationCategories, records] = await Promise.all([
+      const [organizationCategories, conversationRecords] = await Promise.all([
         categories.listByOrganization(organizationId),
         conversations.listByOrganization(organizationId, categoryId),
       ]);
+      const records = conversationRecords.filter(isChannelConversation);
       const privateIds = records
         .filter(
           ({ visibility }) => visibility === ConversationVisibility.PRIVATE,
@@ -171,7 +269,7 @@ const createConversationService = ({
         ]),
       );
 
-      return records
+      const accessible = records
         .filter(
           (conversation) =>
             conversation.visibility === ConversationVisibility.PUBLIC ||
@@ -183,10 +281,14 @@ const createConversationService = ({
               (categoryPosition.get(right.categoryId) ?? 0) ||
             left.position - right.position,
         );
+      return summarize(userId, accessible);
     },
 
-    getById(userId: string, conversationId: string) {
-      return getAccess(userId, conversationId);
+    async getById(userId: string, conversationId: string) {
+      const conversation = await getAccess(userId, conversationId);
+      const [summary] = await summarize(userId, [conversation]);
+      if (!summary) throw new ConversationNotFoundError();
+      return summary;
     },
 
     async update(
@@ -208,21 +310,32 @@ const createConversationService = ({
             conversationId,
             userId,
           );
-          policy.assertOwner(conversation, membership, actorParticipant);
-          previousVisibility = conversation.visibility;
+          const channel = policy.assertOwner(
+            conversation,
+            membership,
+            actorParticipant,
+          );
+          if (
+            !(await context.organizations.lockForMutation(
+              channel.organizationId,
+            ))
+          ) {
+            throw new ConversationNotFoundError();
+          }
+          previousVisibility = channel.visibility;
 
-          const targetCategoryId = input.categoryId ?? conversation.categoryId;
+          const targetCategoryId = input.categoryId ?? channel.categoryId;
           const targetCategory =
             await context.categories.findById(targetCategoryId);
           if (
             !targetCategory ||
-            targetCategory.organizationId !== conversation.organizationId
+            targetCategory.organizationId !== channel.organizationId
           ) {
             throw new CategoryNotFoundError();
           }
 
-          let position = conversation.position;
-          if (targetCategoryId !== conversation.categoryId) {
+          let position = channel.position;
+          if (targetCategoryId !== channel.categoryId) {
             const targetCount =
               await context.conversations.countByCategory(targetCategoryId);
             position =
@@ -236,11 +349,11 @@ const createConversationService = ({
               1,
             );
             const oldCount = await context.conversations.countByCategory(
-              conversation.categoryId,
+              channel.categoryId,
             );
             await context.conversations.shiftPositions(
-              conversation.categoryId,
-              conversation.position + 1,
+              channel.categoryId,
+              channel.position + 1,
               oldCount - 1,
               -1,
             );
@@ -248,17 +361,17 @@ const createConversationService = ({
             const count =
               await context.conversations.countByCategory(targetCategoryId);
             position = Math.min(input.position, Math.max(0, count - 1));
-            if (position < conversation.position) {
+            if (position < channel.position) {
               await context.conversations.shiftPositions(
                 targetCategoryId,
                 position,
-                conversation.position - 1,
+                channel.position - 1,
                 1,
               );
-            } else if (position > conversation.position) {
+            } else if (position > channel.position) {
               await context.conversations.shiftPositions(
                 targetCategoryId,
-                conversation.position + 1,
+                channel.position + 1,
                 position,
                 -1,
               );
@@ -267,14 +380,14 @@ const createConversationService = ({
 
           if (
             input.visibility !== undefined &&
-            input.visibility !== conversation.visibility
+            input.visibility !== channel.visibility
           ) {
             await context.conversationParticipants.deleteByConversationId(
               conversationId,
             );
             if (input.visibility === ConversationVisibility.PRIVATE) {
               await context.conversationParticipants.create({
-                organizationId: conversation.organizationId,
+                organizationId: channel.organizationId,
                 conversationId,
                 userId,
                 addedByUserId: userId,
@@ -285,7 +398,7 @@ const createConversationService = ({
           const result = await context.conversations.updateById(
             conversationId,
             {
-              ...(targetCategoryId !== conversation.categoryId
+              ...(targetCategoryId !== channel.categoryId
                 ? { categoryId: targetCategoryId }
                 : {}),
               ...(input.name !== undefined
@@ -294,7 +407,7 @@ const createConversationService = ({
               ...(input.visibility !== undefined
                 ? { visibility: input.visibility }
                 : {}),
-              ...(position !== conversation.position ? { position } : {}),
+              ...(position !== channel.position ? { position } : {}),
             },
           );
           if (!result) throw new ConversationNotFoundError();
@@ -326,11 +439,23 @@ const createConversationService = ({
           conversationId,
           userId,
         );
-        policy.assertOwner(conversation, membership, actorParticipant);
+        const channel = policy.assertOwner(
+          conversation,
+          membership,
+          actorParticipant,
+        );
+        if (
+          !(await context.organizations.lockForMutation(channel.organizationId))
+        ) {
+          throw new ConversationNotFoundError();
+        }
         const count = await context.conversations.countByCategory(
-          conversation.categoryId,
+          channel.categoryId,
         );
         await context.messages.deleteByConversationId(conversationId);
+        await context.conversationReadStates.deleteByConversationId(
+          conversationId,
+        );
         await context.conversationParticipants.deleteByConversationId(
           conversationId,
         );
@@ -338,37 +463,13 @@ const createConversationService = ({
           throw new ConversationNotFoundError();
         }
         await context.conversations.shiftPositions(
-          conversation.categoryId,
-          conversation.position + 1,
+          channel.categoryId,
+          channel.position + 1,
           count - 1,
           -1,
         );
       });
       await realtime.closeConversation(conversationId);
-    },
-
-    async listOrganizationMembers(userId: string, organizationId: string) {
-      const organization = await organizations.findById(organizationId);
-      const membership = await memberships.findForUser(userId, organizationId);
-      organizationPolicy.assertOwner(organization, membership);
-      const records = await memberships.listForOrganization(organizationId);
-      const publicUsers = await users.findPublicByIds(
-        records.map(({ userId: memberId }) => memberId),
-      );
-      const usersById = new Map(publicUsers.map((user) => [user.id, user]));
-      return records.flatMap<OrganizationMemberView>((record) => {
-        const user = usersById.get(record.userId);
-        return user
-          ? [
-              {
-                membershipId: record.id,
-                role: record.role,
-                joinedAt: record.joinedAt,
-                user: toMemberUser(user),
-              },
-            ]
-          : [];
-      });
     },
 
     async listParticipants(userId: string, conversationId: string) {
@@ -414,6 +515,13 @@ const createConversationService = ({
             ownerMembership,
             actorParticipant,
           );
+          if (
+            !(await context.organizations.lockForMutation(
+              conversation.organizationId,
+            ))
+          ) {
+            throw new ConversationNotFoundError();
+          }
           const targetMembership = await context.memberships.findForUser(
             participantUserId,
             conversation.organizationId,
@@ -453,6 +561,13 @@ const createConversationService = ({
           ownerMembership,
           actorParticipant,
         );
+        if (
+          !(await context.organizations.lockForMutation(
+            conversation.organizationId,
+          ))
+        ) {
+          throw new ConversationNotFoundError();
+        }
         if (
           participantUserId === userId ||
           ownerMembership?.role !== MembershipRole.OWNER

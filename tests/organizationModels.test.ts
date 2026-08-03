@@ -9,6 +9,7 @@ import MembershipModel from "../src/modules/memberships/membership.model.js";
 import { MembershipRole } from "../src/modules/memberships/membership.types.js";
 import OrganizationModel from "../src/modules/organizations/organization.model.js";
 import MessageModel from "../src/modules/message/message.model.js";
+import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
 
 describe("organization persistence indexes", () => {
   test("enforces unique organization slugs", () => {
@@ -74,8 +75,17 @@ describe("organization persistence indexes", () => {
     const conversationName = ConversationModel.schema
       .indexes()
       .find(
-        ([, options]) =>
-          options.name === "unique_conversation_name_per_category",
+        ([, options]) => options.name === "unique_channel_name_per_category",
+      );
+    const directPair = ConversationModel.schema
+      .indexes()
+      .find(
+        ([, options]) => options.name === "unique_direct_conversation_pair",
+      );
+    const directActivityIndexes = ConversationModel.schema
+      .indexes()
+      .filter(([, options]) =>
+        options.name?.startsWith("direct_conversations_by_"),
       );
     const participant = ConversationParticipantModel.schema
       .indexes()
@@ -88,7 +98,15 @@ describe("organization persistence indexes", () => {
         ([, options]) => options.name === "messages_by_conversation_cursor",
       );
     assert.equal(conversationName?.[1].unique, true);
+    assert.equal(directPair?.[1].unique, true);
+    assert.equal(directActivityIndexes.length, 2);
     assert.equal(participant?.[1].unique, true);
     assert.ok(messageCursor);
+    const readState = ConversationReadStateModel.schema
+      .indexes()
+      .find(
+        ([, options]) => options.name === "unique_conversation_read_receipt",
+      );
+    assert.equal(readState?.[1].unique, true);
   });
 });

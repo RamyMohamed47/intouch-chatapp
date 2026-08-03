@@ -30,6 +30,15 @@ export const messageHistoryQuerySchema = z
   })
   .strict();
 
+export const updateReadReceiptSchema = z
+  .object({
+    messageId: z
+      .string()
+      .regex(/^[a-f\d]{24}$/i, "Message ID must be a valid MongoDB ID"),
+  })
+  .strict();
+
 export type CreateMessageInput = z.infer<typeof createMessageSchema>;
 export type UpdateMessageInput = z.infer<typeof updateMessageSchema>;
 export type MessageHistoryQuery = z.infer<typeof messageHistoryQuerySchema>;
+export type UpdateReadReceiptInput = z.infer<typeof updateReadReceiptSchema>;

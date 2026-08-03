@@ -1,4 +1,5 @@
 import type { OrganizationPolicy } from "../organizations/organization.policy.js";
+import { OrganizationNotFoundError } from "../organizations/organization.errors.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
 import { MembershipConflictError } from "./membership.errors.js";
 import { MembershipPersistenceConflictError } from "./membership.repository.js";
@@ -22,6 +23,9 @@ const createMembershipAccessService = ({
           organizationId,
         );
         policy.assertCanJoinPublic(organization, membership);
+        if (!(await context.organizations.lockForMutation(organizationId))) {
+          throw new OrganizationNotFoundError();
+        }
 
         const createdMembership = await context.memberships.createMember(
           userId,

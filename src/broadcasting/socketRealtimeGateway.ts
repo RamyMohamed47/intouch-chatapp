@@ -1,20 +1,45 @@
 import type { MessageBroadcaster } from "./messageBroadcaster.js";
 import type { InTouchSocketServer } from "../contracts/socket.js";
 import type { ConversationRealtime } from "../modules/conversations/conversation.realtime.js";
+import type { PresenceRealtime } from "../modules/presence/presence.realtime.js";
+import type { ReadReceiptRealtime } from "../modules/read-receipts/read-receipt.realtime.js";
+import type { TypingRealtime } from "../modules/typing/typing.realtime.js";
+import type { TypingService } from "../modules/typing/typing.service.js";
 
 const roomName = (conversationId: string) => `conversation:${conversationId}`;
+const organizationRoomName = (organizationId: string) =>
+  `organization:${organizationId}`;
+const userRoomName = (userId: string) => `user:${userId}`;
 
 export interface SocketRealtimeGateway
-  extends MessageBroadcaster, ConversationRealtime {
+  extends
+    MessageBroadcaster,
+    ConversationRealtime,
+    PresenceRealtime,
+    ReadReceiptRealtime,
+    TypingRealtime {
   setSocketServer(io: InTouchSocketServer): void;
+  setTypingService(
+    typing: Pick<
+      TypingService,
+      "clearConversation" | "clearUserInConversation"
+    >,
+  ): void;
 }
 
 const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
   let io: InTouchSocketServer | undefined;
+  let typing:
+    | Pick<TypingService, "clearConversation" | "clearUserInConversation">
+    | undefined;
 
   return {
     setSocketServer(server) {
       io = server;
+    },
+
+    setTypingService(service) {
+      typing = service;
     },
 
     messageCreated(message) {
@@ -29,7 +54,26 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       io?.to(roomName(message.conversationId)).emit("message:deleted", message);
     },
 
+    presenceUpdated(organizationIds, presence) {
+      const rooms = organizationIds.map(organizationRoomName);
+      if (rooms.length > 0) io?.to(rooms).emit("presence:updated", presence);
+    },
+
+    typingUpdated(update) {
+      io?.to(roomName(update.conversationId))
+        .except(userRoomName(update.userId))
+        .emit("typing:updated", update);
+    },
+
+    readReceiptUpdated(receipt) {
+      io?.to(roomName(receipt.conversationId)).emit(
+        "read-receipt:updated",
+        receipt,
+      );
+    },
+
     async evictUser(conversationId, userId) {
+      typing?.clearUserInConversation(conversationId, userId);
       if (!io) return;
       const sockets = await io.in(roomName(conversationId)).fetchSockets();
       for (const socket of sockets) {
@@ -45,6 +89,7 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       const sockets = await io.in(roomName(conversationId)).fetchSockets();
       for (const socket of sockets) {
         if (socket.data.userId !== userId) {
+          typing?.clearUserInConversation(conversationId, socket.data.userId);
           socket.emit("conversation:access-revoked", { conversationId });
           socket.leave(roomName(conversationId));
         }
@@ -52,6 +97,7 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
     },
 
     closeConversation(conversationId) {
+      typing?.clearConversation(conversationId);
       if (!io) return Promise.resolve();
       io.to(roomName(conversationId)).emit("conversation:access-revoked", {
         conversationId,
@@ -62,5 +108,5 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
   };
 };
 
-export { roomName };
+export { organizationRoomName, roomName, userRoomName };
 export default createSocketRealtimeGateway;

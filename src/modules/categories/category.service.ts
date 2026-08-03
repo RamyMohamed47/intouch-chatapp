@@ -54,6 +54,9 @@ const createCategoryService = ({
           organizationId,
         );
         policy.assertOwner(organization, membership);
+        if (!(await context.organizations.lockForMutation(organizationId))) {
+          throw new CategoryNotFoundError();
+        }
         const position =
           await context.categories.countByOrganization(organizationId);
 
@@ -91,6 +94,9 @@ const createCategoryService = ({
           organizationId,
         );
         policy.assertOwner(organization, membership);
+        if (!(await context.organizations.lockForMutation(organizationId))) {
+          throw new CategoryNotFoundError();
+        }
         const category = await context.categories.findById(categoryId);
 
         if (!category || category.organizationId !== organizationId) {
@@ -143,6 +149,9 @@ const createCategoryService = ({
         organizationId,
       );
       policy.assertOwner(organization, membership);
+      if (!(await context.organizations.lockForMutation(organizationId))) {
+        throw new CategoryNotFoundError();
+      }
       const category = await context.categories.findById(categoryId);
 
       if (!category || category.organizationId !== organizationId) {

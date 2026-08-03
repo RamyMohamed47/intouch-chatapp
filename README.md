@@ -123,19 +123,37 @@ a `Conversation` with `type: CHANNEL` and belongs to one category.
 
 Public channels are available to all current organization members. Private
 channels require an explicit participant record in addition to organization
-membership. Owners list organization members at
+membership. Every member can list the safe organization roster and presence at
 `GET /api/v1/organizations/:organizationId/members` and manage private-channel
-participants under `/api/v1/conversations/:conversationId/participants`.
+participants remain owner-managed under
+`/api/v1/conversations/:conversationId/participants`.
 
 Message history and creation are scoped to
 `/api/v1/conversations/:conversationId/messages`. Message edits and redacted
 deletions use `/api/v1/messages/:messageId`. History uses a `before` message-ID
 cursor and a `limit` from 1 to 100.
 
+One-to-one direct messages use the same `Conversation` collection with
+`type: DIRECT`. Create or retrieve the pair idempotently with
+`POST /api/v1/organizations/:organizationId/direct-messages`; list the caller's
+DMs with the cursor-paginated `GET` endpoint at the same path. Both users must
+remain organization members and conversation participants.
+
+Advance a conversation's durable high-water read state with
+`PUT /api/v1/conversations/:conversationId/read-receipt`. Conversation summaries
+include the last message, unread count, and caller read state. DM read updates
+are broadcast; channel read activity remains private.
+
 Socket.IO clients authenticate with `auth: { accessToken }`, then emit
-`conversation:join` before receiving `message:created`, `message:updated`, and
-`message:deleted` events for that room. REST remains the only message-write
-transport. See `.agents/sockets/Socket Events.md` for event contracts.
+`conversation:join` before receiving scoped message events. Organization
+subscriptions provide presence; joined conversation rooms support expiring
+typing indicators. REST remains the only durable write transport. Presence and
+typing are in-memory, so this version must run as one application instance. See
+`.agents/sockets/Socket Events.md` for event contracts.
+
+After deploying the runtime-presence model, remove legacy persisted `status`
+fields idempotently with `npm run migrate:remove-user-status`. `lastSeenAt` is
+the only persisted user presence field.
 
 ## Authentication Proxy
 

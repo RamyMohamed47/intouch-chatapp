@@ -1,21 +1,28 @@
-import type {
-  ConversationTypeValue,
-  ConversationVisibilityType,
-  CreateConversationInput,
-  UpdateConversationInput,
+import {
+  ConversationType,
+  type ConversationTypeValue,
+  type ConversationVisibilityType,
+  type CreateConversationInput,
+  type UpdateConversationInput,
 } from "@intouch/shared/conversations";
 import type { Types } from "mongoose";
 import type { MembershipRole } from "../memberships/index.js";
 import type { PublicUser } from "../user/user.types.js";
+import type { MessageRecord } from "../message/message.types.js";
+import type { PresenceStatusValue } from "../presence/presence.types.js";
 
 export interface Conversation {
   organizationId: Types.ObjectId;
-  categoryId: Types.ObjectId;
-  name: string;
-  nameKey: string;
+  categoryId?: Types.ObjectId;
+  name?: string;
+  nameKey?: string;
   type: ConversationTypeValue;
-  visibility: ConversationVisibilityType;
-  position: number;
+  visibility?: ConversationVisibilityType;
+  position?: number;
+  directParticipantKey?: string;
+  directParticipantAId?: Types.ObjectId;
+  directParticipantBId?: Types.ObjectId;
+  activityAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,16 +30,46 @@ export interface Conversation {
 export interface ConversationRecord {
   id: string;
   organizationId: string;
-  categoryId: string;
-  name: string;
+  categoryId?: string;
+  name?: string;
   type: ConversationTypeValue;
-  visibility: ConversationVisibilityType;
-  position: number;
+  visibility?: ConversationVisibilityType;
+  position?: number;
+  directParticipantKey?: string;
+  activityAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface CreateConversationRecordInput {
+export type ChannelConversationRecord = ConversationRecord & {
+  type: typeof ConversationType.CHANNEL;
+  categoryId: string;
+  name: string;
+  visibility: ConversationVisibilityType;
+  position: number;
+};
+
+export type DirectConversationRecord = ConversationRecord & {
+  type: typeof ConversationType.DIRECT;
+  directParticipantKey: string;
+};
+
+export const isChannelConversation = (
+  conversation: ConversationRecord,
+): conversation is ChannelConversationRecord =>
+  conversation.type === "CHANNEL" &&
+  conversation.categoryId !== undefined &&
+  conversation.name !== undefined &&
+  conversation.visibility !== undefined &&
+  conversation.position !== undefined;
+
+export const isDirectConversation = (
+  conversation: ConversationRecord,
+): conversation is DirectConversationRecord =>
+  conversation.type === "DIRECT" &&
+  conversation.directParticipantKey !== undefined;
+
+export interface CreateChannelConversationRecordInput {
   organizationId: string;
   categoryId: string;
   name: string;
@@ -41,6 +78,17 @@ export interface CreateConversationRecordInput {
   visibility: ConversationVisibilityType;
   position: number;
 }
+
+export interface CreateDirectConversationRecordInput {
+  organizationId: string;
+  type: typeof ConversationType.DIRECT;
+  directParticipantKey: string;
+  directParticipantAId: string;
+  directParticipantBId: string;
+}
+
+export type CreateConversationRecordInput =
+  CreateChannelConversationRecordInput | CreateDirectConversationRecordInput;
 
 export interface UpdateConversationRecordInput {
   categoryId?: string;
@@ -68,20 +116,32 @@ export interface ConversationParticipantRecord {
 }
 
 export interface ConversationParticipantView extends ConversationParticipantRecord {
-  user: Pick<
-    PublicUser,
-    "id" | "username" | "displayName" | "avatarUrl" | "status"
-  >;
+  user: Pick<PublicUser, "id" | "username" | "displayName" | "avatarUrl">;
 }
 
 export interface OrganizationMemberView {
   membershipId: string;
   role: MembershipRole;
   joinedAt: Date;
-  user: Pick<
-    PublicUser,
-    "id" | "username" | "displayName" | "avatarUrl" | "status"
-  >;
+  user: Pick<PublicUser, "id" | "username" | "displayName" | "avatarUrl"> & {
+    status: PresenceStatusValue;
+    lastSeenAt: Date | null;
+  };
+}
+
+export interface ReadReceiptView {
+  id: string;
+  conversationId: string;
+  userId: string;
+  lastReadMessageId: string;
+  lastReadAt: Date;
+}
+
+export interface ConversationSummary extends ConversationRecord {
+  lastMessage: MessageRecord | null;
+  unreadCount: number;
+  readReceipt: ReadReceiptView | null;
+  peer?: Pick<PublicUser, "id" | "username" | "displayName" | "avatarUrl">;
 }
 
 export type { CreateConversationInput, UpdateConversationInput };

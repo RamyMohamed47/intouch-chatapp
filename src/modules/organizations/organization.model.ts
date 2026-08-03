@@ -23,6 +23,12 @@ const organizationSchema = new Schema<Organization>(
       default: OrganizationVisibility.PRIVATE,
       required: true,
     },
+    mutationVersion: {
+      type: Number,
+      default: 0,
+      required: true,
+      select: false,
+    },
   },
   {
     timestamps: true,

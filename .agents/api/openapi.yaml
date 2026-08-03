@@ -183,7 +183,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
-
     patch:
       tags: [Organizations]
       summary: Update organization
@@ -390,7 +389,8 @@ paths:
   /organizations/{organizationId}/members:
     get:
       tags: [Memberships]
-      summary: List organization members for participant selection
+      summary: List organization members and current presence
+      description: Available to every current organization member.
       parameters:
         - $ref: "#/components/parameters/OrganizationId"
       responses:
@@ -410,8 +410,8 @@ paths:
   /organizations/{organizationId}/conversations:
     get:
       tags: [Conversations]
-      summary: List conversations
-      description: Returns public channels and private channels available to the caller.
+      summary: List channel conversations
+      description: Returns accessible channels with last-message, unread-count, and caller read-state summaries. Direct messages are listed separately.
       parameters:
         - $ref: "#/components/parameters/OrganizationId"
         - name: categoryId
@@ -445,6 +445,74 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /organizations/{organizationId}/direct-messages:
+    get:
+      tags: [Conversations]
+      summary: List the caller's direct messages in an organization
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - name: before
+          in: query
+          schema:
+            type: string
+            maxLength: 512
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+      responses:
+        "200":
+          $ref: "#/components/responses/DirectMessageListResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Conversations]
+      summary: Create or retrieve a one-to-one direct message
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDirectMessageInput"
+      responses:
+        "200":
+          description: Existing direct message returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [directMessage]
+                properties:
+                  directMessage:
+                    $ref: "#/components/schemas/DirectConversation"
+        "201":
+          description: Direct message created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [directMessage]
+                properties:
+                  directMessage:
+                    $ref: "#/components/schemas/DirectConversation"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -556,6 +624,29 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /conversations/{conversationId}/read-receipt:
+    put:
+      tags: [Messages]
+      summary: Advance the caller's conversation read state
+      description: The high-water mark is monotonic. Direct-message updates are broadcast; channel read state remains private.
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReadReceiptInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/ReadReceiptResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   #
   # Messages
@@ -1008,6 +1099,34 @@ components:
                 items:
                   $ref: "#/components/schemas/Conversation"
 
+    DirectMessageListResponse:
+      description: Cursor-paginated direct-message list.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [directMessages, nextCursor]
+            properties:
+              directMessages:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DirectConversation"
+              nextCursor:
+                oneOf:
+                  - type: string
+                  - type: "null"
+
+    ReadReceiptResponse:
+      description: Current monotonic conversation read state.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [readReceipt]
+            properties:
+              readReceipt:
+                $ref: "#/components/schemas/ReadReceipt"
+
     OrganizationMemberListResponse:
       description: Organization member list.
       content:
@@ -1140,6 +1259,7 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+          pattern: ".*\\S.*"
 
     UpdateCategoryInput:
       type: object
@@ -1150,6 +1270,7 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+          pattern: ".*\\S.*"
         position:
           type: integer
           minimum: 0
@@ -1186,6 +1307,7 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+          pattern: ".*\\S.*"
         visibility:
           type: string
           enum: [PUBLIC, PRIVATE]
@@ -1203,6 +1325,7 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+          pattern: ".*\\S.*"
         visibility:
           type: string
           enum: [PUBLIC, PRIVATE]
@@ -1210,7 +1333,32 @@ components:
           type: integer
           minimum: 0
 
+    CreateDirectMessageInput:
+      type: object
+      additionalProperties: false
+      required: [recipientUserId]
+      properties:
+        recipientUserId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+
+    UpdateReadReceiptInput:
+      type: object
+      additionalProperties: false
+      required: [messageId]
+      properties:
+        messageId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+
     Conversation:
+      oneOf:
+        - $ref: "#/components/schemas/ChannelConversation"
+        - $ref: "#/components/schemas/DirectConversation"
+      discriminator:
+        propertyName: type
+
+    ChannelConversation:
       type: object
       required:
         [id, organizationId, categoryId, name, type, visibility, position, createdAt, updatedAt]
@@ -1232,6 +1380,49 @@ components:
         position:
           type: integer
           minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastMessage:
+          oneOf:
+            - $ref: "#/components/schemas/Message"
+            - type: "null"
+        unreadCount:
+          type: integer
+          minimum: 0
+        readReceipt:
+          oneOf:
+            - $ref: "#/components/schemas/ReadReceipt"
+            - type: "null"
+
+    DirectConversation:
+      type: object
+      required:
+        [id, organizationId, type, peer, lastMessage, unreadCount, readReceipt, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        type:
+          type: string
+          const: DIRECT
+        peer:
+          $ref: "#/components/schemas/PeerUser"
+        lastMessage:
+          oneOf:
+            - $ref: "#/components/schemas/Message"
+            - type: "null"
+        unreadCount:
+          type: integer
+          minimum: 0
+        readReceipt:
+          oneOf:
+            - $ref: "#/components/schemas/ReadReceipt"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -1274,11 +1465,25 @@ components:
           required: [user]
           properties:
             user:
-              $ref: "#/components/schemas/MemberUser"
+              $ref: "#/components/schemas/ParticipantUser"
+
+    ParticipantUser:
+      type: object
+      required: [id, username, displayName]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
 
     MemberUser:
       type: object
-      required: [id, username, displayName, status]
+      required: [id, username, displayName, status, lastSeenAt]
       properties:
         id:
           type: string
@@ -1292,6 +1497,25 @@ components:
         status:
           type: string
           enum: [ONLINE, OFFLINE]
+        lastSeenAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+
+    PeerUser:
+      type: object
+      required: [id, username, displayName]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
 
     OrganizationMember:
       type: object
@@ -1317,6 +1541,7 @@ components:
           type: string
           minLength: 1
           maxLength: 4000
+          pattern: ".*\\S.*"
 
     Message:
       type: object
@@ -1350,6 +1575,22 @@ components:
           type: string
           format: date-time
         updatedAt:
+          type: string
+          format: date-time
+
+    ReadReceipt:
+      type: object
+      required: [id, conversationId, userId, lastReadMessageId, lastReadAt]
+      properties:
+        id:
+          type: string
+        conversationId:
+          type: string
+        userId:
+          type: string
+        lastReadMessageId:
+          type: string
+        lastReadAt:
           type: string
           format: date-time
 
@@ -1433,9 +1674,11 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+          pattern: ".*\\S.*"
         logoUrl:
           type: string
           format: uri
+          pattern: "^https?://"
         visibility:
           type: string
           enum: [PRIVATE, PUBLIC]
@@ -1450,10 +1693,12 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+          pattern: ".*\\S.*"
         logoUrl:
           oneOf:
             - type: string
               format: uri
+              pattern: "^https?://"
             - type: "null"
         visibility:
           type: string
@@ -1527,7 +1772,7 @@ components:
 
     PublicUser:
       type: object
-      required: [id, username, displayName, email, status, createdAt, updatedAt]
+      required: [id, username, displayName, email, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -1541,9 +1786,6 @@ components:
         avatarUrl:
           type: string
           format: uri
-        status:
-          type: string
-          enum: [ONLINE, OFFLINE]
         createdAt:
           type: string
           format: date-time

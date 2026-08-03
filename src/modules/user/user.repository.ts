@@ -1,10 +1,9 @@
-import { Types } from "mongoose";
+import { Types, type ClientSession } from "mongoose";
 
 import { UserIdentityConflictError } from "./user.errors.js";
 import { UserModel } from "./user.model.js";
 import {
   AuthProvider,
-  UserStatus,
   type PasswordUser,
   type PublicUser,
   type User,
@@ -38,6 +37,9 @@ export interface UserRepository {
   findPublicByEmail(email: string): Promise<PublicUser | null>;
   findPublicById(userId: string): Promise<PublicUser | null>;
   findPublicByIds(userIds: readonly string[]): Promise<PublicUser[]>;
+  findLastSeenByIds(
+    userIds: readonly string[],
+  ): Promise<Array<{ userId: string; lastSeenAt: Date | null }>>;
   linkGoogleProvider(
     userId: string,
     providerAccountId: string,
@@ -49,6 +51,7 @@ export interface UserRepository {
     usedAt: Date,
   ): Promise<PublicUser | null>;
   usernameExists(username: string): Promise<boolean>;
+  updateLastSeen(userId: string, lastSeenAt: Date): Promise<void>;
 }
 
 const isDuplicateKeyError = (error: unknown) =>
@@ -63,7 +66,6 @@ const toPublicUser = (user: UserRecord): PublicUser => {
     username: user.username,
     displayName: user.displayName,
     email: user.email,
-    status: user.status,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -75,14 +77,17 @@ const toPublicUser = (user: UserRecord): PublicUser => {
   return publicUser;
 };
 
-const createMongooseUserRepository = (): UserRepository => ({
+const createMongooseUserRepository = (
+  session?: ClientSession,
+): UserRepository => ({
   async hasIdentityConflict(email, username) {
-    const user = await UserModel.findOne({
+    const query = UserModel.findOne({
       $or: [{ email }, { username }],
     })
       .select("_id")
-      .lean()
-      .exec();
+      .lean();
+    if (session) query.session(session);
+    const user = await query.exec();
 
     return user !== null;
   },
@@ -91,20 +96,26 @@ const createMongooseUserRepository = (): UserRepository => ({
     const createdAt = new Date();
 
     try {
-      const user = await UserModel.create({
-        username: input.username,
-        displayName: input.displayName,
-        email: input.email,
-        status: UserStatus.OFFLINE,
-        loginProviders: [
+      const users = await UserModel.create(
+        [
           {
-            provider: AuthProvider.PASSWORD,
-            providerAccountId: input.email,
-            passwordHash: input.passwordHash,
-            linkedAt: createdAt,
+            username: input.username,
+            displayName: input.displayName,
+            email: input.email,
+            loginProviders: [
+              {
+                provider: AuthProvider.PASSWORD,
+                providerAccountId: input.email,
+                passwordHash: input.passwordHash,
+                linkedAt: createdAt,
+              },
+            ],
           },
         ],
-      });
+        session ? { session } : {},
+      );
+      const user = users[0];
+      if (!user) throw new Error("User creation returned no document");
 
       return toPublicUser(user.toObject<UserRecord>());
     } catch (error) {
@@ -118,21 +129,27 @@ const createMongooseUserRepository = (): UserRepository => ({
 
   async createGoogleUser(input) {
     try {
-      const user = await UserModel.create({
-        username: input.username,
-        displayName: input.displayName,
-        email: input.email,
-        ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
-        status: UserStatus.OFFLINE,
-        loginProviders: [
+      const users = await UserModel.create(
+        [
           {
-            provider: AuthProvider.GOOGLE,
-            providerAccountId: input.providerAccountId,
-            linkedAt: input.usedAt,
-            lastUsedAt: input.usedAt,
+            username: input.username,
+            displayName: input.displayName,
+            email: input.email,
+            ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
+            loginProviders: [
+              {
+                provider: AuthProvider.GOOGLE,
+                providerAccountId: input.providerAccountId,
+                linkedAt: input.usedAt,
+                lastUsedAt: input.usedAt,
+              },
+            ],
           },
         ],
-      });
+        session ? { session } : {},
+      );
+      const user = users[0];
+      if (!user) throw new Error("User creation returned no document");
 
       return toPublicUser(user.toObject<UserRecord>());
     } catch (error) {
@@ -145,10 +162,11 @@ const createMongooseUserRepository = (): UserRepository => ({
   },
 
   async findPasswordUserByEmail(email) {
-    const user = await UserModel.findOne({ email })
+    const query = UserModel.findOne({ email })
       .select("+loginProviders.passwordHash")
-      .lean<UserRecord>()
-      .exec();
+      .lean<UserRecord>();
+    if (session) query.session(session);
+    const user = await query.exec();
     const passwordProvider = user?.loginProviders.find(
       (provider) => provider.provider === AuthProvider.PASSWORD,
     );
@@ -164,7 +182,9 @@ const createMongooseUserRepository = (): UserRepository => ({
   },
 
   async findPublicByEmail(email) {
-    const user = await UserModel.findOne({ email }).lean<UserRecord>().exec();
+    const query = UserModel.findOne({ email }).lean<UserRecord>();
+    if (session) query.session(session);
+    const user = await query.exec();
 
     return user ? toPublicUser(user) : null;
   },
@@ -174,7 +194,9 @@ const createMongooseUserRepository = (): UserRepository => ({
       return null;
     }
 
-    const user = await UserModel.findById(userId).lean<UserRecord>().exec();
+    const query = UserModel.findById(userId).lean<UserRecord>();
+    if (session) query.session(session);
+    const user = await query.exec();
 
     return user ? toPublicUser(user) : null;
   },
@@ -184,16 +206,31 @@ const createMongooseUserRepository = (): UserRepository => ({
       return [];
     }
 
-    const users = await UserModel.find({ _id: { $in: userIds } })
-      .lean<UserRecord[]>()
-      .exec();
+    const query = UserModel.find({ _id: { $in: userIds } }).lean<
+      UserRecord[]
+    >();
+    if (session) query.session(session);
+    const users = await query.exec();
 
     return users.map(toPublicUser);
   },
 
+  async findLastSeenByIds(userIds) {
+    if (userIds.length === 0) return [];
+    const query = UserModel.find({ _id: { $in: userIds } })
+      .select("lastSeenAt")
+      .lean<Array<{ _id: Types.ObjectId; lastSeenAt?: Date }>>();
+    if (session) query.session(session);
+    const users = await query.exec();
+    return users.map((user) => ({
+      userId: user._id.toString(),
+      lastSeenAt: user.lastSeenAt ?? null,
+    }));
+  },
+
   async linkGoogleProvider(userId, providerAccountId, usedAt) {
     try {
-      const user = await UserModel.findOneAndUpdate(
+      const query = UserModel.findOneAndUpdate(
         {
           _id: userId,
           loginProviders: {
@@ -211,9 +248,9 @@ const createMongooseUserRepository = (): UserRepository => ({
           },
         },
         { new: true },
-      )
-        .lean<UserRecord>()
-        .exec();
+      ).lean<UserRecord>();
+      if (session) query.session(session);
+      const user = await query.exec();
 
       return user ? toPublicUser(user) : null;
     } catch (error) {
@@ -226,7 +263,7 @@ const createMongooseUserRepository = (): UserRepository => ({
   },
 
   async touchPasswordProvider(userId, usedAt) {
-    await UserModel.updateOne(
+    const query = UserModel.updateOne(
       {
         _id: userId,
         loginProviders: {
@@ -236,11 +273,13 @@ const createMongooseUserRepository = (): UserRepository => ({
       {
         $set: { "loginProviders.$.lastUsedAt": usedAt },
       },
-    ).exec();
+    );
+    if (session) query.session(session);
+    await query.exec();
   },
 
   async useGoogleProvider(providerAccountId, usedAt) {
-    const user = await UserModel.findOneAndUpdate(
+    const query = UserModel.findOneAndUpdate(
       {
         loginProviders: {
           $elemMatch: {
@@ -253,20 +292,28 @@ const createMongooseUserRepository = (): UserRepository => ({
         $set: { "loginProviders.$.lastUsedAt": usedAt },
       },
       { new: true },
-    )
-      .lean<UserRecord>()
-      .exec();
+    ).lean<UserRecord>();
+    if (session) query.session(session);
+    const user = await query.exec();
 
     return user ? toPublicUser(user) : null;
   },
 
   async usernameExists(username) {
-    const user = await UserModel.findOne({ username })
-      .select("_id")
-      .lean()
-      .exec();
+    const query = UserModel.findOne({ username }).select("_id").lean();
+    if (session) query.session(session);
+    const user = await query.exec();
 
     return user !== null;
+  },
+
+  async updateLastSeen(userId, lastSeenAt) {
+    const query = UserModel.updateOne(
+      { _id: userId },
+      { $set: { lastSeenAt } },
+    );
+    if (session) query.session(session);
+    await query.exec();
   },
 });
 

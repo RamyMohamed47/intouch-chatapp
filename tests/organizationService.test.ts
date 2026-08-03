@@ -55,6 +55,7 @@ const createOrganizationRepository = (
   create: async (input) => organization(input),
   findById: async () => organization(),
   findByIds: async () => [organization()],
+  lockForMutation: async () => true,
   updateById: async (_id, input) =>
     organization({
       ...(input.name === undefined ? {} : { name: input.name }),

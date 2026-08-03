@@ -1,11 +1,6 @@
 import { Schema, model } from "mongoose";
 
-import {
-  AuthProvider,
-  UserStatus,
-  type LoginProvider,
-  type User,
-} from "./user.types.js";
+import { AuthProvider, type LoginProvider, type User } from "./user.types.js";
 
 const loginProviderSchema = new Schema<LoginProvider>(
   {
@@ -61,11 +56,7 @@ const userSchema = new Schema<User>(
       trim: true,
     },
     avatarUrl: String,
-    status: {
-      type: String,
-      enum: Object.values(UserStatus),
-      default: UserStatus.OFFLINE,
-    },
+    lastSeenAt: Date,
     loginProviders: {
       type: [loginProviderSchema],
       default: [],

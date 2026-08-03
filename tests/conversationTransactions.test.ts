@@ -16,12 +16,15 @@ import createConversationPolicy from "../src/modules/conversations/conversation.
 import { createNoopConversationRealtime } from "../src/modules/conversations/conversation.realtime.js";
 import createMongooseConversationRepository from "../src/modules/conversations/conversation.repository.js";
 import createConversationService from "../src/modules/conversations/conversation.service.js";
+import createDirectMessageService from "../src/modules/direct-messages/direct-message.service.js";
 import createMongooseInvitationRepository from "../src/modules/invitations/invitation.repository.js";
 import MembershipModel from "../src/modules/memberships/membership.model.js";
 import createMongooseMembershipRepository from "../src/modules/memberships/membership.repository.js";
 import createMembershipService from "../src/modules/memberships/membership.service.js";
 import MessageModel from "../src/modules/message/message.model.js";
 import createMongooseMessageRepository from "../src/modules/message/message.repository.js";
+import createMongooseConversationSummaryRepository from "../src/modules/message/conversation-summary.repository.js";
+import createMessageService from "../src/modules/message/message.service.js";
 import { MessageType } from "../src/modules/message/message.types.js";
 import OrganizationModel from "../src/modules/organizations/organization.model.js";
 import createOrganizationPolicy from "../src/modules/organizations/organization.policy.js";
@@ -31,6 +34,8 @@ import createMongooseOrganizationUnitOfWork, {
   type OrganizationUnitOfWork,
 } from "../src/modules/organizations/organization.unit-of-work.js";
 import createMongooseUserRepository from "../src/modules/user/user.repository.js";
+import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
+import createMongooseConversationReadStateRepository from "../src/modules/read-receipts/read-receipt.repository.js";
 
 const ownerId = "507f1f77bcf86cd799439011";
 const memberId = "507f1f77bcf86cd799439012";
@@ -46,6 +51,7 @@ before(async () => {
     ConversationModel.syncIndexes(),
     ConversationParticipantModel.syncIndexes(),
     MessageModel.syncIndexes(),
+    ConversationReadStateModel.syncIndexes(),
   ]);
 });
 
@@ -57,6 +63,7 @@ beforeEach(async () => {
     ConversationModel.deleteMany({}).exec(),
     ConversationParticipantModel.deleteMany({}).exec(),
     MessageModel.deleteMany({}).exec(),
+    ConversationReadStateModel.deleteMany({}).exec(),
   ]);
 });
 
@@ -74,6 +81,31 @@ const createHarness = (unitOfWork = createMongooseOrganizationUnitOfWork()) => {
   const conversations = createMongooseConversationRepository();
   const participants = createMongooseConversationParticipantRepository();
   const organizationPolicy = createOrganizationPolicy();
+  const conversationService = createConversationService({
+    categories,
+    conversations,
+    memberships,
+    conversationSummaries: createMongooseConversationSummaryRepository(),
+    organizations,
+    participants,
+    policy: createConversationPolicy(),
+    organizationPolicy,
+    realtime: createNoopConversationRealtime(),
+    unitOfWork,
+    users: createMongooseUserRepository(),
+  });
+  const messageService = createMessageService({
+    broadcaster: {
+      messageCreated() {},
+      messageDeleted() {},
+      messageUpdated() {},
+    },
+    conversationPolicy: createConversationPolicy(),
+    conversations: conversationService,
+    memberships,
+    messages: createMongooseMessageRepository(),
+    unitOfWork,
+  });
   return {
     organizationService: createOrganizationService({
       organizations,
@@ -88,19 +120,17 @@ const createHarness = (unitOfWork = createMongooseOrganizationUnitOfWork()) => {
       policy: organizationPolicy,
       unitOfWork,
     }),
-    conversationService: createConversationService({
-      categories,
+    conversationService,
+    directMessageService: createDirectMessageService({
       conversations,
       memberships,
       organizations,
-      participants,
-      policy: createConversationPolicy(),
       organizationPolicy,
-      realtime: createNoopConversationRealtime(),
+      summaries: conversationService,
       unitOfWork,
-      users: createMongooseUserRepository(),
     }),
     memberships,
+    messageService,
   };
 };
 
@@ -119,6 +149,163 @@ const createOrganizationAndCategory = async () => {
 };
 
 describe("category and conversation transactions", () => {
+  test("serializes concurrent category and channel appends", async () => {
+    const harness = createHarness();
+    const organization = await harness.organizationService.create(ownerId, {
+      name: "Concurrent Team",
+      visibility: OrganizationVisibility.PRIVATE,
+    });
+    const createdCategories = await Promise.all([
+      harness.categoryService.create(ownerId, organization.id, { name: "A" }),
+      harness.categoryService.create(ownerId, organization.id, { name: "B" }),
+    ]);
+    assert.deepEqual(
+      createdCategories.map(({ position }) => position).sort(),
+      [0, 1],
+    );
+
+    const category = createdCategories[0];
+    assert.ok(category);
+    const createdChannels = await Promise.all([
+      harness.conversationService.create(ownerId, organization.id, {
+        categoryId: category.id,
+        name: "one",
+        visibility: ConversationVisibility.PUBLIC,
+      }),
+      harness.conversationService.create(ownerId, organization.id, {
+        categoryId: category.id,
+        name: "two",
+        visibility: ConversationVisibility.PUBLIC,
+      }),
+    ]);
+    assert.deepEqual(
+      createdChannels.map(({ position }) => position).sort(),
+      [0, 1],
+    );
+  });
+
+  test("creates one idempotent direct conversation with exactly two participants", async () => {
+    const { directMessageService, memberships, organization } =
+      await createOrganizationAndCategory();
+    await memberships.createMember(memberId, organization.id);
+
+    const first = await directMessageService.create(ownerId, organization.id, {
+      recipientUserId: memberId,
+    });
+    const second = await directMessageService.create(ownerId, organization.id, {
+      recipientUserId: memberId,
+    });
+
+    assert.equal(first.created, true);
+    assert.equal(second.created, false);
+    assert.equal(first.directMessage.id, second.directMessage.id);
+    assert.equal(await ConversationModel.countDocuments({ type: "DIRECT" }), 1);
+    assert.equal(await ConversationParticipantModel.countDocuments(), 2);
+  });
+
+  test("rejects self direct messages and recipients outside the organization", async () => {
+    const { directMessageService, organization } =
+      await createOrganizationAndCategory();
+    await assert.rejects(
+      directMessageService.create(ownerId, organization.id, {
+        recipientUserId: ownerId,
+      }),
+      /cannot create a direct message with yourself/i,
+    );
+    await assert.rejects(
+      directMessageService.create(ownerId, organization.id, {
+        recipientUserId: memberId,
+      }),
+      /recipient not found/i,
+    );
+  });
+
+  test("converges concurrent DM creation on one conversation", async () => {
+    const { directMessageService, memberships, organization } =
+      await createOrganizationAndCategory();
+    await memberships.createMember(memberId, organization.id);
+    const results = await Promise.all([
+      directMessageService.create(ownerId, organization.id, {
+        recipientUserId: memberId,
+      }),
+      directMessageService.create(ownerId, organization.id, {
+        recipientUserId: memberId,
+      }),
+    ]);
+    assert.equal(
+      new Set(results.map(({ directMessage }) => directMessage.id)).size,
+      1,
+    );
+    assert.equal(await ConversationModel.countDocuments({ type: "DIRECT" }), 1);
+    assert.equal(await ConversationParticipantModel.countDocuments(), 2);
+  });
+
+  test("computes DM previews and unread counts from durable read state", async () => {
+    const {
+      conversationService,
+      directMessageService,
+      memberships,
+      messageService,
+      organization,
+    } = await createOrganizationAndCategory();
+    await memberships.createMember(memberId, organization.id);
+    const result = await directMessageService.create(ownerId, organization.id, {
+      recipientUserId: memberId,
+    });
+    const ownMessage = await messageService.create(
+      ownerId,
+      result.directMessage.id,
+      {
+        content: "own message",
+      },
+    );
+    const incoming = await messageService.create(
+      memberId,
+      result.directMessage.id,
+      {
+        content: "incoming",
+      },
+    );
+    const page = await directMessageService.list(ownerId, organization.id, {
+      limit: 30,
+    });
+    assert.equal(page.directMessages[0]?.lastMessage?.id, incoming.id);
+    const [unread] = await conversationService.summarize(
+      ownerId,
+      [
+        await createMongooseConversationRepository().findById(
+          result.directMessage.id,
+        ),
+      ].filter((record) => record !== null),
+    );
+    assert.equal(unread?.lastMessage?.id, incoming.id);
+    assert.equal(unread?.unreadCount, 1);
+
+    const readStateRepository = createMongooseConversationReadStateRepository();
+    await readStateRepository.advance({
+      organizationId: organization.id,
+      conversationId: result.directMessage.id,
+      userId: ownerId,
+      lastReadMessageId: incoming.id,
+      lastReadAt: new Date(),
+    });
+    const stale = await readStateRepository.advance({
+      organizationId: organization.id,
+      conversationId: result.directMessage.id,
+      userId: ownerId,
+      lastReadMessageId: ownMessage.id,
+      lastReadAt: new Date(),
+    });
+    assert.equal(stale.lastReadMessageId, incoming.id);
+    const record = await createMongooseConversationRepository().findById(
+      result.directMessage.id,
+    );
+    assert.ok(record);
+    const [read] = await conversationService.summarize(ownerId, [record]);
+    assert.equal(read?.unreadCount, 0);
+    assert.equal(read?.readReceipt?.lastReadMessageId, incoming.id);
+  });
+
   test("creates a private channel and owner participant atomically", async () => {
     const { category, conversationService, organization } =
       await createOrganizationAndCategory();
@@ -157,6 +344,8 @@ describe("category and conversation transactions", () => {
               createMongooseMembershipRepository(session),
             ),
             messages: createMongooseMessageRepository(session),
+            conversationReadStates:
+              createMongooseConversationReadStateRepository(session),
             organizations: createMongooseOrganizationRepository(session),
           });
         }),
@@ -216,11 +405,18 @@ describe("category and conversation transactions", () => {
         visibility: ConversationVisibility.PUBLIC,
       },
     );
-    await createMongooseMessageRepository().create({
+    const message = await createMongooseMessageRepository().create({
       conversationId: conversation.id,
       senderId: ownerId,
       content: "hello",
       messageType: MessageType.TEXT,
+    });
+    await createMongooseConversationReadStateRepository().advance({
+      organizationId: organization.id,
+      conversationId: conversation.id,
+      userId: ownerId,
+      lastReadMessageId: message.id,
+      lastReadAt: new Date(),
     });
     await assert.rejects(
       categoryService.delete(ownerId, organization.id, category.id),
@@ -228,6 +424,7 @@ describe("category and conversation transactions", () => {
     );
     await conversationService.delete(ownerId, conversation.id);
     assert.equal(await MessageModel.countDocuments(), 0);
+    assert.equal(await ConversationReadStateModel.countDocuments(), 0);
     await categoryService.delete(ownerId, organization.id, category.id);
     assert.equal(await CategoryModel.countDocuments(), 0);
   });

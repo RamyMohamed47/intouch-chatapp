@@ -4,6 +4,7 @@ import type { UserRepository } from "../user/index.js";
 import { MembershipConflictError } from "../memberships/membership.errors.js";
 import { MembershipPersistenceConflictError } from "../memberships/membership.repository.js";
 import type { OrganizationPolicy } from "../organizations/organization.policy.js";
+import { OrganizationNotFoundError } from "../organizations/organization.errors.js";
 import type { OrganizationRepository } from "../organizations/organization.repository.js";
 import type { OrganizationRecord } from "../organizations/organization.types.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
@@ -84,6 +85,9 @@ const createInvitationService = ({
           organization,
           inviterMembership,
         );
+        if (!(await context.organizations.lockForMutation(organizationId))) {
+          throw new OrganizationNotFoundError();
+        }
         const invitedUserMembership = await context.memberships.findForUser(
           invitedUser.id,
           organizationId,
@@ -162,6 +166,13 @@ const createInvitationService = ({
         );
 
         if (!organization) {
+          throw new InvitationNotFoundError();
+        }
+        if (
+          !(await context.organizations.lockForMutation(
+            invitation.organizationId,
+          ))
+        ) {
           throw new InvitationNotFoundError();
         }
 

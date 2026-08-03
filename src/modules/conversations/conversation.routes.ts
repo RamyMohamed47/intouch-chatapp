@@ -22,11 +22,6 @@ export const createOrganizationConversationRouter = (
 ) => {
   const router = express.Router();
   router.use(requireAccessToken);
-  router.get(
-    "/:organizationId/members",
-    validateParams(organizationConversationsParamsSchema),
-    controller.listOrganizationMembers,
-  );
   router
     .route("/:organizationId/conversations")
     .get(
