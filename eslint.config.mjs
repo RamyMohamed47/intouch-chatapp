@@ -8,6 +8,9 @@ export default tseslint.config(
     ignores: [
       ".agents/**",
       "dist/**",
+      "apps/*/dist/**",
+      "apps/*/.next/**",
+      "apps/web/*.config.mjs",
       "packages/*/dist/**",
       "node_modules/**",
       "coverage/**",
@@ -29,7 +32,15 @@ export default tseslint.config(
     },
   },
   {
-    files: ["tests/**/*.ts", "packages/*/tests/**/*.ts"],
+    files: ["apps/web/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+  {
+    files: ["apps/api/tests/**/*.ts", "packages/*/tests/**/*.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-floating-promises": "off",

@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { fileURLToPath } from "node:url";
 
 export interface AppConfig {
   accessTokenAudience: string;
@@ -104,8 +105,11 @@ const parseGoogleUrl = (
   return url.toString();
 };
 
+export const getEnvFilePath = () =>
+  fileURLToPath(new URL("../../config.env", import.meta.url));
+
 export const loadEnvFile = () => {
-  dotenv.config({ path: "./config.env" });
+  dotenv.config({ path: getEnvFilePath() });
 };
 
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {

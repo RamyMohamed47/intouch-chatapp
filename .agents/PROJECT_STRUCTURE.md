@@ -1,40 +1,28 @@
-src/
+# Project Structure
 
-modules/
+Backend application: `apps/api`
 
+Frontend application: `apps/web`
 
-    organization/
+Shared contracts: `packages/shared`
 
-    message/
+Future mobile application: `apps/mobile` (reserved, not scaffolded)
 
-shared/
+```text
+apps/api/
+|-- src/
+|   |-- config/
+|   |-- middleware/
+|   |-- migrations/
+|   |-- modules/
+|   `-- sockets/
+|-- tests/
+|-- config.env
+|-- package.json
+`-- tsconfig.build.json
+```
 
-config/
-
-middlewares/
-
-utils/
-
-Each feature contains:
-
-controller
-
-routes
-
-service
-
-repository
-
-model
-
-schema
-
-types
-
-validators
-
-tests
-
-Business logic always belongs to services.
-
-Database access always belongs to repositories.
+API feature modules live under `apps/api/src/modules`. Controllers and socket
+handlers stay transport-only. Services own business rules. Repositories own
+MongoDB persistence and aggregation. Shared Zod contracts belong in
+`packages/shared`; do not duplicate them in an app.

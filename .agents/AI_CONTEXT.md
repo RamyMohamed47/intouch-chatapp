@@ -21,6 +21,10 @@
 - Layered Architecture
 - Repository Pattern
 - Feature Modules
+- npm workspaces with applications under `apps` and contracts under `packages`
+- Backend composition root at `apps/api/src/server.ts`
+- Next.js frontend at `apps/web`
+- Future mobile application reserved for `apps/mobile`
 
 ## Engineering Principles
 

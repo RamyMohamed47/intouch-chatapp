@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-import { loadConfig } from "../src/config/env.js";
+import { getEnvFilePath, loadConfig } from "../src/config/env.js";
 
 const validEnv: NodeJS.ProcessEnv = {
   ACCESS_TOKEN_SECRET: "a-development-secret-that-is-over-32-bytes",
@@ -16,6 +17,13 @@ const validEnv: NodeJS.ProcessEnv = {
 };
 
 describe("auth environment configuration", () => {
+  test("resolves config.env from the API package instead of the working directory", () => {
+    assert.equal(
+      getEnvFilePath(),
+      fileURLToPath(new URL("../config.env", import.meta.url)),
+    );
+  });
+
   test("normalizes client origins and development cookie settings", () => {
     const config = loadConfig(validEnv);
 

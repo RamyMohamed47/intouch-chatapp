@@ -1,6 +1,6 @@
 # intouch-chatapp
 
-Backend API and Socket.IO server for a SaaS chat application.
+Full-stack API, Socket.IO, and Next.js application for a SaaS chat platform.
 
 ## Development
 
@@ -10,14 +10,28 @@ Install dependencies:
 npm install
 ```
 
-Run the TypeScript development server:
+Run the API, shared-contract watcher, and web application together:
 
 ```bash
 npm run dev
 ```
 
-The current static frontend has been removed. Use the API and Socket.IO server
-from a dedicated frontend client.
+The API runs at `http://localhost:3000` and the web application runs at
+`http://localhost:3001`. The frontend lives in `apps/web` and proxies browser
+requests from `/api/*` to the API so refresh cookies remain first-party.
+
+Run either application independently when needed:
+
+```bash
+npm run dev:api
+npm run dev:web
+```
+
+Frontend server settings are documented in `apps/web/.env.example`.
+`BACKEND_ORIGIN` is server-only and powers the same-origin API proxy;
+`NEXT_PUBLIC_SOCKET_ORIGIN` is the direct Socket.IO endpoint. The imported v0
+workspace shell still uses presentation mock data until its individual screens
+are connected to the frontend auth and API clients.
 
 Health check:
 
@@ -33,7 +47,10 @@ npm run check
 
 ## Runtime
 
-The server reads `config.env` from the project root. Required values:
+The API reads `apps/api/config.env`. The path is resolved from the API package,
+so root commands, workspace commands, source execution, and compiled execution
+load the same local file. Start from `apps/api/config.env.example`; required
+values are:
 
 - `ACCESS_TOKEN_SECRET`, at least 32 bytes
 - `CLIENT_ORIGINS`, comma-separated exact frontend origins
@@ -73,11 +90,11 @@ Example development auth configuration:
 
 ```dotenv
 ACCESS_TOKEN_SECRET=replace-with-at-least-32-random-bytes
-CLIENT_ORIGINS=http://localhost:5173
+CLIENT_ORIGINS=http://localhost:3001
 GOOGLE_OAUTH_CLIENT_ID=replace-with-google-web-client-id
 GOOGLE_OAUTH_CLIENT_SECRET=replace-with-google-web-client-secret
-GOOGLE_OAUTH_CALLBACK_URL=http://localhost:5173/api/v1/auth/oauth/google/callback
-GOOGLE_OAUTH_FRONTEND_REDIRECT_URL=http://localhost:5173/auth/callback
+GOOGLE_OAUTH_CALLBACK_URL=http://localhost:3001/api/v1/auth/oauth/google/callback
+GOOGLE_OAUTH_FRONTEND_REDIRECT_URL=http://localhost:3001/auth/callback
 ```
 
 ## Google OAuth
@@ -175,9 +192,44 @@ Pino HTTP still sets `X-Request-Id`, but automatic request completed logs are
 disabled to keep local output readable. Socket connection logs are emitted at
 `debug`, so they are hidden by the default `info` level.
 
-Production runs from compiled output:
+## Repository Layout
+
+```text
+apps/
+|-- api/                  # Express, Socket.IO, MongoDB, API tests and migrations
+`-- web/                  # Next.js frontend and same-origin API proxy
+packages/
+`-- shared/               # Transport-neutral Zod contracts and shared types
+```
+
+The future mobile client belongs at `apps/mobile` and should consume
+`@intouch/shared`; it is intentionally not scaffolded until its framework and
+native authentication transport are selected.
+
+## Railway Deployment
+
+Keep Railway's build context at the repository root because `@intouch/api`
+depends on `packages/shared`. Do not set the service Root Directory to
+`/apps/api`.
+
+- Build command: `npm run build:api`
+- Start command: `npm run start:api`
+- Watch paths: `/apps/api/**`, `/packages/shared/**`, `/package.json`,
+  `/package-lock.json`, and `/tsconfig.base.json`
+
+API production output is written to `apps/api/dist`. Railway runtime variables
+come from the service environment; `apps/api/config.env` remains local and
+ignored by Git.
+
+Build both applications from the workspace root:
 
 ```bash
 npm run build
+```
+
+Run the API and web production processes separately:
+
+```bash
 npm start
+npm run start:web
 ```

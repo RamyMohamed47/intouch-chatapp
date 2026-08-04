@@ -14,6 +14,5 @@
     "skipLibCheck": false,
     "sourceMap": true,
     "verbatimModuleSyntax": true
-  },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "eslint.config.mjs"]
+  }
 }

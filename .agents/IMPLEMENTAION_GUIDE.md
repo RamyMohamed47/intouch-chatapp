@@ -2,6 +2,10 @@
 
 Every feature follows the same process.
 
+Backend features are implemented under `apps/api/src/modules`. Shared request
+contracts are implemented under `packages/shared`, and API tests belong in
+`apps/api/tests`.
+
 1. Read OpenAPI contract
 
 2. Read relevant ADRs
