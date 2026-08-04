@@ -1,5 +1,5 @@
-import { InTouchShell } from "@/components/intouch-shell";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <InTouchShell />;
+  redirect("/login");
 }

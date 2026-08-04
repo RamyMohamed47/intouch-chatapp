@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "InTouch — Team communication",
+  title: "InTouch - Team communication",
   description:
     "A focused workspace for teams to talk, decide, and move work forward.",
   generator: "v0.app",

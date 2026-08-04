@@ -1,55 +1,70 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { ArrowRight, Check, LoaderCircle, RotateCcw, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-import { refreshAccessToken } from "@/lib/api/client";
+import { ThemeSwitcher } from "@/components/theme-switcher";
+import { LinkButton } from "@/components/ui/link-button";
 
-type CallbackStatus = "loading" | "failed";
-
-function OAuthCallback() {
-  const router = useRouter();
+function CallbackState() {
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<CallbackStatus>("loading");
-
-  useEffect(() => {
-    if (searchParams.get("googleAuth") !== "success") {
-      setStatus("failed");
-      return;
-    }
-
-    void refreshAccessToken().then((accessToken) => {
-      if (accessToken) {
-        router.replace("/");
-        return;
-      }
-      setStatus("failed");
-    });
-  }, [router, searchParams]);
+  const status = searchParams.get("googleAuth");
+  const isSuccess = status === "success";
+  const isFailure = status === "failed";
+  const Icon = isSuccess ? Check : isFailure ? X : LoaderCircle;
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-background p-6 text-foreground">
-      <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 text-center shadow-2xl">
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-primary">
-          InTouch
+    <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-background p-6 text-foreground">
+      <div className="absolute top-5 right-5">
+        <ThemeSwitcher />
+      </div>
+      <div className="absolute top-1/4 left-1/4 size-72 rounded-full bg-primary/10 blur-3xl" />
+      <section className="relative w-full max-w-md rounded-[2rem] border border-border bg-card/80 p-8 text-center shadow-2xl backdrop-blur-xl">
+        <span
+          className={`mx-auto grid size-16 place-items-center rounded-2xl ${
+            isFailure
+              ? "bg-destructive/10 text-destructive"
+              : "bg-primary/10 text-primary"
+          }`}
+        >
+          <Icon
+            className={`size-7 ${!isSuccess && !isFailure ? "animate-spin" : ""}`}
+          />
+        </span>
+        <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.22em] text-primary">
+          Google authentication preview
         </p>
-        <h1 className="mt-4 text-2xl font-semibold">
-          {status === "loading" ? "Finishing sign in" : "Sign in failed"}
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight">
+          {isSuccess
+            ? "Your workspace is ready."
+            : isFailure
+              ? "Sign in did not complete."
+              : "Finishing sign in."}
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          {status === "loading"
-            ? "Securing your session and preparing your workspace."
-            : "Google authentication could not be completed. Please try again."}
+          {isSuccess
+            ? "This frontend preview can now continue into the application shell."
+            : isFailure
+              ? "Return to login and try the flow again when authentication is connected."
+              : "This is the static processing state. No session request is being made."}
         </p>
-        {status === "failed" && (
-          <Link
-            className="mt-6 inline-flex rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground"
-            href="/"
-          >
-            Return to InTouch
-          </Link>
-        )}
+        <div className="mt-7 flex flex-col gap-2">
+          {isSuccess && (
+            <LinkButton className="h-10 rounded-full" href="/app">
+              Continue to workspace <ArrowRight />
+            </LinkButton>
+          )}
+          {isFailure && (
+            <LinkButton
+              variant="outline"
+              className="h-10 rounded-full"
+              href="/login"
+            >
+              <RotateCcw /> Return to login
+            </LinkButton>
+          )}
+        </div>
       </section>
     </main>
   );
@@ -58,7 +73,7 @@ function OAuthCallback() {
 export default function OAuthCallbackPage() {
   return (
     <Suspense>
-      <OAuthCallback />
+      <CallbackState />
     </Suspense>
   );
 }
