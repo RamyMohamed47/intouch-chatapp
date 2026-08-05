@@ -1,4 +1,8 @@
 import type { RequestHandler } from "express";
+import {
+  membershipResponseSchema,
+  organizationMemberListResponseSchema,
+} from "@intouch/shared/memberships";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
 import catchAsync from "../../utils/catchAsync.js";
@@ -31,7 +35,7 @@ const createMembershipController = (
       id,
     );
 
-    res.status(201).json({ membership });
+    res.status(201).json(membershipResponseSchema.parse({ membership }));
   }),
 
   listMembers: catchAsync(async (req, res) => {
@@ -41,7 +45,9 @@ const createMembershipController = (
       getUserId(res.locals as AuthLocals),
       id,
     );
-    res.status(200).json({ members });
+    res
+      .status(200)
+      .json(organizationMemberListResponseSchema.parse({ members }));
   }),
 });
 

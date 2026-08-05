@@ -4,6 +4,7 @@ import cors from "cors";
 import express from "express";
 import type { Router } from "express";
 import helmet from "helmet";
+import { healthResponseSchema } from "@intouch/shared/common";
 
 import NotFoundError from "./errors/NotFoundError.js";
 import ForbiddenError from "./errors/ForbiddenError.js";
@@ -66,11 +67,13 @@ const createApp = ({
   app.use(createHttpLogger());
 
   app.get("/health", (_req, res) => {
-    res.status(200).json({
-      status: "ok",
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString(),
-    });
+    res.status(200).json(
+      healthResponseSchema.parse({
+        status: "ok",
+        uptime: process.uptime(),
+        timestamp: new Date(),
+      }),
+    );
   });
 
   if (authRouter) {

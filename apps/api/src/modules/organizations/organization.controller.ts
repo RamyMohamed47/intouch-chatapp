@@ -1,4 +1,8 @@
 import type { RequestHandler } from "express";
+import {
+  organizationListResponseSchema,
+  organizationResponseSchema,
+} from "@intouch/shared/organizations";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
 import type { AuthLocals } from "../auth/auth.types.js";
@@ -35,7 +39,7 @@ const createOrganizationController = (
       req.body as CreateOrganizationInput,
     );
 
-    res.status(201).json({ organization });
+    res.status(201).json(organizationResponseSchema.parse({ organization }));
   }),
 
   list: catchAsync(async (_req, res) => {
@@ -43,7 +47,9 @@ const createOrganizationController = (
       getUserId(res.locals as AuthLocals),
     );
 
-    res.status(200).json({ organizations });
+    res
+      .status(200)
+      .json(organizationListResponseSchema.parse({ organizations }));
   }),
 
   getById: catchAsync(async (req, res) => {
@@ -53,7 +59,7 @@ const createOrganizationController = (
       id,
     );
 
-    res.status(200).json({ organization });
+    res.status(200).json(organizationResponseSchema.parse({ organization }));
   }),
 
   update: catchAsync(async (req, res) => {
@@ -64,7 +70,7 @@ const createOrganizationController = (
       req.body as UpdateOrganizationInput,
     );
 
-    res.status(200).json({ organization });
+    res.status(200).json(organizationResponseSchema.parse({ organization }));
   }),
 
   delete: catchAsync(async (req, res) => {

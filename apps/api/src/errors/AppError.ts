@@ -1,12 +1,6 @@
-export type ErrorCode =
-  | "VALIDATION_ERROR"
-  | "UNAUTHORIZED"
-  | "FORBIDDEN"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "TOO_MANY_REQUESTS"
-  | "SERVICE_UNAVAILABLE"
-  | "INTERNAL_SERVER_ERROR";
+import type { ErrorCodeValue } from "@intouch/shared/common";
+
+export type ErrorCode = ErrorCodeValue;
 
 class AppError extends Error {
   code: ErrorCode;

@@ -1,4 +1,8 @@
 import type { RequestHandler } from "express";
+import {
+  categoryListResponseSchema,
+  categoryResponseSchema,
+} from "@intouch/shared/categories";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
 import type { AuthLocals } from "../auth/auth.types.js";
@@ -36,7 +40,7 @@ const createCategoryController = (
       organizationId,
       req.body as CreateCategoryInput,
     );
-    res.status(201).json({ category });
+    res.status(201).json(categoryResponseSchema.parse({ category }));
   }),
 
   list: catchAsync(async (req, res) => {
@@ -46,7 +50,7 @@ const createCategoryController = (
       getUserId(res.locals as AuthLocals),
       organizationId,
     );
-    res.status(200).json({ categories });
+    res.status(200).json(categoryListResponseSchema.parse({ categories }));
   }),
 
   update: catchAsync(async (req, res) => {
@@ -58,7 +62,7 @@ const createCategoryController = (
       categoryId,
       req.body as UpdateCategoryInput,
     );
-    res.status(200).json({ category });
+    res.status(200).json(categoryResponseSchema.parse({ category }));
   }),
 
   delete: catchAsync(async (req, res) => {

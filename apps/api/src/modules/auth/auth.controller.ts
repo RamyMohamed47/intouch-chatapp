@@ -1,4 +1,10 @@
 import type { RequestHandler, Response } from "express";
+import {
+  authResponseSchema,
+  googleOAuthCallbackQuerySchema,
+  refreshResponseSchema,
+} from "@intouch/shared/auth";
+import { userResponseSchema } from "@intouch/shared/users";
 
 import catchAsync from "../../utils/catchAsync.js";
 import {
@@ -82,9 +88,6 @@ const getCookie = (cookies: unknown, name: string) => {
   return typeof value === "string" ? value : undefined;
 };
 
-const getQueryString = (value: unknown) =>
-  typeof value === "string" ? value : undefined;
-
 const getFrontendRedirect = (
   frontendRedirectUrl: string,
   status: "failed" | "success",
@@ -117,13 +120,14 @@ const createAuthController = (
   },
 
   googleCallback: catchAsync(async (req, res) => {
-    const receivedState = getQueryString(req.query.state);
+    const query = googleOAuthCallbackQuerySchema.safeParse(req.query);
+    const receivedState = query.success ? query.data.state : undefined;
     const expectedState = getCookie(
       req.cookies as unknown,
       googleOAuth.stateCookie.name,
     );
-    const code = getQueryString(req.query.code);
-    const providerError = getQueryString(req.query.error);
+    const code = query.success ? query.data.code : undefined;
+    const providerError = query.success ? query.data.error : undefined;
     const failureRedirect = getFrontendRedirect(
       googleOAuth.frontendRedirectUrl,
       "failed",
@@ -164,20 +168,14 @@ const createAuthController = (
     const result = await authService.register(req.body as RegisterInput);
 
     setRefreshCookie(res, cookie, result.refreshToken);
-    res.status(201).json({
-      user: result.user,
-      accessToken: result.accessToken,
-    });
+    res.status(201).json(authResponseSchema.parse(result));
   }),
 
   login: catchAsync(async (req, res) => {
     const result = await authService.login(req.body as LoginInput);
 
     setRefreshCookie(res, cookie, result.refreshToken);
-    res.status(200).json({
-      user: result.user,
-      accessToken: result.accessToken,
-    });
+    res.status(200).json(authResponseSchema.parse(result));
   }),
 
   refresh: catchAsync(async (_req, res) => {
@@ -192,7 +190,7 @@ const createAuthController = (
       const result = await authService.refresh(refreshToken);
 
       setRefreshCookie(res, cookie, result.refreshToken);
-      res.status(200).json({ accessToken: result.accessToken });
+      res.status(200).json(refreshResponseSchema.parse(result));
     } catch (error) {
       clearRefreshCookie(res, cookie);
       throw error;
@@ -207,7 +205,7 @@ const createAuthController = (
     }
 
     const user = await authService.getCurrentUser(userId);
-    res.status(200).json({ user });
+    res.status(200).json(userResponseSchema.parse({ user }));
   }),
 });
 

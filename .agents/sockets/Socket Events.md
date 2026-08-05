@@ -1,5 +1,11 @@
 # Socket.IO Events
 
+All handshake, acknowledgement, client-event, and server-event DTOs originate
+from Zod schemas exported by `@intouch/shared/realtime`. The API parses
+outbound payloads before emission, including conversion of `Date` values to ISO
+8601 strings. Web and future mobile clients consume the inferred shared types
+rather than redefining event payloads.
+
 ## Authentication
 
 Connect with the current access JWT in the Socket.IO auth payload:

@@ -1,12 +1,11 @@
 import type { Types } from "mongoose";
+import {
+  MembershipRole,
+  type MembershipRoleValue,
+} from "@intouch/shared/memberships";
 
-export const MembershipRole = {
-  OWNER: "OWNER",
-  MEMBER: "MEMBER",
-} as const;
-
-export type MembershipRole =
-  (typeof MembershipRole)[keyof typeof MembershipRole];
+export { MembershipRole };
+export type MembershipRole = MembershipRoleValue;
 
 export interface Membership {
   userId: Types.ObjectId;

@@ -71,7 +71,13 @@ describe("messageController", () => {
     await controller.create(req, res as unknown as Response, next);
 
     assert.equal(res.statusCode, 201);
-    assert.deepEqual(res.body, { message });
+    assert.deepEqual(res.body, {
+      message: {
+        ...message,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      },
+    });
   });
 
   test("passes service failures to the error pipeline", async () => {

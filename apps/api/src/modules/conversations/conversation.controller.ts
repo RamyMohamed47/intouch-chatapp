@@ -2,6 +2,12 @@ import type {
   AddConversationParticipantInput,
   ListConversationsQuery,
 } from "@intouch/shared/conversations";
+import {
+  conversationListResponseSchema,
+  conversationResponseSchema,
+  participantListResponseSchema,
+  participantResponseSchema,
+} from "@intouch/shared/conversations";
 import type { RequestHandler } from "express";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
@@ -45,7 +51,7 @@ const createConversationController = (
       organizationId,
       req.body as CreateConversationInput,
     );
-    res.status(201).json({ conversation });
+    res.status(201).json(conversationResponseSchema.parse({ conversation }));
   }),
 
   list: catchAsync(async (req, res) => {
@@ -59,7 +65,9 @@ const createConversationController = (
       organizationId,
       categoryId,
     );
-    res.status(200).json({ conversations });
+    res
+      .status(200)
+      .json(conversationListResponseSchema.parse({ conversations }));
   }),
 
   getById: catchAsync(async (req, res) => {
@@ -68,7 +76,7 @@ const createConversationController = (
       getUserId(res.locals as AuthLocals),
       conversationId,
     );
-    res.status(200).json({ conversation });
+    res.status(200).json(conversationResponseSchema.parse({ conversation }));
   }),
 
   update: catchAsync(async (req, res) => {
@@ -78,7 +86,7 @@ const createConversationController = (
       conversationId,
       req.body as UpdateConversationInput,
     );
-    res.status(200).json({ conversation });
+    res.status(200).json(conversationResponseSchema.parse({ conversation }));
   }),
 
   delete: catchAsync(async (req, res) => {
@@ -93,7 +101,7 @@ const createConversationController = (
       getUserId(res.locals as AuthLocals),
       conversationId,
     );
-    res.status(200).json({ participants });
+    res.status(200).json(participantListResponseSchema.parse({ participants }));
   }),
 
   addParticipant: catchAsync(async (req, res) => {
@@ -104,7 +112,7 @@ const createConversationController = (
       conversationId,
       userId,
     );
-    res.status(201).json({ participant });
+    res.status(201).json(participantResponseSchema.parse({ participant }));
   }),
 
   removeParticipant: catchAsync(async (req, res) => {

@@ -1,10 +1,10 @@
-export const PresenceStatus = {
-  ONLINE: "ONLINE",
-  OFFLINE: "OFFLINE",
-} as const;
+import {
+  PresenceStatus,
+  type PresenceStatusValue,
+} from "@intouch/shared/memberships";
 
-export type PresenceStatusValue =
-  (typeof PresenceStatus)[keyof typeof PresenceStatus];
+export { PresenceStatus };
+export type { PresenceStatusValue };
 
 export interface PresenceView {
   userId: string;

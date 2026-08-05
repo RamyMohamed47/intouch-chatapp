@@ -2,6 +2,10 @@ import type {
   CreateDirectMessageInput,
   ListDirectMessagesQuery,
 } from "@intouch/shared/conversations";
+import {
+  directMessageListResponseSchema,
+  directMessageResponseSchema,
+} from "@intouch/shared/conversations";
 import type { RequestHandler } from "express";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
@@ -31,9 +35,11 @@ const createDirectMessageController = (
       organizationId,
       req.body as CreateDirectMessageInput,
     );
-    res.status(result.created ? 201 : 200).json({
-      directMessage: result.directMessage,
-    });
+    res.status(result.created ? 201 : 200).json(
+      directMessageResponseSchema.parse({
+        directMessage: result.directMessage,
+      }),
+    );
   }),
 
   list: catchAsync(async (req, res) => {
@@ -45,7 +51,7 @@ const createDirectMessageController = (
       (res.locals as { validatedQuery: ListDirectMessagesQuery })
         .validatedQuery,
     );
-    res.status(200).json(page);
+    res.status(200).json(directMessageListResponseSchema.parse(page));
   }),
 });
 

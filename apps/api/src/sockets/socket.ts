@@ -2,7 +2,9 @@ import type { Logger } from "pino";
 import {
   conversationSocketSchema,
   organizationSocketSchema,
+  socketHandshakeAuthSchema,
 } from "@intouch/shared/realtime";
+import { errorDtoSchema } from "@intouch/shared/common";
 
 import type {
   InTouchSocketServer,
@@ -32,22 +34,18 @@ const toSocketError = (error: unknown) => {
     "isOperational" in error &&
     error.isOperational === true
   ) {
-    return {
+    return errorDtoSchema.parse({
       code:
         "code" in error && typeof error.code === "string"
           ? error.code
           : "INTERNAL_SERVER_ERROR",
       message: error.message,
-    };
+    });
   }
-  return { code: "INTERNAL_SERVER_ERROR", message: "Something went wrong" };
-};
-
-const getAccessToken = (auth: unknown) => {
-  if (typeof auth !== "object" || auth === null || !("accessToken" in auth)) {
-    return null;
-  }
-  return typeof auth.accessToken === "string" ? auth.accessToken : null;
+  return errorDtoSchema.parse({
+    code: "INTERNAL_SERVER_ERROR",
+    message: "Something went wrong",
+  });
 };
 
 const configureSocket = (
@@ -58,17 +56,17 @@ const configureSocket = (
   services: SocketDomainServices = {},
 ) => {
   io.use((socket, next) => {
-    const token = getAccessToken(socket.handshake.auth);
-    if (!token) {
+    const auth = socketHandshakeAuthSchema.safeParse(socket.handshake.auth);
+    if (!auth.success) {
       next(new Error("Bearer access token is required"));
       return;
     }
 
     void accessTokens
-      .verify(token)
+      .verify(auth.data.accessToken)
       .then(({ userId }) => {
         socket.data.userId = userId;
-        const expiresAt = accessTokens.getExpiration?.(token);
+        const expiresAt = accessTokens.getExpiration?.(auth.data.accessToken);
         if (expiresAt !== undefined && expiresAt !== null) {
           const timeout = Math.max(0, expiresAt * 1_000 - Date.now());
           const timer = setTimeout(() => socket.disconnect(true), timeout);

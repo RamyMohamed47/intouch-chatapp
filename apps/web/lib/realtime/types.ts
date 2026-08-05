@@ -1,50 +1,22 @@
 import type {
+  ConversationAccessRevokedEvent,
   ConversationSocketInput,
+  MessageEvent,
   OrganizationSocketInput,
+  PresenceEvent,
+  ReadReceiptEvent,
+  SocketAcknowledgementResult,
+  TypingEvent,
 } from "@intouch/shared/realtime";
 
-export interface SocketError {
-  code: string;
-  message: string;
-}
-
 export type SocketAcknowledgement = (
-  result: { success: true } | { success: false; error: SocketError },
+  result: SocketAcknowledgementResult,
 ) => void;
 
-export interface MessageEvent {
-  id: string;
-  conversationId: string;
-  senderId: string;
-  content: string | null;
-  messageType: "TEXT";
-  createdAt: string;
-  updatedAt: string;
-  editedAt: string | null;
-  deletedAt: string | null;
-}
-
-export interface PresenceEvent {
-  userId: string;
-  status: "ONLINE" | "OFFLINE";
-  lastSeenAt: string | null;
-}
-
-export interface TypingEvent {
-  conversationId: string;
-  userId: string;
-  isTyping: boolean;
-}
-
-export interface ReadReceiptEvent {
-  conversationId: string;
-  userId: string;
-  lastReadMessageId: string;
-  lastReadAt: string;
-}
-
 export interface ServerToClientEvents {
-  "conversation:access-revoked": (input: ConversationSocketInput) => void;
+  "conversation:access-revoked": (
+    input: ConversationAccessRevokedEvent,
+  ) => void;
   "message:created": (message: MessageEvent) => void;
   "message:deleted": (message: MessageEvent) => void;
   "message:updated": (message: MessageEvent) => void;

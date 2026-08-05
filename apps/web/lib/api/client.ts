@@ -1,15 +1,9 @@
 import { getAccessToken, setAccessToken } from "@/lib/auth/access-token";
+import { errorResponseSchema } from "@intouch/shared/common";
+import { refreshResponseSchema } from "@intouch/shared/auth";
 
-interface ErrorEnvelope {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-  };
-}
-
-interface RefreshResponse {
-  accessToken: string;
+interface ResponseSchema<T> {
+  parse(input: unknown): T;
 }
 
 export class ApiError extends Error {
@@ -34,9 +28,13 @@ const parseError = async (response: Response) => {
   );
 
   try {
-    const body = (await response.json()) as Partial<ErrorEnvelope>;
-    if (body.error?.code && body.error.message) {
-      return new ApiError(response.status, body.error.code, body.error.message);
+    const body = errorResponseSchema.safeParse(await response.json());
+    if (body.success) {
+      return new ApiError(
+        response.status,
+        body.data.error.code,
+        body.data.error.message,
+      );
     }
   } catch {
     return fallback;
@@ -57,7 +55,7 @@ export const refreshAccessToken = () => {
         return null;
       }
 
-      const body = (await response.json()) as RefreshResponse;
+      const body = refreshResponseSchema.parse(await response.json());
       setAccessToken(body.accessToken);
       return body.accessToken;
     })
@@ -70,6 +68,7 @@ export const refreshAccessToken = () => {
 
 export const apiRequest = async <T>(
   path: `/api/v1/${string}`,
+  responseSchema: ResponseSchema<T>,
   init: RequestInit = {},
   retryAfterRefresh = true,
 ): Promise<T> => {
@@ -89,10 +88,12 @@ export const apiRequest = async <T>(
 
   if (response.status === 401 && retryAfterRefresh) {
     const refreshedToken = await refreshAccessToken();
-    if (refreshedToken) return apiRequest<T>(path, init, false);
+    if (refreshedToken) {
+      return apiRequest(path, responseSchema, init, false);
+    }
   }
 
   if (!response.ok) throw await parseError(response);
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  if (response.status === 204) return responseSchema.parse(undefined);
+  return responseSchema.parse(await response.json());
 };

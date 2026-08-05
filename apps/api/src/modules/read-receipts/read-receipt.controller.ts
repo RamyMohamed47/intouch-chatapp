@@ -1,4 +1,5 @@
 import type { UpdateReadReceiptInput } from "@intouch/shared/messages";
+import { readReceiptResponseSchema } from "@intouch/shared/messages";
 import type { RequestHandler } from "express";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
@@ -26,7 +27,7 @@ const createReadReceiptController = (
       conversationId,
       req.body as UpdateReadReceiptInput,
     );
-    res.status(200).json({ readReceipt });
+    res.status(200).json(readReceiptResponseSchema.parse({ readReceipt }));
   }),
 });
 

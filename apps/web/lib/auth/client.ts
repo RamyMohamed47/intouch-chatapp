@@ -1,33 +1,22 @@
-import type { LoginInput, RegisterInput } from "@intouch/shared/auth";
+import {
+  authResponseSchema,
+  type LoginInput,
+  type RegisterInput,
+} from "@intouch/shared/auth";
+import { userResponseSchema, type PublicUserDto } from "@intouch/shared/users";
 
 import { apiRequest, refreshAccessToken } from "@/lib/api/client";
 import { setAccessToken } from "@/lib/auth/access-token";
 
-export interface PublicUser {
-  id: string;
-  username: string;
-  displayName: string;
-  email: string;
-  avatarUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface AuthenticationResponse {
-  user: PublicUser;
-  accessToken: string;
-}
-
-interface CurrentUserResponse {
-  user: PublicUser;
-}
+export type PublicUser = PublicUserDto;
 
 const authenticate = async (
   endpoint: "/api/v1/auth/login" | "/api/v1/auth/register",
   input: LoginInput | RegisterInput,
 ) => {
-  const result = await apiRequest<AuthenticationResponse>(
+  const result = await apiRequest(
     endpoint,
+    authResponseSchema,
     {
       method: "POST",
       body: JSON.stringify(input),
@@ -46,7 +35,7 @@ export const login = (input: LoginInput) =>
 
 export const getCurrentUser = async () =>
   (
-    await apiRequest<CurrentUserResponse>("/api/v1/auth/me", {
+    await apiRequest("/api/v1/auth/me", userResponseSchema, {
       method: "GET",
     })
   ).user;

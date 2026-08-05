@@ -3,6 +3,10 @@ import type {
   MessageHistoryQuery,
   UpdateMessageInput,
 } from "@intouch/shared/messages";
+import {
+  messageListResponseSchema,
+  messageResponseSchema,
+} from "@intouch/shared/messages";
 import type { RequestHandler } from "express";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
@@ -37,7 +41,7 @@ const createMessageController = (
       conversationId,
       (res.locals as { validatedQuery: MessageHistoryQuery }).validatedQuery,
     );
-    res.status(200).json(page);
+    res.status(200).json(messageListResponseSchema.parse(page));
   }),
 
   create: catchAsync(async (req, res) => {
@@ -48,7 +52,7 @@ const createMessageController = (
       conversationId,
       req.body as CreateMessageInput,
     );
-    res.status(201).json({ message });
+    res.status(201).json(messageResponseSchema.parse({ message }));
   }),
 
   update: catchAsync(async (req, res) => {
@@ -58,7 +62,7 @@ const createMessageController = (
       messageId,
       req.body as UpdateMessageInput,
     );
-    res.status(200).json({ message });
+    res.status(200).json(messageResponseSchema.parse({ message }));
   }),
 
   delete: catchAsync(async (req, res) => {

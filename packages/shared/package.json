@@ -8,6 +8,14 @@
       "types": "./dist/auth/index.d.ts",
       "import": "./dist/auth/index.js"
     },
+    "./common": {
+      "types": "./dist/common/index.d.ts",
+      "import": "./dist/common/index.js"
+    },
+    "./users": {
+      "types": "./dist/users/index.d.ts",
+      "import": "./dist/users/index.js"
+    },
     "./organizations": {
       "types": "./dist/organizations/index.d.ts",
       "import": "./dist/organizations/index.js"

@@ -18,3 +18,29 @@ export type {
   ListConversationsQuery,
   UpdateConversationInput,
 } from "./conversation.schema.js";
+export {
+  channelConversationDtoSchema,
+  conversationDtoSchema,
+  conversationListResponseSchema,
+  conversationParticipantDtoSchema,
+  conversationParticipantViewDtoSchema,
+  conversationResponseSchema,
+  directConversationDtoSchema,
+  directMessageListResponseSchema,
+  directMessageResponseSchema,
+  participantListResponseSchema,
+  participantResponseSchema,
+} from "./conversation.dto.js";
+export type {
+  ChannelConversationDto,
+  ConversationDto,
+  ConversationListResponse,
+  ConversationParticipantDto,
+  ConversationParticipantViewDto,
+  ConversationResponse,
+  DirectConversationDto,
+  DirectMessageListResponse,
+  DirectMessageResponse,
+  ParticipantListResponse,
+  ParticipantResponse,
+} from "./conversation.dto.js";

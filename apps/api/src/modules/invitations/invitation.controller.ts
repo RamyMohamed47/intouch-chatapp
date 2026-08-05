@@ -1,6 +1,11 @@
 import type { RequestHandler } from "express";
 
 import type { InviteMemberInput } from "@intouch/shared/memberships";
+import {
+  invitationListResponseSchema,
+  invitationResponseSchema,
+  membershipResponseSchema,
+} from "@intouch/shared/memberships";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
 import catchAsync from "../../utils/catchAsync.js";
@@ -35,7 +40,7 @@ const createInvitationController = (
       req.body as InviteMemberInput,
     );
 
-    res.status(201).json({ invitation });
+    res.status(201).json(invitationResponseSchema.parse({ invitation }));
   }),
 
   list: catchAsync(async (_req, res) => {
@@ -43,7 +48,7 @@ const createInvitationController = (
       getUserId(res.locals as AuthLocals),
     );
 
-    res.status(200).json({ invitations });
+    res.status(200).json(invitationListResponseSchema.parse({ invitations }));
   }),
 
   accept: catchAsync(async (req, res) => {
@@ -53,7 +58,7 @@ const createInvitationController = (
       id,
     );
 
-    res.status(201).json({ membership });
+    res.status(201).json(membershipResponseSchema.parse({ membership }));
   }),
 
   decline: catchAsync(async (req, res) => {

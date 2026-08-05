@@ -5,12 +5,14 @@
   },
   "include": [
     "auth/**/*.ts",
+    "common/**/*.ts",
     "categories/**/*.ts",
     "conversations/**/*.ts",
     "memberships/**/*.ts",
     "messages/**/*.ts",
     "organizations/**/*.ts",
     "realtime/**/*.ts",
+    "users/**/*.ts",
     "tests/**/*.ts"
   ]
 }

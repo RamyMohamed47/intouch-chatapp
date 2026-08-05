@@ -23,6 +23,11 @@ const directMessage = {
   id: conversationId,
   organizationId,
   type: ConversationType.DIRECT,
+  peer: {
+    id: recipientUserId,
+    username: "recipient",
+    displayName: "Recipient User",
+  },
   createdAt: now,
   updatedAt: now,
   lastMessage: null,

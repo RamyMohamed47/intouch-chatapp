@@ -3,13 +3,11 @@ import type {
   MessageHistoryQuery,
   UpdateMessageInput,
 } from "@intouch/shared/messages";
+import { MessageType, type MessageTypeValue } from "@intouch/shared/messages";
 import type { Types } from "mongoose";
 
-export const MessageType = {
-  TEXT: "TEXT",
-} as const;
-
-export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
+export { MessageType };
+export type { MessageTypeValue };
 
 export interface Message {
   conversationId: Types.ObjectId;

@@ -3,13 +3,17 @@
 import { ArrowRight, Check, LoaderCircle, RotateCcw, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { googleAuthRedirectQuerySchema } from "@intouch/shared/auth";
 
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LinkButton } from "@/components/ui/link-button";
 
 function CallbackState() {
   const searchParams = useSearchParams();
-  const status = searchParams.get("googleAuth");
+  const result = googleAuthRedirectQuerySchema.safeParse({
+    googleAuth: searchParams.get("googleAuth") ?? undefined,
+  });
+  const status = result.success ? result.data.googleAuth : undefined;
   const isSuccess = status === "success";
   const isFailure = status === "failed";
   const Icon = isSuccess ? Check : isFailure ? X : LoaderCircle;

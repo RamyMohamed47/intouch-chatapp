@@ -1,4 +1,11 @@
 import type { MessageBroadcaster } from "./messageBroadcaster.js";
+import {
+  conversationAccessRevokedEventSchema,
+  messageEventSchema,
+  presenceEventSchema,
+  readReceiptEventSchema,
+  typingEventSchema,
+} from "@intouch/shared/realtime";
 import type { InTouchSocketServer } from "../contracts/socket.js";
 import type { ConversationRealtime } from "../modules/conversations/conversation.realtime.js";
 import type { PresenceRealtime } from "../modules/presence/presence.realtime.js";
@@ -43,32 +50,46 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
     },
 
     messageCreated(message) {
-      io?.to(roomName(message.conversationId)).emit("message:created", message);
+      io?.to(roomName(message.conversationId)).emit(
+        "message:created",
+        messageEventSchema.parse(message),
+      );
     },
 
     messageUpdated(message) {
-      io?.to(roomName(message.conversationId)).emit("message:updated", message);
+      io?.to(roomName(message.conversationId)).emit(
+        "message:updated",
+        messageEventSchema.parse(message),
+      );
     },
 
     messageDeleted(message) {
-      io?.to(roomName(message.conversationId)).emit("message:deleted", message);
+      io?.to(roomName(message.conversationId)).emit(
+        "message:deleted",
+        messageEventSchema.parse(message),
+      );
     },
 
     presenceUpdated(organizationIds, presence) {
       const rooms = organizationIds.map(organizationRoomName);
-      if (rooms.length > 0) io?.to(rooms).emit("presence:updated", presence);
+      if (rooms.length > 0) {
+        io?.to(rooms).emit(
+          "presence:updated",
+          presenceEventSchema.parse(presence),
+        );
+      }
     },
 
     typingUpdated(update) {
       io?.to(roomName(update.conversationId))
         .except(userRoomName(update.userId))
-        .emit("typing:updated", update);
+        .emit("typing:updated", typingEventSchema.parse(update));
     },
 
     readReceiptUpdated(receipt) {
       io?.to(roomName(receipt.conversationId)).emit(
         "read-receipt:updated",
-        receipt,
+        readReceiptEventSchema.parse(receipt),
       );
     },
 
@@ -78,7 +99,10 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       const sockets = await io.in(roomName(conversationId)).fetchSockets();
       for (const socket of sockets) {
         if (socket.data.userId === userId) {
-          socket.emit("conversation:access-revoked", { conversationId });
+          socket.emit(
+            "conversation:access-revoked",
+            conversationAccessRevokedEventSchema.parse({ conversationId }),
+          );
           socket.leave(roomName(conversationId));
         }
       }
@@ -90,7 +114,10 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       for (const socket of sockets) {
         if (socket.data.userId !== userId) {
           typing?.clearUserInConversation(conversationId, socket.data.userId);
-          socket.emit("conversation:access-revoked", { conversationId });
+          socket.emit(
+            "conversation:access-revoked",
+            conversationAccessRevokedEventSchema.parse({ conversationId }),
+          );
           socket.leave(roomName(conversationId));
         }
       }
@@ -99,9 +126,10 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
     closeConversation(conversationId) {
       typing?.clearConversation(conversationId);
       if (!io) return Promise.resolve();
-      io.to(roomName(conversationId)).emit("conversation:access-revoked", {
-        conversationId,
-      });
+      io.to(roomName(conversationId)).emit(
+        "conversation:access-revoked",
+        conversationAccessRevokedEventSchema.parse({ conversationId }),
+      );
       io.in(roomName(conversationId)).socketsLeave(roomName(conversationId));
       return Promise.resolve();
     },

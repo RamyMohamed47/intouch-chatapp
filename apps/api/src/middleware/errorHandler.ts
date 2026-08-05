@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, Response } from "express";
+import { errorResponseSchema } from "@intouch/shared/common";
 
 import { getLogger } from "../config/logger.js";
 import type { ErrorCode } from "../errors/AppError.js";
@@ -45,13 +46,15 @@ const sendError = (err: OperationalError, res: Response) => {
   const code = isOperational ? err.code : "INTERNAL_SERVER_ERROR";
   const message = isOperational ? err.message : "Something went wrong";
 
-  res.status(statusCode).json({
-    success: false,
-    error: {
-      code: code ?? "INTERNAL_SERVER_ERROR",
-      message,
-    },
-  });
+  res.status(statusCode).json(
+    errorResponseSchema.parse({
+      success: false,
+      error: {
+        code: code ?? "INTERNAL_SERVER_ERROR",
+        message,
+      },
+    }),
+  );
 };
 
 const handleError: ErrorRequestHandler = (err, _req, res, next) => {
