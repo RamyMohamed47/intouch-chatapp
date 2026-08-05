@@ -200,6 +200,18 @@ receives the refresh token in JSON. Refresh requests must include
 stored in frontend memory. The production cookie is `Secure`, `SameSite=Lax`,
 and scoped to `/api/v1/auth`.
 
+The web application restores sessions with `POST /api/v1/auth/refresh`, keeps
+the access JWT in memory, and uses TanStack Query for API-backed server state.
+`POST /api/v1/auth/logout` requires the same Origin and CSRF protection,
+idempotently revokes the current refresh session, and clears the cookie. The
+browser then clears its query cache and Socket.IO lifecycle before returning to
+login.
+
+Socket.IO connects directly to `NEXT_PUBLIC_SOCKET_ORIGIN`. REST and Google
+OAuth continue through the frontend `/api` proxy. The current presence and
+typing stores are process-local, so realtime deployment remains single-instance
+until Redis-backed stores and the Socket.IO Redis adapter are introduced.
+
 Development logs are formatted for readability. Production logs are structured
 JSON written to stdout.
 Pino HTTP still sets `X-Request-Id`, but automatic request completed logs are

@@ -5,7 +5,11 @@ import {
 } from "@intouch/shared/auth";
 import { userResponseSchema, type PublicUserDto } from "@intouch/shared/users";
 
-import { apiRequest, refreshAccessToken } from "@/lib/api/client";
+import {
+  apiRequest,
+  noContentSchema,
+  refreshAccessToken,
+} from "@/lib/api/client";
 import { setAccessToken } from "@/lib/auth/access-token";
 
 export type PublicUser = PublicUserDto;
@@ -47,6 +51,19 @@ export const restoreSession = async () => {
 
 export const startGoogleSignIn = () => {
   window.location.assign("/api/v1/auth/oauth/google");
+};
+
+export const logout = async () => {
+  await apiRequest(
+    "/api/v1/auth/logout",
+    noContentSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Protection": "1" },
+    },
+    false,
+  );
+  setAccessToken(null);
 };
 
 export const clearLocalSession = () => {

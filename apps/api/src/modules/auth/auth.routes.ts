@@ -77,6 +77,12 @@ const createAuthRouter = (
     middleware.requireRefreshCookie,
     controller.refresh,
   );
+  router.post(
+    "/logout",
+    refreshLimit,
+    middleware.requireRefreshCsrfProtection,
+    controller.logout,
+  );
   router.get("/me", middleware.requireAccessToken, controller.me);
 
   return router;

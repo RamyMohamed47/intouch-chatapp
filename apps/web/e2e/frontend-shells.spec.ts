@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+// Legacy fixture-only suite. Rebuild against the API-backed runtime before use.
+
 const ids = {
   northstar: "64b000000000000000000001",
   pixel: "64b000000000000000000002",

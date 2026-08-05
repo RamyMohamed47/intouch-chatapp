@@ -375,4 +375,20 @@ describe("authService", () => {
     );
     assert.equal(harness.sessionRecords.size, 0);
   });
+
+  test("revokes the current session and ignores invalid logout tokens", async () => {
+    const harness = createHarness();
+    const registered = await harness.service.register({
+      username: user.username,
+      displayName: user.displayName,
+      email: user.email,
+      password: "correct horse battery staple",
+    });
+
+    await harness.service.logout(registered.refreshToken);
+    await harness.service.logout("invalid-token");
+    await harness.service.logout(undefined);
+
+    assert.equal(harness.sessionRecords.size, 0);
+  });
 });

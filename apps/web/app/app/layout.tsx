@@ -1,12 +1,17 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
+import {
+  ProtectedApp,
+  ProtectedAppFallback,
+} from "@/components/auth/protected-app";
 import { AppShell } from "@/components/workspace/app-shell";
-import { DemoWorkspaceProvider } from "@/lib/demo/provider";
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   return (
-    <DemoWorkspaceProvider>
-      <AppShell>{children}</AppShell>
-    </DemoWorkspaceProvider>
+    <Suspense fallback={<ProtectedAppFallback />}>
+      <ProtectedApp>
+        <AppShell>{children}</AppShell>
+      </ProtectedApp>
+    </Suspense>
   );
 }

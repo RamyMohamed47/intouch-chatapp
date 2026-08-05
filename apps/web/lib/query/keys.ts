@@ -1,0 +1,37 @@
+export const queryKeys = {
+  organizations: {
+    all: ["organizations"] as const,
+    detail: (organizationId: string) =>
+      ["organizations", organizationId] as const,
+  },
+  invitations: {
+    all: ["invitations"] as const,
+  },
+  categories: {
+    list: (organizationId: string) =>
+      ["organizations", organizationId, "categories"] as const,
+  },
+  members: {
+    list: (organizationId: string) =>
+      ["organizations", organizationId, "members"] as const,
+  },
+  conversations: {
+    channels: (organizationId: string, categoryId?: string) =>
+      [
+        "organizations",
+        organizationId,
+        "channels",
+        categoryId ?? "all",
+      ] as const,
+    directMessages: (organizationId: string) =>
+      ["organizations", organizationId, "direct-messages"] as const,
+    directMessagePreview: (organizationId: string) =>
+      ["organizations", organizationId, "direct-message-preview"] as const,
+    detail: (conversationId: string) =>
+      ["conversations", conversationId] as const,
+    participants: (conversationId: string) =>
+      ["conversations", conversationId, "participants"] as const,
+    messages: (conversationId: string) =>
+      ["conversations", conversationId, "messages"] as const,
+  },
+};

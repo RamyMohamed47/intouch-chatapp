@@ -1,35 +1,37 @@
 "use client";
 
 import {
-  ArrowDown,
   ArrowLeft,
+  ArrowDown,
   ArrowUp,
   Hash,
   Lock,
   MailPlus,
   Plus,
   Save,
-  Settings,
   Trash2,
   UserMinus,
   UserPlus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  createCategorySchema,
+  updateCategorySchema,
+  type CategoryDto,
+} from "@intouch/shared/categories";
+import {
+  createConversationSchema,
+  updateConversationSchema,
+  type ChannelConversationDto,
+} from "@intouch/shared/conversations";
+import { inviteMemberSchema } from "@intouch/shared/memberships";
+import { updateOrganizationSchema } from "@intouch/shared/organizations";
 
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
 import { initials } from "@/components/workspace/app-shell";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarBadge, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,73 +42,88 @@ import { LinkButton } from "@/components/ui/link-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useDemoWorkspace } from "@/lib/demo/provider";
+import { categoriesApi } from "@/lib/api/categories";
+import { conversationsApi } from "@/lib/api/conversations";
+import { membershipsApi } from "@/lib/api/memberships";
+import { organizationsApi } from "@/lib/api/organizations";
 import {
-  getOrganization,
-  getOrganizationCategories,
-  getOrganizationChannels,
-  getOrganizationMembers,
-} from "@/lib/demo/selectors";
-import type {
-  DemoActionResult,
-  DemoChannelConversation,
-} from "@/lib/demo/types";
+  useCategories,
+  useChannels,
+  useMembers,
+  useOrganization,
+  useParticipants,
+} from "@/lib/query/hooks";
+import { invalidateOrganizationNavigation } from "@/lib/query/invalidate";
+import { queryKeys } from "@/lib/query/keys";
 import { getFormString } from "@/lib/utils";
 
-function ResultMessage({ result }: { result: DemoActionResult | null }) {
-  if (!result) return null;
-  return result.success ? (
-    <p role="status" className="text-xs text-primary">
-      Changes saved in the demo workspace.
-    </p>
-  ) : (
-    <FormError>{result.error}</FormError>
-  );
+const firstIssue = (error: { issues: { message: string }[] }) =>
+  error.issues[0]?.message ?? "The submitted values are invalid";
+
+function Notice({ message }: { message: string | null }) {
+  return message ? (
+    <div className="mt-4">
+      <FormError>{message}</FormError>
+    </div>
+  ) : null;
 }
 
 function GeneralSettings({ organizationId }: { organizationId: string }) {
   const router = useRouter();
-  const { state, updateOrganization, deleteOrganization } = useDemoWorkspace();
-  const organization = getOrganization(state, organizationId)!;
-  const [result, setResult] = useState<DemoActionResult | null>(null);
+  const queryClient = useQueryClient();
+  const organization = useOrganization(organizationId);
+  const [notice, setNotice] = useState<string | null>(null);
+  const update = useMutation({
+    mutationFn: (input: Parameters<typeof organizationsApi.update>[1]) =>
+      organizationsApi.update(organizationId, input),
+    onSuccess: async () => {
+      await invalidateOrganizationNavigation(queryClient, organizationId);
+      setNotice(null);
+    },
+    onError: (error) => setNotice(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: () => organizationsApi.remove(organizationId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.organizations.all,
+      });
+      router.replace("/app");
+    },
+    onError: (error) => setNotice(error.message),
+  });
+  if (!organization.data) return null;
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const logoUrl = getFormString(form, "logoUrl").trim();
-    setResult(
-      updateOrganization(organizationId, {
-        name: getFormString(form, "name"),
-        logoUrl: logoUrl || null,
-        visibility: getFormString(form, "visibility") as "PRIVATE" | "PUBLIC",
-      }),
-    );
+    const data = new FormData(event.currentTarget);
+    const logoUrl = getFormString(data, "logoUrl").trim();
+    const parsed = updateOrganizationSchema.safeParse({
+      name: getFormString(data, "name"),
+      logoUrl: logoUrl || null,
+      visibility: getFormString(data, "visibility"),
+    });
+    if (!parsed.success) {
+      setNotice(firstIssue(parsed.error));
+      return;
+    }
+    update.mutate(parsed.data);
   };
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1fr_0.72fr]">
+    <div className="grid gap-5 lg:grid-cols-[1fr_0.65fr]">
       <form
         onSubmit={submit}
         className="rounded-[1.75rem] border border-border bg-background/30 p-6"
       >
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-            <Settings />
-          </span>
-          <div>
-            <h2 className="font-semibold">Organization profile</h2>
-            <p className="text-xs text-muted-foreground">
-              Name, logo, and visibility.
-            </p>
-          </div>
-        </div>
-        <div className="mt-7 grid gap-5">
+        <h2 className="text-lg font-semibold">Organization identity</h2>
+        <div className="mt-6 grid gap-5">
           <div className="grid gap-2">
             <Label htmlFor="organization-name">Name</Label>
             <Input
               id="organization-name"
               name="name"
-              defaultValue={organization.name}
+              defaultValue={organization.data.name}
             />
           </div>
           <div className="grid gap-2">
@@ -115,8 +132,7 @@ function GeneralSettings({ organizationId }: { organizationId: string }) {
               id="organization-logo"
               name="logoUrl"
               type="url"
-              defaultValue={organization.logoUrl ?? ""}
-              placeholder="https://example.com/logo.png"
+              defaultValue={organization.data.logoUrl ?? ""}
             />
           </div>
           <div className="grid gap-2">
@@ -124,74 +140,162 @@ function GeneralSettings({ organizationId }: { organizationId: string }) {
             <Select
               id="organization-visibility"
               name="visibility"
-              defaultValue={organization.visibility}
+              defaultValue={organization.data.visibility}
             >
               <option value="PRIVATE">Private</option>
               <option value="PUBLIC">Public</option>
             </Select>
           </div>
-          <ResultMessage result={result} />
-          <Button type="submit" className="w-fit rounded-full">
-            <Save /> Save changes
+          <Notice message={notice} />
+          <Button
+            type="submit"
+            disabled={update.isPending}
+            className="w-fit rounded-full"
+          >
+            <Save /> {update.isPending ? "Saving..." : "Save changes"}
           </Button>
         </div>
       </form>
-
       <aside className="h-fit rounded-[1.75rem] border border-destructive/25 bg-destructive/5 p-6">
         <Trash2 className="size-5 text-destructive" />
-        <h2 className="mt-5 text-lg font-semibold">Delete workspace</h2>
+        <h2 className="mt-5 text-lg font-semibold">Delete organization</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          This preview removes the organization, memberships, channels,
-          invitations, and messages from in-memory state.
+          This permanently deletes categories, conversations, memberships,
+          invitations, messages, and receipts.
         </p>
-        <AlertDialog>
-          <AlertDialogTrigger
-            render={
-              <Button variant="destructive" className="mt-6 rounded-full" />
-            }
-          >
-            Delete {organization.name}
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this organization?</AlertDialogTitle>
-              <AlertDialogDescription>
-                The demo state will cascade-delete all related resources.
-                Reloading the page restores the fixtures.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel render={<Button variant="ghost" />}>
-                Cancel
-              </AlertDialogCancel>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  const deletion = deleteOrganization(organizationId);
-                  if (deletion.success) router.push("/app");
-                }}
-              >
-                Delete workspace
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button
+          type="button"
+          variant="destructive"
+          className="mt-6 rounded-full"
+          disabled={remove.isPending}
+          onClick={() => {
+            if (
+              window.confirm(
+                `Delete ${organization.data?.name}? This cannot be undone.`,
+              )
+            )
+              remove.mutate();
+          }}
+        >
+          Delete workspace
+        </Button>
       </aside>
     </div>
   );
 }
 
-function CategorySettings({ organizationId }: { organizationId: string }) {
-  const {
-    state,
-    createCategory,
-    renameCategory,
-    moveCategory,
-    deleteCategory,
-  } = useDemoWorkspace();
-  const categories = getOrganizationCategories(state, organizationId);
-  const [result, setResult] = useState<DemoActionResult | null>(null);
+function CategoryRow({
+  organizationId,
+  category,
+  index,
+  total,
+}: {
+  organizationId: string;
+  category: CategoryDto;
+  index: number;
+  total: number;
+}) {
+  const queryClient = useQueryClient();
+  const [notice, setNotice] = useState<string | null>(null);
+  const refresh = () =>
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.categories.list(organizationId),
+    });
+  const update = useMutation({
+    mutationFn: (input: Parameters<typeof categoriesApi.update>[2]) =>
+      categoriesApi.update(organizationId, category.id, input),
+    onSuccess: refresh,
+    onError: (error) => setNotice(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: () => categoriesApi.remove(organizationId, category.id),
+    onSuccess: refresh,
+    onError: (error) => setNotice(error.message),
+  });
+  return (
+    <form
+      className="rounded-2xl border border-border bg-card/35 p-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const parsed = updateCategorySchema.safeParse({
+          name: getFormString(new FormData(event.currentTarget), "name"),
+        });
+        if (parsed.success) {
+          update.mutate(parsed.data);
+        } else {
+          setNotice(firstIssue(parsed.error));
+        }
+      }}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <span className="grid size-8 place-items-center rounded-lg bg-muted font-mono text-xs">
+          {index + 1}
+        </span>
+        <Input
+          name="name"
+          defaultValue={category.name}
+          aria-label={`Rename ${category.name}`}
+        />
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={index === 0 || update.isPending}
+            onClick={() => update.mutate({ position: index - 1 })}
+            aria-label={`Move ${category.name} up`}
+          >
+            <ArrowUp />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={index === total - 1 || update.isPending}
+            onClick={() => update.mutate({ position: index + 1 })}
+            aria-label={`Move ${category.name} down`}
+          >
+            <ArrowDown />
+          </Button>
+          <Button
+            type="submit"
+            variant="ghost"
+            size="icon-sm"
+            disabled={update.isPending}
+            aria-label={`Save ${category.name}`}
+          >
+            <Save />
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="icon-sm"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate()}
+            aria-label={`Delete ${category.name}`}
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      </div>
+      <Notice message={notice} />
+    </form>
+  );
+}
 
+function CategorySettings({ organizationId }: { organizationId: string }) {
+  const queryClient = useQueryClient();
+  const categories = useCategories(organizationId);
+  const [notice, setNotice] = useState<string | null>(null);
+  const create = useMutation({
+    mutationFn: (name: string) =>
+      categoriesApi.create(organizationId, { name }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.categories.list(organizationId),
+      }),
+    onError: (error) => setNotice(error.message),
+  });
   return (
     <div className="grid gap-5 xl:grid-cols-[0.65fr_1.35fr]">
       <form
@@ -199,110 +303,39 @@ function CategorySettings({ organizationId }: { organizationId: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           const form = event.currentTarget;
-          const action = createCategory(
-            organizationId,
-            getFormString(new FormData(form), "name"),
-          );
-          setResult(action);
-          if (action.success) form.reset();
+          const parsed = createCategorySchema.safeParse({
+            name: getFormString(new FormData(form), "name"),
+          });
+          if (!parsed.success) return setNotice(firstIssue(parsed.error));
+          create.mutate(parsed.data.name, { onSuccess: () => form.reset() });
         }}
       >
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
-          New category
-        </p>
-        <h2 className="mt-2 text-lg font-semibold">Group related channels</h2>
+        <h2 className="text-lg font-semibold">Create category</h2>
         <div className="mt-5 grid gap-2">
-          <Label htmlFor="new-category-name">Category name</Label>
-          <Input id="new-category-name" name="name" placeholder="Operations" />
+          <Label htmlFor="new-category">Name</Label>
+          <Input id="new-category" name="name" placeholder="Operations" />
         </div>
-        <ResultMessage result={result} />
-        <Button type="submit" className="mt-5 rounded-full">
+        <Notice message={notice} />
+        <Button
+          type="submit"
+          className="mt-5 rounded-full"
+          disabled={create.isPending}
+        >
           <Plus /> Add category
         </Button>
       </form>
-
       <section className="rounded-[1.75rem] border border-border bg-background/30 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
-              Order
-            </p>
-            <h2 className="mt-1 text-lg font-semibold">Workspace categories</h2>
-          </div>
-          <Badge variant="outline" className="rounded-full">
-            {categories.length}
-          </Badge>
-        </div>
+        <h2 className="text-lg font-semibold">Category order</h2>
         <div className="mt-5 grid gap-3">
-          {categories.map((category, index) => (
-            <form
+          {categories.data?.map((category, index) => (
+            <CategoryRow
               key={category.id}
-              className="flex flex-col gap-3 rounded-2xl border border-border bg-card/35 p-4 sm:flex-row sm:items-center"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setResult(
-                  renameCategory(
-                    category.id,
-                    getFormString(new FormData(event.currentTarget), "name"),
-                  ),
-                );
-              }}
-            >
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted font-mono text-xs text-muted-foreground">
-                {index + 1}
-              </span>
-              <Input
-                name="name"
-                defaultValue={category.name}
-                aria-label={`Rename ${category.name}`}
-                className="sm:flex-1"
-              />
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={index === 0}
-                  onClick={() => moveCategory(category.id, -1)}
-                  aria-label={`Move ${category.name} up`}
-                >
-                  <ArrowUp />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={index === categories.length - 1}
-                  onClick={() => moveCategory(category.id, 1)}
-                  aria-label={`Move ${category.name} down`}
-                >
-                  <ArrowDown />
-                </Button>
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Save ${category.name}`}
-                >
-                  <Save />
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon-sm"
-                  onClick={() => setResult(deleteCategory(category.id))}
-                  aria-label={`Delete ${category.name}`}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </form>
+              organizationId={organizationId}
+              category={category}
+              index={index}
+              total={categories.data?.length ?? 0}
+            />
           ))}
-          {categories.length === 0 && (
-            <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              Create the first category to unlock channel creation.
-            </p>
-          )}
         </div>
       </section>
     </div>
@@ -310,62 +343,190 @@ function CategorySettings({ organizationId }: { organizationId: string }) {
 }
 
 function PrivateParticipants({
-  channel,
   organizationId,
+  channel,
 }: {
-  channel: DemoChannelConversation;
   organizationId: string;
+  channel: ChannelConversationDto;
 }) {
-  const { state, addParticipant, removeParticipant } = useDemoWorkspace();
-  const members = getOrganizationMembers(state, organizationId);
+  const queryClient = useQueryClient();
+  const members = useMembers(organizationId);
+  const participants = useParticipants(channel.id);
+  const [notice, setNotice] = useState<string | null>(null);
+  const refresh = () =>
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.conversations.participants(channel.id),
+    });
+  const add = useMutation({
+    mutationFn: (userId: string) =>
+      conversationsApi.addParticipant(channel.id, { userId }),
+    onSuccess: refresh,
+    onError: (error) => setNotice(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: (userId: string) =>
+      conversationsApi.removeParticipant(channel.id, userId),
+    onSuccess: refresh,
+    onError: (error) => setNotice(error.message),
+  });
+  const participantIds = new Set(
+    participants.data?.map((participant) => participant.userId),
+  );
   return (
     <div className="mt-4 border-t border-border pt-4">
       <p className="mb-3 text-xs font-medium text-muted-foreground">
         Private participants
       </p>
       <div className="flex flex-wrap gap-2">
-        {members.map((membership) => {
-          const active = channel.participantIds.includes(membership.user.id);
-          const owner = membership.user.id === state.currentUser.id;
+        {members.data?.map((member) => {
+          const active = participantIds.has(member.user.id);
+          const owner = member.role === "OWNER";
           return (
             <button
-              key={membership.user.id}
+              key={member.user.id}
               type="button"
-              disabled={owner}
+              disabled={owner || add.isPending || remove.isPending}
               aria-pressed={active}
               onClick={() =>
                 active
-                  ? removeParticipant(channel.id, membership.user.id)
-                  : addParticipant(channel.id, membership.user.id)
+                  ? remove.mutate(member.user.id)
+                  : add.mutate(member.user.id)
               }
-              className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${
-                active
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground"
-              } disabled:opacity-70`}
+              className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${active ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground"} disabled:opacity-60`}
             >
               {active ? (
                 <UserMinus className="size-3" />
               ) : (
                 <UserPlus className="size-3" />
               )}
-              {membership.user.displayName}
+              {member.user.displayName}
               {owner ? " (owner)" : ""}
             </button>
           );
         })}
       </div>
+      <Notice message={notice} />
     </div>
   );
 }
 
-function ChannelSettings({ organizationId }: { organizationId: string }) {
-  const { state, createChannel, updateChannel, deleteChannel } =
-    useDemoWorkspace();
-  const categories = getOrganizationCategories(state, organizationId);
-  const channels = getOrganizationChannels(state, organizationId);
-  const [result, setResult] = useState<DemoActionResult | null>(null);
+function ChannelCard({
+  organizationId,
+  channel,
+  categories,
+}: {
+  organizationId: string;
+  channel: ChannelConversationDto;
+  categories: CategoryDto[];
+}) {
+  const queryClient = useQueryClient();
+  const [notice, setNotice] = useState<string | null>(null);
+  const refresh = () =>
+    invalidateOrganizationNavigation(queryClient, organizationId);
+  const update = useMutation({
+    mutationFn: (input: Parameters<typeof conversationsApi.update>[1]) =>
+      conversationsApi.update(channel.id, input),
+    onSuccess: refresh,
+    onError: (error) => setNotice(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: () => conversationsApi.remove(channel.id),
+    onSuccess: refresh,
+    onError: (error) => setNotice(error.message),
+  });
+  return (
+    <form
+      className="rounded-[1.75rem] border border-border bg-background/30 p-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const parsed = updateConversationSchema.safeParse({
+          name: getFormString(data, "name"),
+          categoryId: getFormString(data, "categoryId"),
+          visibility: getFormString(data, "visibility"),
+        });
+        if (parsed.success) {
+          update.mutate(parsed.data);
+        } else {
+          setNotice(firstIssue(parsed.error));
+        }
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <span className="grid size-9 place-items-center rounded-xl bg-muted">
+          {channel.visibility === "PRIVATE" ? <Lock /> : <Hash />}
+        </span>
+        <strong className="min-w-0 flex-1 truncate">{channel.name}</strong>
+        <Button
+          type="button"
+          variant="destructive"
+          size="icon-sm"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate()}
+          aria-label={`Delete ${channel.name}`}
+        >
+          <Trash2 />
+        </Button>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2 sm:col-span-2">
+          <Label>Name</Label>
+          <Input name="name" defaultValue={channel.name} />
+        </div>
+        <div className="grid gap-2">
+          <Label>Category</Label>
+          <Select name="categoryId" defaultValue={channel.categoryId}>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label>Visibility</Label>
+          <Select name="visibility" defaultValue={channel.visibility}>
+            <option value="PUBLIC">Public</option>
+            <option value="PRIVATE">Private</option>
+          </Select>
+        </div>
+      </div>
+      {channel.visibility === "PRIVATE" && (
+        <PrivateParticipants
+          organizationId={organizationId}
+          channel={channel}
+        />
+      )}
+      <Notice message={notice} />
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        className="mt-5 rounded-full"
+        disabled={update.isPending}
+      >
+        <Save /> Save channel
+      </Button>
+    </form>
+  );
+}
 
+function ChannelSettings({ organizationId }: { organizationId: string }) {
+  const queryClient = useQueryClient();
+  const categories = useCategories(organizationId);
+  const channels = useChannels(organizationId);
+  const [notice, setNotice] = useState<string | null>(null);
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof conversationsApi.createChannel>[1]) =>
+      conversationsApi.createChannel(organizationId, input),
+    onSuccess: () =>
+      invalidateOrganizationNavigation(queryClient, organizationId),
+    onError: (error) => setNotice(error.message),
+  });
+  const channelList =
+    channels.data?.filter(
+      (item): item is ChannelConversationDto => item.type === "CHANNEL",
+    ) ?? [];
   return (
     <div className="grid gap-5">
       <form
@@ -374,44 +535,25 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
           event.preventDefault();
           const form = event.currentTarget;
           const data = new FormData(form);
-          const action = createChannel(organizationId, {
+          const parsed = createConversationSchema.safeParse({
             name: getFormString(data, "name"),
             categoryId: getFormString(data, "categoryId"),
-            visibility: getFormString(data, "visibility") as
-              "PRIVATE" | "PUBLIC",
+            visibility: getFormString(data, "visibility"),
           });
-          setResult(action);
-          if (action.success) form.reset();
+          if (!parsed.success) return setNotice(firstIssue(parsed.error));
+          create.mutate(parsed.data, { onSuccess: () => form.reset() });
         }}
       >
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-            <Hash />
-          </span>
-          <div>
-            <h2 className="font-semibold">Create channel</h2>
-            <p className="text-xs text-muted-foreground">
-              Every channel belongs to one category.
-            </p>
-          </div>
-        </div>
-        <div className="mt-6 grid gap-4 md:grid-cols-[1fr_1fr_0.8fr_auto] md:items-end">
+        <h2 className="font-semibold">Create channel</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-[1fr_1fr_0.8fr_auto] md:items-end">
           <div className="grid gap-2">
-            <Label htmlFor="new-channel-name">Name</Label>
-            <Input
-              id="new-channel-name"
-              name="name"
-              placeholder="team-updates"
-            />
+            <Label>Name</Label>
+            <Input name="name" placeholder="team-updates" />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="new-channel-category">Category</Label>
-            <Select
-              id="new-channel-category"
-              name="categoryId"
-              disabled={categories.length === 0}
-            >
-              {categories.map((category) => (
+            <Label>Category</Label>
+            <Select name="categoryId" disabled={!categories.data?.length}>
+              {categories.data?.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>
@@ -419,101 +561,29 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="new-channel-visibility">Visibility</Label>
-            <Select
-              id="new-channel-visibility"
-              name="visibility"
-              defaultValue="PUBLIC"
-            >
+            <Label>Visibility</Label>
+            <Select name="visibility" defaultValue="PUBLIC">
               <option value="PUBLIC">Public</option>
               <option value="PRIVATE">Private</option>
             </Select>
           </div>
-          <Button type="submit" disabled={categories.length === 0}>
+          <Button
+            type="submit"
+            disabled={!categories.data?.length || create.isPending}
+          >
             <Plus /> Create
           </Button>
         </div>
-        <div className="mt-3">
-          <ResultMessage result={result} />
-        </div>
+        <Notice message={notice} />
       </form>
-
       <section className="grid gap-4 lg:grid-cols-2">
-        {channels.map((channel) => (
-          <form
+        {channelList.map((channel) => (
+          <ChannelCard
             key={channel.id}
-            className="rounded-[1.75rem] border border-border bg-background/30 p-5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              setResult(
-                updateChannel(channel.id, {
-                  name: getFormString(data, "name"),
-                  categoryId: getFormString(data, "categoryId"),
-                  visibility: getFormString(data, "visibility") as
-                    "PRIVATE" | "PUBLIC",
-                }),
-              );
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <span className="grid size-9 place-items-center rounded-xl bg-muted text-muted-foreground">
-                {channel.visibility === "PRIVATE" ? <Lock /> : <Hash />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{channel.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  Position {channel.position + 1}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="destructive"
-                size="icon-sm"
-                aria-label={`Delete ${channel.name}`}
-                onClick={() => setResult(deleteChannel(channel.id))}
-              >
-                <Trash2 />
-              </Button>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-2 sm:col-span-2">
-                <Label>Name</Label>
-                <Input name="name" defaultValue={channel.name} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Category</Label>
-                <Select name="categoryId" defaultValue={channel.categoryId}>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Visibility</Label>
-                <Select name="visibility" defaultValue={channel.visibility}>
-                  <option value="PUBLIC">Public</option>
-                  <option value="PRIVATE">Private</option>
-                </Select>
-              </div>
-            </div>
-            {channel.visibility === "PRIVATE" && (
-              <PrivateParticipants
-                channel={channel}
-                organizationId={organizationId}
-              />
-            )}
-            <Button
-              type="submit"
-              variant="outline"
-              size="sm"
-              className="mt-5 rounded-full"
-            >
-              <Save /> Save channel
-            </Button>
-          </form>
+            organizationId={organizationId}
+            channel={channel}
+            categories={categories.data ?? []}
+          />
         ))}
       </section>
     </div>
@@ -521,15 +591,16 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
 }
 
 function MemberSettings({ organizationId }: { organizationId: string }) {
-  const { state, inviteMember } = useDemoWorkspace();
-  const members = getOrganizationMembers(state, organizationId);
-  const pending = state.invitations.filter(
-    (item) =>
-      item.organizationId === organizationId &&
-      item.invitedByUserId === state.currentUser.id,
-  );
-  const [result, setResult] = useState<DemoActionResult | null>(null);
-
+  const queryClient = useQueryClient();
+  const members = useMembers(organizationId);
+  const [notice, setNotice] = useState<string | null>(null);
+  const invite = useMutation({
+    mutationFn: (email: string) =>
+      membershipsApi.invite(organizationId, { email }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.invitations.all }),
+    onError: (error) => setNotice(error.message),
+  });
   return (
     <div className="grid gap-5 xl:grid-cols-[0.72fr_1.28fr]">
       <form
@@ -537,21 +608,20 @@ function MemberSettings({ organizationId }: { organizationId: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           const form = event.currentTarget;
-          const action = inviteMember(
-            organizationId,
-            getFormString(new FormData(form), "email"),
-          );
-          setResult(action);
-          if (action.success) form.reset();
+          const parsed = inviteMemberSchema.safeParse({
+            email: getFormString(new FormData(form), "email"),
+          });
+          if (!parsed.success) return setNotice(firstIssue(parsed.error));
+          invite.mutate(parsed.data.email, {
+            onSuccess: () => {
+              form.reset();
+              setNotice("Invitation created.");
+            },
+          });
         }}
       >
         <MailPlus className="size-5 text-primary" />
         <h2 className="mt-5 text-lg font-semibold">Invite a registered user</h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Try{" "}
-          <span className="font-mono text-foreground">priya@intouch.demo</span>{" "}
-          in this fixture set.
-        </p>
         <div className="mt-5 grid gap-2">
           <Label htmlFor="invite-email">Email address</Label>
           <Input
@@ -561,44 +631,33 @@ function MemberSettings({ organizationId }: { organizationId: string }) {
             placeholder="person@company.com"
           />
         </div>
-        <div className="mt-3">
-          <ResultMessage result={result} />
-        </div>
-        <Button type="submit" className="mt-5 rounded-full">
+        <Notice message={notice} />
+        <Button
+          type="submit"
+          className="mt-5 rounded-full"
+          disabled={invite.isPending}
+        >
           <MailPlus /> Send invitation
         </Button>
-        {pending.length > 0 && (
-          <p className="mt-5 text-xs text-muted-foreground">
-            {pending.length} outgoing invitation pending.
-          </p>
-        )}
       </form>
-
       <section className="rounded-[1.75rem] border border-border bg-background/30 p-6">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
-              Directory
-            </p>
-            <h2 className="mt-1 text-lg font-semibold">Organization members</h2>
-          </div>
-          <Badge variant="outline" className="rounded-full">
-            {members.length}
-          </Badge>
+          <h2 className="text-lg font-semibold">Organization members</h2>
+          <Badge variant="outline">{members.data?.length ?? 0}</Badge>
         </div>
         <div className="mt-5 grid gap-3">
-          {members.map((membership) => (
+          {members.data?.map((member) => (
             <div
-              key={membership.membershipId}
+              key={member.membershipId}
               className="flex items-center gap-3 rounded-2xl border border-border bg-card/35 p-3"
             >
               <Avatar>
                 <AvatarFallback>
-                  {initials(membership.user.displayName)}
+                  {initials(member.user.displayName)}
                 </AvatarFallback>
                 <AvatarBadge
                   className={
-                    membership.user.status === "ONLINE"
+                    member.user.status === "ONLINE"
                       ? "bg-status"
                       : "bg-muted-foreground"
                   }
@@ -606,16 +665,13 @@ function MemberSettings({ organizationId }: { organizationId: string }) {
               </Avatar>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
-                  {membership.user.displayName}
+                  {member.user.displayName}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  @{membership.user.username} -{" "}
-                  {membership.user.status.toLowerCase()}
+                  @{member.user.username} - {member.user.status.toLowerCase()}
                 </p>
               </div>
-              <Badge variant="outline" className="rounded-full">
-                {membership.role}
-              </Badge>
+              <Badge variant="outline">{member.role}</Badge>
             </div>
           ))}
         </div>
@@ -629,36 +685,40 @@ export function OrganizationSettings({
 }: {
   organizationId: string;
 }) {
-  const { state } = useDemoWorkspace();
-  const organization = getOrganization(state, organizationId);
-  if (!organization || organization.currentUserRole === null) {
+  const organization = useOrganization(organizationId);
+  if (organization.isPending)
+    return (
+      <ResourceState
+        title="Loading settings"
+        description="Verifying owner access."
+      />
+    );
+  if (organization.isError || !organization.data)
     return (
       <ResourceState
         title="Workspace not found"
-        description="This organization is unavailable or has not been added to your account."
+        description="This organization is unavailable or inaccessible."
       />
     );
-  }
-  if (organization.currentUserRole !== "OWNER") {
+  if (organization.data.currentUserRole !== "OWNER") {
     return (
       <ResourceState
         kind="forbidden"
         title="Owner access required"
-        description="Members can collaborate in channels and direct messages, but only the organization owner can change workspace settings."
+        description="Only the organization owner can change workspace settings."
         href={`/app/${organizationId}`}
       />
     );
   }
-
   return (
     <>
       <PageHeader
         eyebrow="Owner workspace"
-        title={`${organization.name} settings`}
+        title={`${organization.data.name} settings`}
         description="Shape organization identity, rooms, access, and membership."
         actions={
           <LinkButton variant="ghost" href={`/app/${organizationId}`}>
-            <ArrowLeft /> <span className="hidden sm:inline">Workspace</span>
+            <ArrowLeft /> Workspace
           </LinkButton>
         }
       />

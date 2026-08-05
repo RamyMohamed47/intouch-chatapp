@@ -1,23 +1,41 @@
 "use client";
 
-import { ArrowRight, Check, LoaderCircle, RotateCcw, X } from "lucide-react";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Check, LoaderCircle, RotateCcw, X } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { googleAuthRedirectQuerySchema } from "@intouch/shared/auth";
 
 import { BrandLockup } from "@/components/brand/brand";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LinkButton } from "@/components/ui/link-button";
+import { useAuth } from "@/lib/auth/provider";
+import { getSafeReturnPath } from "@/lib/auth/return-path";
 
 function CallbackState() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { restore } = useAuth();
+  const [restoreFailed, setRestoreFailed] = useState(false);
   const result = googleAuthRedirectQuerySchema.safeParse({
     googleAuth: searchParams.get("googleAuth") ?? undefined,
   });
   const status = result.success ? result.data.googleAuth : undefined;
-  const isSuccess = status === "success";
-  const isFailure = status === "failed";
+  const isSuccess = status === "success" && !restoreFailed;
+  const isFailure = status === "failed" || restoreFailed;
   const Icon = isSuccess ? Check : isFailure ? X : LoaderCircle;
+
+  useEffect(() => {
+    if (status !== "success") return;
+    const storedPath = sessionStorage.getItem("intouch:auth-return-path");
+    sessionStorage.removeItem("intouch:auth-return-path");
+    void restore().then((user) => {
+      if (!user) {
+        setRestoreFailed(true);
+        return;
+      }
+      router.replace(getSafeReturnPath(storedPath));
+    });
+  }, [restore, router, status]);
 
   return (
     <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-background p-6 text-foreground">
@@ -26,7 +44,7 @@ function CallbackState() {
       </div>
       <div className="absolute top-1/4 left-1/4 size-72 rounded-full bg-primary/10 blur-3xl" />
       <section className="relative w-full max-w-md rounded-[2rem] border border-border bg-card/80 p-8 text-center shadow-2xl backdrop-blur-xl">
-        <BrandLockup className="mx-auto mb-6 h-36 w-full max-w-xs" priority />
+        <BrandLockup className="mx-auto mb-6 h-36 w-full max-w-xs" preload />
         <span
           className={`mx-auto grid size-16 place-items-center rounded-2xl ${
             isFailure
@@ -39,7 +57,7 @@ function CallbackState() {
           />
         </span>
         <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.22em] text-primary">
-          Google authentication preview
+          Google authentication
         </p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight">
           {isSuccess
@@ -50,16 +68,14 @@ function CallbackState() {
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           {isSuccess
-            ? "This frontend preview can now continue into the application shell."
+            ? "Your session is secure. Redirecting to your workspace now."
             : isFailure
-              ? "Return to login and try the flow again when authentication is connected."
-              : "This is the static processing state. No session request is being made."}
+              ? "Return to login and try the Google sign-in flow again."
+              : "Google is returning control to InTouch. This should only take a moment."}
         </p>
         <div className="mt-7 flex flex-col gap-2">
           {isSuccess && (
-            <LinkButton className="h-10 rounded-full" href="/app">
-              Continue to workspace <ArrowRight />
-            </LinkButton>
+            <p className="text-xs text-muted-foreground">Redirecting...</p>
           )}
           {isFailure && (
             <LinkButton

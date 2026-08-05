@@ -2,7 +2,9 @@
 
 import { ArrowLeft, ArrowRight, Building2, Globe2, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createOrganizationSchema } from "@intouch/shared/organizations";
 
 import { PageHeader } from "@/components/workspace/page-header";
 import { Button } from "@/components/ui/button";
@@ -11,28 +13,50 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { Select } from "@/components/ui/select";
-import { useDemoWorkspace } from "@/lib/demo/provider";
+import { ApiError } from "@/lib/api/client";
+import { organizationsApi } from "@/lib/api/organizations";
+import { queryKeys } from "@/lib/query/keys";
 import { getFormString } from "@/lib/utils";
 
 export function NewOrganizationPage() {
   const router = useRouter();
-  const { createOrganization } = useDemoWorkspace();
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const createOrganization = useMutation({
+    mutationFn: (input: Parameters<typeof organizationsApi.create>[0]) =>
+      organizationsApi.create(input),
+    onSuccess: async (organization) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.organizations.all,
+      });
+      router.push(`/app/${organization.id}`);
+    },
+  });
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const logoUrl = getFormString(form, "logoUrl").trim();
-    const result = createOrganization({
+    const parsed = createOrganizationSchema.safeParse({
       name: getFormString(form, "name"),
       ...(logoUrl ? { logoUrl } : {}),
       visibility: getFormString(form, "visibility") as "PRIVATE" | "PUBLIC",
     });
-    if (!result.success || !result.id) {
-      setError(result.error ?? "Workspace could not be created");
+    if (!parsed.success) {
+      setError(
+        parsed.error.issues[0]?.message ?? "Workspace details are invalid",
+      );
       return;
     }
-    router.push(`/app/${result.id}`);
+    setError(null);
+    createOrganization.mutate(parsed.data, {
+      onError: (requestError) =>
+        setError(
+          requestError instanceof ApiError
+            ? requestError.message
+            : "Workspace could not be created",
+        ),
+    });
   };
 
   return (
@@ -120,8 +144,16 @@ export function NewOrganizationPage() {
                 </Select>
               </div>
               {error && <FormError>{error}</FormError>}
-              <Button type="submit" size="lg" className="mt-2 h-11 rounded-xl">
-                Create workspace <ArrowRight />
+              <Button
+                type="submit"
+                size="lg"
+                className="mt-2 h-11 rounded-xl"
+                disabled={createOrganization.isPending}
+              >
+                {createOrganization.isPending
+                  ? "Creating..."
+                  : "Create workspace"}{" "}
+                {!createOrganization.isPending && <ArrowRight />}
               </Button>
             </div>
           </form>

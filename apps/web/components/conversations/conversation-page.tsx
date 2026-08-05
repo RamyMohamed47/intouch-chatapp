@@ -4,333 +4,70 @@ import {
   CheckCheck,
   Hash,
   Lock,
-  MoreHorizontal,
-  Paperclip,
+  MessageCircle,
+  Pencil,
   Send,
-  Smile,
-  Sparkles,
-  UserPlus,
+  Trash2,
   Users,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
+import {
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
+import {
+  createMessageSchema,
+  updateMessageSchema,
+  type MessageDto,
+  type MessageListResponse,
+} from "@intouch/shared/messages";
 
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
 import { initials } from "@/components/workspace/app-shell";
-import { Avatar, AvatarBadge, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { FormError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { useDemoWorkspace } from "@/lib/demo/provider";
+import { useAuth } from "@/lib/auth/provider";
+import { messagesApi } from "@/lib/api/messages";
 import {
-  getConversation,
-  getConversationMessages,
-  getDirectPeer,
-  getOrganization,
-  getOrganizationMembers,
-  getUser,
-} from "@/lib/demo/selectors";
-import { formatRelativePresence, formatTime } from "@/lib/demo/format";
-import type {
-  DemoChannelConversation,
-  DemoConversation,
-  DemoMembership,
-} from "@/lib/demo/types";
+  useConversation,
+  useMembers,
+  useMessages,
+  useOrganization,
+} from "@/lib/query/hooks";
+import { queryKeys } from "@/lib/query/keys";
+import { useRealtime } from "@/lib/realtime/provider";
 
-function MembersPanel({
-  members,
-  conversation,
-  mobile = false,
-}: {
-  members: DemoMembership[];
-  conversation: DemoConversation;
-  mobile?: boolean;
-}) {
-  const visibleMembers =
-    conversation.type === "CHANNEL" && conversation.visibility === "PRIVATE"
-      ? members.filter((item) =>
-          conversation.participantIds.includes(item.user.id),
-        )
-      : conversation.type === "DIRECT"
-        ? members.filter((item) =>
-            conversation.participantIds.includes(item.user.id),
-          )
-        : members;
-  const online = visibleMembers.filter((item) => item.user.status === "ONLINE");
+const formatTime = (value: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 
-  return (
-    <aside
-      className={`h-full w-[280px] shrink-0 border-l border-border/70 bg-card/35 ${
-        mobile ? "w-full border-0" : "hidden xl:block"
-      }`}
-    >
-      <ScrollArea className="h-full">
-        <div className="p-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
-            In this conversation
-          </p>
-          <h2 className="mt-1 text-lg font-semibold">
-            {online.length} present now
-          </h2>
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">
-            Presence is fixture-driven until realtime integration begins.
-          </p>
-          <div className="mt-6 grid gap-4">
-            {visibleMembers.map((membership) => (
-              <div
-                key={membership.membershipId}
-                className="flex items-center gap-3"
-              >
-                <Avatar>
-                  <AvatarFallback>
-                    {initials(membership.user.displayName)}
-                  </AvatarFallback>
-                  <AvatarBadge
-                    className={
-                      membership.user.status === "ONLINE"
-                        ? "bg-status"
-                        : "bg-muted-foreground"
-                    }
-                  />
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {membership.user.displayName}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {membership.user.status === "ONLINE"
-                      ? "Available now"
-                      : formatRelativePresence(membership.user.lastSeenAt)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/10 p-4">
-            <Sparkles className="size-4 text-primary" />
-            <p className="mt-3 text-sm font-semibold">Quiet presence</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Typing and presence updates will become live when Socket.IO is
-              connected.
-            </p>
-          </div>
-        </div>
-      </ScrollArea>
-    </aside>
-  );
-}
-
-function ParticipantDialog({
-  conversation,
-  members,
-}: {
-  conversation: DemoChannelConversation;
-  members: DemoMembership[];
-}) {
-  const { state, addParticipant, removeParticipant } = useDemoWorkspace();
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="rounded-full"
-        onClick={() => setOpen(true)}
-      >
-        <UserPlus /> <span className="hidden sm:inline">Participants</span>
-      </Button>
-      <DialogContent>
-        <DialogHeader>
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
-            Private access
-          </p>
-          <DialogTitle>Manage channel participants</DialogTitle>
-          <DialogDescription>
-            Organization membership is still required. This list adds
-            private-channel access.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="mt-5 grid max-h-[50vh] gap-2 overflow-auto">
-          {members.map((membership) => {
-            const included = conversation.participantIds.includes(
-              membership.user.id,
-            );
-            const isOwner = membership.user.id === state.currentUser.id;
-            return (
-              <div
-                key={membership.user.id}
-                className="flex items-center gap-3 rounded-2xl border border-border p-3"
-              >
-                <Avatar size="sm">
-                  <AvatarFallback>
-                    {initials(membership.user.displayName)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {membership.user.displayName}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    @{membership.user.username}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={included ? "ghost" : "outline"}
-                  disabled={isOwner}
-                  onClick={() => {
-                    const result = included
-                      ? removeParticipant(conversation.id, membership.user.id)
-                      : addParticipant(conversation.id, membership.user.id);
-                    setError(result.success ? null : (result.error ?? null));
-                  }}
-                >
-                  {included ? (isOwner ? "Owner" : "Remove") : "Add"}
-                </Button>
-              </div>
-            );
-          })}
-        </div>
-        {error && <FormError className="mt-3">{error}</FormError>}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function MessageItem({
-  messageId,
-  conversation,
-}: {
-  messageId: string;
-  conversation: DemoConversation;
-}) {
-  const { state, editMessage, deleteMessage } = useDemoWorkspace();
-  const message = state.messages.find((item) => item.id === messageId);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(message?.content ?? "");
-  if (!message) return null;
-  const sender = getUser(state, message.senderId);
-  const organization = getOrganization(state, conversation.organizationId);
-  const canEdit =
-    message.senderId === state.currentUser.id && !message.deletedAt;
-  const canDelete =
-    !message.deletedAt &&
-    (message.senderId === state.currentUser.id ||
-      (conversation.type === "CHANNEL" &&
-        organization?.currentUserRole === "OWNER"));
-
-  const saveEdit = (event: FormEvent) => {
-    event.preventDefault();
-    const result = editMessage(message.id, draft);
-    if (result.success) setEditing(false);
-  };
-
-  return (
-    <article className="group grid grid-cols-[40px_1fr] gap-3 md:grid-cols-[44px_1fr]">
-      <Avatar size="lg">
-        <AvatarFallback>
-          {initials(sender?.displayName ?? "Unknown")}
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <h3 className="truncate text-sm font-semibold">
-            {sender?.displayName ?? "Unknown member"}
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            @{sender?.username ?? "unknown"}
-          </span>
-          <span className="ml-auto font-mono text-[10px] text-muted-foreground">
-            {formatTime(message.createdAt)}
-          </span>
-          {(canEdit || canDelete) && (
-            <DropdownMenu
-              trigger={({ open, toggle }) => (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label="Message actions"
-                  aria-expanded={open}
-                  onClick={toggle}
-                  className="opacity-0 group-hover:opacity-100 focus:opacity-100"
-                >
-                  <MoreHorizontal />
-                </Button>
-              )}
-            >
-              {canEdit && (
-                <DropdownMenuItem onClick={() => setEditing(true)}>
-                  Edit message
-                </DropdownMenuItem>
-              )}
-              {canDelete && (
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={() => deleteMessage(message.id)}
-                >
-                  Delete message
-                </DropdownMenuItem>
-              )}
-            </DropdownMenu>
-          )}
-        </div>
-        {editing ? (
-          <form onSubmit={saveEdit} className="mt-2 flex gap-2">
-            <Input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              autoFocus
-              aria-label="Edit message"
-            />
-            <Button type="submit">Save</Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setEditing(false)}
-            >
-              Cancel
-            </Button>
-          </form>
-        ) : message.deletedAt ? (
-          <p className="mt-2 text-sm italic text-muted-foreground">
-            Message deleted
-          </p>
-        ) : (
-          <p className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-foreground/90">
-            {message.content}
-            {message.editedAt && (
-              <span className="ml-2 text-[10px] text-muted-foreground">
-                (edited)
-              </span>
-            )}
-          </p>
-        )}
-      </div>
-    </article>
-  );
-}
+const upsertCachedMessage = (
+  data: InfiniteData<MessageListResponse> | undefined,
+  message: MessageDto,
+) => {
+  if (!data) return data;
+  let found = false;
+  const pages = data.pages.map((page) => ({
+    ...page,
+    messages: page.messages.map((current) => {
+      if (current.id !== message.id) return current;
+      found = true;
+      return message;
+    }),
+  }));
+  if (!found && pages[0])
+    pages[0] = { ...pages[0], messages: [message, ...pages[0].messages] };
+  return { ...data, pages };
+};
 
 export function ConversationPage({
   organizationId,
@@ -341,226 +78,453 @@ export function ConversationPage({
   conversationId: string;
   expectedType: "CHANNEL" | "DIRECT";
 }) {
-  const { state, sendMessage } = useDemoWorkspace();
-  const [draft, setDraft] = useState("");
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const realtime = useRealtime();
+  const {
+    connected,
+    joinConversation,
+    leaveConversation,
+    startTyping,
+    stopTyping,
+  } = realtime;
+  const organization = useOrganization(organizationId);
+  const conversation = useConversation(conversationId);
+  const messages = useMessages(conversationId);
+  const members = useMembers(organizationId, Boolean(conversation.data));
+  const [content, setContent] = useState("");
+  const [focused, setFocused] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const conversation = getConversation(state, conversationId);
-  const organization = getOrganization(state, organizationId);
+  const [documentActive, setDocumentActive] = useState(
+    () =>
+      typeof document === "undefined" || document.visibilityState === "visible",
+  );
+  const refreshSummaries = () =>
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.channels(organizationId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.directMessages(organizationId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.directMessagePreview(organizationId),
+      }),
+    ]);
+
+  useEffect(() => {
+    if (!connected) return;
+    void joinConversation(conversationId);
+    return () => {
+      stopTyping(conversationId);
+      void leaveConversation(conversationId);
+    };
+  }, [
+    connected,
+    conversationId,
+    joinConversation,
+    leaveConversation,
+    stopTyping,
+  ]);
+
+  useEffect(() => {
+    if (!focused || !content.trim()) {
+      stopTyping(conversationId);
+      return;
+    }
+    startTyping(conversationId);
+    const timer = window.setInterval(() => startTyping(conversationId), 3_000);
+    return () => {
+      window.clearInterval(timer);
+      stopTyping(conversationId);
+    };
+  }, [content, conversationId, focused, startTyping, stopTyping]);
+
+  const allMessages = (
+    messages.data?.pages.flatMap((page) => page.messages) ?? []
+  )
+    .filter(
+      (message, index, list) =>
+        list.findIndex((item) => item.id === message.id) === index,
+    )
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const newestMessage = allMessages.at(-1);
+  const receipt = useMutation({
+    mutationFn: (messageId: string) =>
+      messagesApi.updateReadReceipt(conversationId, { messageId }),
+    onSuccess: (readReceipt) => {
+      queryClient.setQueryData(
+        queryKeys.conversations.detail(conversationId),
+        (current: typeof conversation.data) =>
+          current ? { ...current, readReceipt, unreadCount: 0 } : current,
+      );
+      void refreshSummaries();
+    },
+  });
+
+  useEffect(() => {
+    const updateVisibility = () =>
+      setDocumentActive(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", updateVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", updateVisibility);
+  }, []);
+
+  useEffect(() => {
+    if (
+      !newestMessage ||
+      !documentActive ||
+      conversation.data?.readReceipt?.lastReadMessageId === newestMessage.id ||
+      receipt.isPending
+    ) {
+      return;
+    }
+    receipt.mutate(newestMessage.id);
+  }, [
+    conversation.data?.readReceipt?.lastReadMessageId,
+    documentActive,
+    newestMessage,
+    receipt,
+  ]);
+
+  const sendMessage = useMutation({
+    mutationFn: (messageContent: string) =>
+      messagesApi.create(conversationId, { content: messageContent }),
+    onSuccess: (message) => {
+      queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+        queryKeys.conversations.messages(conversationId),
+        (current) => upsertCachedMessage(current, message),
+      );
+      setContent("");
+      stopTyping(conversationId);
+      void refreshSummaries();
+    },
+  });
+  const editMessage = useMutation({
+    mutationFn: ({
+      messageId,
+      messageContent,
+    }: {
+      messageId: string;
+      messageContent: string;
+    }) => messagesApi.update(messageId, { content: messageContent }),
+    onSuccess: (message) => {
+      queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+        queryKeys.conversations.messages(conversationId),
+        (current) => upsertCachedMessage(current, message),
+      );
+      setEditingId(null);
+      void refreshSummaries();
+    },
+  });
+  const deleteMessage = useMutation({
+    mutationFn: (messageId: string) => messagesApi.remove(messageId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.messages(conversationId),
+      });
+      await refreshSummaries();
+    },
+  });
+
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const parsed = createMessageSchema.safeParse({ content });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? "Message is invalid");
+      return;
+    }
+    setError(null);
+    sendMessage.mutate(parsed.data.content, {
+      onError: (requestError) => setError(requestError.message),
+    });
+  };
+
+  if (realtime.revokedConversationId === conversationId) {
+    return (
+      <ResourceState
+        title="Conversation access changed"
+        description="Your access to this conversation was revoked."
+        href={`/app/${organizationId}`}
+      />
+    );
+  }
+  if (conversation.isPending || organization.isPending) {
+    return (
+      <ResourceState
+        title="Loading conversation"
+        description="Fetching the conversation and recent messages."
+      />
+    );
+  }
   if (
-    !organization ||
-    organization.currentUserRole === null ||
-    !conversation ||
-    conversation.organizationId !== organizationId ||
-    conversation.type !== expectedType
+    conversation.isError ||
+    organization.isError ||
+    !conversation.data ||
+    !organization.data ||
+    conversation.data.organizationId !== organizationId ||
+    conversation.data.type !== expectedType
   ) {
     return (
       <ResourceState
         title="Conversation not found"
-        description="This conversation is unavailable, private, or no longer belongs to this workspace."
-        href={organization?.currentUserRole ? `/app/${organizationId}` : "/app"}
+        description="This conversation is unavailable or you no longer have access."
+        href={`/app/${organizationId}`}
       />
     );
   }
-  const messages = getConversationMessages(state, conversation.id);
-  const members = getOrganizationMembers(state, organization.id);
-  const peer = getDirectPeer(state, conversation);
-  const label =
-    conversation.type === "CHANNEL"
-      ? conversation.name
-      : (peer?.displayName ?? "Direct message");
-  const isOwner = organization.currentUserRole === "OWNER";
 
-  const submit = () => {
-    const result = sendMessage(conversation.id, draft);
-    if (!result.success) {
-      setError(result.error ?? "Message could not be sent");
-      return;
-    }
-    setDraft("");
-    setError(null);
-  };
+  const title =
+    conversation.data.type === "CHANNEL"
+      ? conversation.data.name
+      : conversation.data.peer.displayName;
+  const typingNames = realtime
+    .typingUserIds(conversationId)
+    .map(
+      (userId) =>
+        members.data?.find((member) => member.user.id === userId)?.user
+          .displayName,
+    )
+    .filter((name): name is string => Boolean(name));
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <PageHeader
-          eyebrow={
-            conversation.type === "CHANNEL"
-              ? `${conversation.visibility} channel`
-              : "Direct message"
-          }
-          title={label}
-          description={
-            conversation.type === "CHANNEL"
-              ? "Messages stay scoped to this channel and organization."
-              : peer?.status === "ONLINE"
-                ? `${peer.displayName} is online now.`
-                : formatRelativePresence(peer?.lastSeenAt ?? null)
-          }
-          actions={
-            <>
-              {conversation.type === "CHANNEL" &&
-                conversation.visibility === "PRIVATE" &&
-                isOwner && (
-                  <ParticipantDialog
-                    conversation={conversation}
-                    members={members}
-                  />
-                )}
-              <Sheet>
-                <SheetTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="xl:hidden"
-                      aria-label="Show members"
-                    />
-                  }
-                >
-                  <Users />
-                </SheetTrigger>
-                <SheetContent side="right" className="w-[300px] gap-0 p-0">
-                  <SheetTitle className="sr-only">
-                    Conversation members
-                  </SheetTitle>
-                  <MembersPanel
-                    members={members}
-                    conversation={conversation}
-                    mobile
-                  />
-                </SheetContent>
-              </Sheet>
-            </>
-          }
-        />
+    <>
+      <PageHeader
+        eyebrow={
+          conversation.data.type === "CHANNEL"
+            ? `${conversation.data.visibility.toLowerCase()} channel`
+            : "Direct message"
+        }
+        title={title}
+        description={
+          conversation.data.type === "CHANNEL"
+            ? `A channel in ${organization.data.name}`
+            : `Private conversation in ${organization.data.name}`
+        }
+        actions={
+          <Badge variant="outline" className="rounded-full">
+            {connected ? "Live" : "Reconnecting"}
+          </Badge>
+        }
+      />
+      <div className="flex min-h-0 flex-1 flex-col">
         <ScrollArea className="min-h-0 flex-1">
-          <div className="mx-auto flex max-w-4xl flex-col px-5 py-8 md:px-9 md:py-10">
-            <section className="mb-9 max-w-2xl">
-              <Badge
-                variant="outline"
-                className="rounded-full border-primary/25 bg-primary/10 text-primary"
-              >
-                {conversation.type === "CHANNEL" ? (
-                  conversation.visibility === "PRIVATE" ? (
-                    <>
-                      <Lock /> Private room
-                    </>
-                  ) : (
-                    <>
-                      <Hash /> Open room
-                    </>
-                  )
-                ) : (
-                  <>
-                    <CheckCheck /> One-to-one
-                  </>
-                )}
-              </Badge>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight">
-                {conversation.type === "CHANNEL"
-                  ? `Welcome to #${conversation.name}.`
-                  : `A direct line to ${peer?.displayName ?? "your teammate"}.`}
-              </h2>
-              <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                {conversation.type === "CHANNEL"
-                  ? "Use this room for focused updates, decisions, and context the whole audience can revisit."
-                  : "This conversation is private to both organization members. Organization owners cannot moderate direct messages."}
+          <div className="mx-auto max-w-4xl p-5 md:p-8">
+            {messages.hasNextPage && (
+              <div className="mb-6 text-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={messages.isFetchingNextPage}
+                  onClick={() => void messages.fetchNextPage()}
+                >
+                  {messages.isFetchingNextPage
+                    ? "Loading..."
+                    : "Load earlier messages"}
+                </Button>
+              </div>
+            )}
+            {messages.isPending && (
+              <p className="text-center text-sm text-muted-foreground">
+                Loading messages...
               </p>
-            </section>
-            <div className="mb-7 flex items-center gap-4">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Today - August 4
-              </span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-            <div className="grid gap-8">
-              {messages.map((message) => (
-                <MessageItem
-                  key={message.id}
-                  messageId={message.id}
-                  conversation={conversation}
-                />
-              ))}
-              {messages.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                  No messages yet. Start the conversation below.
+            )}
+            {messages.isError && (
+              <button
+                type="button"
+                onClick={() => void messages.refetch()}
+                className="w-full rounded-2xl border border-destructive/30 p-4 text-sm text-destructive"
+              >
+                Messages could not be loaded. Select to retry.
+              </button>
+            )}
+            <div className="grid gap-5">
+              {allMessages.map((message) => {
+                const sender = members.data?.find(
+                  (member) => member.user.id === message.senderId,
+                )?.user;
+                const own = message.senderId === user?.id;
+                const canDelete =
+                  own ||
+                  (conversation.data.type === "CHANNEL" &&
+                    organization.data.currentUserRole === "OWNER");
+                return (
+                  <article key={message.id} className="group flex gap-3">
+                    <Avatar>
+                      <AvatarFallback>
+                        {initials(sender?.displayName ?? "User")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1 rounded-2xl border border-border bg-background/30 p-4">
+                      <div className="flex items-center gap-2">
+                        <strong className="truncate text-sm">
+                          {sender?.displayName ?? "Member"}
+                        </strong>
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {formatTime(message.createdAt)}
+                        </span>
+                        {message.editedAt && (
+                          <span className="text-[10px] text-muted-foreground">
+                            edited
+                          </span>
+                        )}
+                        <div className="ml-auto flex gap-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
+                          {own && !message.deletedAt && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              aria-label="Edit message"
+                              onClick={() => {
+                                setEditingId(message.id);
+                                setEditingContent(message.content ?? "");
+                              }}
+                            >
+                              <Pencil />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              aria-label="Delete message"
+                              disabled={deleteMessage.isPending}
+                              onClick={() => deleteMessage.mutate(message.id)}
+                            >
+                              <Trash2 />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {editingId === message.id ? (
+                        <form
+                          className="mt-2 flex gap-2"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            const parsed = updateMessageSchema.safeParse({
+                              content: editingContent,
+                            });
+                            if (parsed.success) {
+                              editMessage.mutate({
+                                messageId: message.id,
+                                messageContent: parsed.data.content,
+                              });
+                            }
+                          }}
+                        >
+                          <Input
+                            value={editingContent}
+                            onChange={(event) =>
+                              setEditingContent(event.target.value)
+                            }
+                          />
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={editMessage.isPending}
+                          >
+                            Save
+                          </Button>
+                        </form>
+                      ) : (
+                        <p
+                          className={
+                            message.deletedAt
+                              ? "mt-2 text-sm italic text-muted-foreground"
+                              : "mt-2 whitespace-pre-wrap text-sm leading-6"
+                          }
+                        >
+                          {message.deletedAt
+                            ? "Message deleted"
+                            : message.content}
+                        </p>
+                      )}
+                      {own &&
+                        conversation.data.type === "DIRECT" &&
+                        message.id === newestMessage?.id && (
+                          <p className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <CheckCheck className="size-3" />{" "}
+                            {realtime.readReceipt(conversationId)
+                              ?.lastReadMessageId === message.id
+                              ? "Read"
+                              : "Sent"}
+                          </p>
+                        )}
+                    </div>
+                  </article>
+                );
+              })}
+              {!messages.isPending && allMessages.length === 0 && (
+                <div className="py-16 text-center">
+                  <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+                    {conversation.data.type === "CHANNEL" ? (
+                      <Hash />
+                    ) : (
+                      <MessageCircle />
+                    )}
+                  </span>
+                  <h2 className="mt-5 text-xl font-semibold">
+                    Start the conversation
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    The first message sets the context.
+                  </p>
                 </div>
               )}
             </div>
-            {messages.length > 0 && conversation.type === "DIRECT" && (
-              <p className="mt-6 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
-                <CheckCheck className="size-3 text-primary" /> Read receipt
-                preview
-              </p>
-            )}
           </div>
         </ScrollArea>
-        <div className="shrink-0 px-3 pb-3 md:px-6 md:pb-5">
-          <div className="mx-auto max-w-4xl rounded-3xl border border-border bg-card/90 p-2 shadow-2xl backdrop-blur-xl focus-within:border-primary/50">
-            <Textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !event.shiftKey &&
-                  !event.nativeEvent.isComposing
-                ) {
-                  event.preventDefault();
-                  submit();
-                }
-              }}
-              placeholder={`Message ${conversation.type === "CHANNEL" ? `#${conversation.name}` : (peer?.displayName ?? "teammate")}`}
-              aria-label="Message content"
-              className="min-h-12 resize-none border-0 bg-transparent px-3 py-3 shadow-none focus-visible:ring-0"
-            />
-            {error && <FormError className="px-3 pb-2">{error}</FormError>}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                {[
-                  [Paperclip, "Attachments"],
-                  [Smile, "Emoji"],
-                  [Sparkles, "Smart actions"],
-                ].map(([Icon, text]) => {
-                  const ActionIcon = Icon as typeof Paperclip;
-                  return (
-                    <Button
-                      key={text as string}
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      disabled
-                      title={`${text as string} coming later`}
-                      aria-label={`${text as string} coming later`}
-                    >
-                      <ActionIcon />
-                    </Button>
-                  );
-                })}
-              </div>
-              <div className="flex items-center gap-3">
-                {draft.trim() && (
-                  <span className="hidden text-[10px] text-muted-foreground sm:inline">
-                    You are typing...
-                  </span>
+
+        <div className="shrink-0 border-t border-border bg-card/80 p-4">
+          <form onSubmit={submit} className="mx-auto max-w-4xl">
+            {typingNames.length > 0 && (
+              <p className="mb-2 text-xs text-muted-foreground">
+                {typingNames.join(", ")}{" "}
+                {typingNames.length === 1 ? "is" : "are"} typing...
+              </p>
+            )}
+            <div className="flex items-end gap-2 rounded-2xl border border-border bg-background/50 p-2 focus-within:border-primary/40">
+              <span className="mb-2 grid size-8 place-items-center text-muted-foreground">
+                {conversation.data.type === "CHANNEL" ? (
+                  conversation.data.visibility === "PRIVATE" ? (
+                    <Lock />
+                  ) : (
+                    <Hash />
+                  )
+                ) : (
+                  <Users />
                 )}
-                <Button
-                  type="button"
-                  className="rounded-full"
-                  size="icon"
-                  onClick={submit}
-                  disabled={!draft.trim()}
-                  aria-label="Send message"
-                >
-                  <Send />
-                </Button>
-              </div>
+              </span>
+              <Textarea
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                placeholder={`Message ${title}`}
+                className="min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+                maxLength={4000}
+              />
+              <Button
+                type="submit"
+                size="icon"
+                aria-label="Send message"
+                disabled={sendMessage.isPending || !content.trim()}
+              >
+                <Send />
+              </Button>
             </div>
-          </div>
+            {error && (
+              <div className="mt-2">
+                <FormError>{error}</FormError>
+              </div>
+            )}
+          </form>
         </div>
       </div>
-      <MembersPanel members={members} conversation={conversation} />
-    </div>
+    </>
   );
 }

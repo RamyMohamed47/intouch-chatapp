@@ -7,6 +7,7 @@ import {
   Hash,
   Inbox,
   Lock,
+  LogOut,
   Menu,
   MessageCircle,
   Plus,
@@ -16,7 +17,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { ChannelConversationDto } from "@intouch/shared/conversations";
 
 import { BrandMark, BrandSignature } from "@/components/brand/brand";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -42,17 +45,21 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useDemoWorkspace } from "@/lib/demo/provider";
+import { conversationsApi } from "@/lib/api/conversations";
+import { useAuth } from "@/lib/auth/provider";
 import {
-  getDirectPeer,
-  getOrganizationCategories,
-  getOrganizationChannels,
-  getOrganizationDirectMessages,
-  getOrganizationMembers,
-} from "@/lib/demo/selectors";
+  useCategories,
+  useChannels,
+  useDirectMessages,
+  useInvitations,
+  useMembers,
+  useOrganizations,
+} from "@/lib/query/hooks";
+import { queryKeys } from "@/lib/query/keys";
+import { useRealtime } from "@/lib/realtime/provider";
 import { cn } from "@/lib/utils";
 
-const initials = (name: string) =>
+export const initials = (name: string) =>
   name
     .split(" ")
     .map((part) => part[0])
@@ -88,20 +95,25 @@ function NewDirectMessageDialog({
   onNavigate?: () => void;
 }) {
   const router = useRouter();
-  const { state, createDirectMessage } = useDemoWorkspace();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const members = getOrganizationMembers(state, organizationId).filter(
-    (item) => item.user.id !== state.currentUser.id,
-  );
-
-  const selectMember = (userId: string) => {
-    const result = createDirectMessage(organizationId, userId);
-    if (result.success && result.id) {
+  const members = useMembers(organizationId, open);
+  const createDirectMessage = useMutation({
+    mutationFn: (recipientUserId: string) =>
+      conversationsApi.createDirectMessage(organizationId, { recipientUserId }),
+    onSuccess: async (conversation) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.directMessages(organizationId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.directMessagePreview(organizationId),
+      });
       setOpen(false);
       onNavigate?.();
-      router.push(`/app/${organizationId}/direct-messages/${result.id}`);
-    }
-  };
+      router.push(`/app/${organizationId}/direct-messages/${conversation.id}`);
+    },
+  });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -125,36 +137,49 @@ function NewDirectMessageDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="mt-5 grid gap-2">
-          {members.map((member) => (
-            <button
-              key={member.user.id}
-              type="button"
-              onClick={() => selectMember(member.user.id)}
-              className="flex items-center gap-3 rounded-2xl border border-transparent p-3 text-left hover:border-border hover:bg-muted/50"
-            >
-              <Avatar>
-                <AvatarFallback>
-                  {initials(member.user.displayName)}
-                </AvatarFallback>
-                <AvatarBadge
-                  className={
-                    member.user.status === "ONLINE"
-                      ? "bg-status"
-                      : "bg-muted-foreground"
-                  }
-                />
-              </Avatar>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">
-                  {member.user.displayName}
+          {members.isPending && (
+            <p className="p-3 text-sm text-muted-foreground">
+              Loading teammates...
+            </p>
+          )}
+          {members.data
+            ?.filter((member) => member.user.id !== user?.id)
+            .map((member) => (
+              <button
+                key={member.user.id}
+                type="button"
+                disabled={createDirectMessage.isPending}
+                onClick={() => createDirectMessage.mutate(member.user.id)}
+                className="flex items-center gap-3 rounded-2xl border border-transparent p-3 text-left hover:border-border hover:bg-muted/50 disabled:opacity-60"
+              >
+                <Avatar>
+                  <AvatarFallback>
+                    {initials(member.user.displayName)}
+                  </AvatarFallback>
+                  <AvatarBadge
+                    className={
+                      member.user.status === "ONLINE"
+                        ? "bg-status"
+                        : "bg-muted-foreground"
+                    }
+                  />
+                </Avatar>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {member.user.displayName}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    @{member.user.username}
+                  </span>
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  @{member.user.username}
-                </span>
-              </span>
-              <MessageCircle className="size-4 text-muted-foreground" />
-            </button>
-          ))}
+                <MessageCircle className="size-4 text-muted-foreground" />
+              </button>
+            ))}
+          {createDirectMessage.isError && (
+            <p className="text-sm text-destructive">
+              {createDirectMessage.error.message}
+            </p>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -170,26 +195,28 @@ function WorkspaceNavigation({
 }) {
   const pathname = usePathname();
   const params = useParams<{ organizationId?: string }>();
-  const { state } = useDemoWorkspace();
+  const { user, logout } = useAuth();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState<string[]>([]);
-  const organizations = state.organizations.filter(
-    (item) => item.currentUserRole !== null,
+  const organizationId = params.organizationId ?? "";
+  const organizations = useOrganizations();
+  const invitations = useInvitations();
+  const categories = useCategories(organizationId, Boolean(organizationId));
+  const channels = useChannels(organizationId, Boolean(organizationId));
+  const directMessages = useDirectMessages(
+    organizationId,
+    Boolean(organizationId),
   );
-  const invitationCount = state.invitations.filter(
-    (item) => item.invitedUserId === state.currentUser.id,
-  ).length;
-  const activeOrganization = organizations.find(
-    (item) => item.id === params.organizationId,
+  const activeOrganization = organizations.data?.find(
+    (organization) => organization.id === organizationId,
   );
-  const categories = activeOrganization
-    ? getOrganizationCategories(state, activeOrganization.id)
-    : [];
-  const channels = activeOrganization
-    ? getOrganizationChannels(state, activeOrganization.id)
-    : [];
-  const directMessages = activeOrganization
-    ? getOrganizationDirectMessages(state, activeOrganization.id)
-    : [];
+  const dms =
+    directMessages.data?.pages.flatMap((page) => page.directMessages) ?? [];
+  const channelList =
+    channels.data?.filter(
+      (conversation): conversation is ChannelConversationDto =>
+        conversation.type === "CHANNEL",
+    ) ?? [];
 
   return (
     <aside
@@ -204,7 +231,7 @@ function WorkspaceNavigation({
         aria-label="InTouch workspace hub"
         className="flex items-center gap-3 rounded-2xl border border-sidebar-border bg-sidebar-accent/65 p-3"
       >
-        <BrandMark className="size-10" priority />
+        <BrandMark className="size-10" preload />
         <span className="min-w-0 flex-1">
           <span className="brand-wordmark block text-sm font-semibold">
             <span className="brand-wordmark-warm">In</span>
@@ -218,7 +245,7 @@ function WorkspaceNavigation({
       </Link>
 
       <div className="mt-3 flex items-center gap-1 overflow-x-auto px-1 pb-1">
-        {organizations.map((organization) => (
+        {organizations.data?.map((organization) => (
           <Tooltip key={organization.id}>
             <TooltipTrigger
               render={
@@ -228,7 +255,7 @@ function WorkspaceNavigation({
                   aria-label={organization.name}
                   className={cn(
                     "grid size-9 shrink-0 place-items-center rounded-xl border border-transparent bg-background/40 text-xs font-bold text-muted-foreground transition hover:text-foreground",
-                    activeOrganization?.id === organization.id &&
+                    organization.id === organizationId &&
                       "border-primary/40 bg-primary/10 text-primary",
                   )}
                 />
@@ -277,9 +304,9 @@ function WorkspaceNavigation({
           )}
         >
           <Inbox className="size-3.5" /> Invites
-          {invitationCount > 0 && (
+          {!!invitations.data?.length && (
             <Badge className="ml-auto h-4 min-w-4 px-1 text-[9px]">
-              {invitationCount}
+              {invitations.data.length}
             </Badge>
           )}
         </Link>
@@ -292,15 +319,14 @@ function WorkspaceNavigation({
         title="Search is coming later"
       >
         <Search className="size-4" /> Find anything
-        <kbd className="ml-auto font-mono text-[10px]">Ctrl K</kbd>
       </button>
 
       <ScrollArea className="mt-5 min-h-0 flex-1">
         {activeOrganization ? (
           <div className="flex flex-col gap-6 px-1">
-            {categories.map((category) => {
+            {categories.data?.map((category) => {
               const closed = collapsed.includes(category.id);
-              const categoryChannels = channels.filter(
+              const categoryChannels = channelList.filter(
                 (channel) => channel.categoryId === category.id,
               );
               return (
@@ -308,10 +334,10 @@ function WorkspaceNavigation({
                   <button
                     type="button"
                     onClick={() =>
-                      setCollapsed((value) =>
+                      setCollapsed((current) =>
                         closed
-                          ? value.filter((item) => item !== category.id)
-                          : [...value, category.id],
+                          ? current.filter((id) => id !== category.id)
+                          : [...current, category.id],
                       )
                     }
                     className="mb-2 flex w-full items-center gap-1 text-xs font-semibold text-muted-foreground"
@@ -321,8 +347,8 @@ function WorkspaceNavigation({
                   </button>
                   {!closed && (
                     <div className="grid gap-1">
-                      {categoryChannels.map((channel) => {
-                        const href = `/app/${activeOrganization.id}/channels/${channel.id}`;
+                      {categoryChannels?.map((channel) => {
+                        const href = `/app/${organizationId}/channels/${channel.id}`;
                         return (
                           <Link
                             key={channel.id}
@@ -335,12 +361,12 @@ function WorkspaceNavigation({
                             )}
                           >
                             {channel.visibility === "PRIVATE" ? (
-                              <Lock className="size-3.5" />
+                              <Lock />
                             ) : (
-                              <Hash className="size-3.5" />
+                              <Hash />
                             )}
                             <span className="truncate">{channel.name}</span>
-                            {channel.unreadCount > 0 && (
+                            {!!channel.unreadCount && (
                               <Badge className="ml-auto h-5 min-w-5 px-1 text-[10px]">
                                 {channel.unreadCount}
                               </Badge>
@@ -360,15 +386,13 @@ function WorkspaceNavigation({
                   People
                 </p>
                 <NewDirectMessageDialog
-                  organizationId={activeOrganization.id}
+                  organizationId={organizationId}
                   onNavigate={onNavigate}
                 />
               </div>
               <div className="grid gap-1">
-                {directMessages.map((conversation) => {
-                  const peer = getDirectPeer(state, conversation);
-                  if (!peer) return null;
-                  const href = `/app/${activeOrganization.id}/direct-messages/${conversation.id}`;
+                {dms.map((conversation) => {
+                  const href = `/app/${organizationId}/direct-messages/${conversation.id}`;
                   return (
                     <Link
                       key={conversation.id}
@@ -382,17 +406,12 @@ function WorkspaceNavigation({
                     >
                       <Avatar size="sm">
                         <AvatarFallback>
-                          {initials(peer.displayName)}
+                          {initials(conversation.peer.displayName)}
                         </AvatarFallback>
-                        <AvatarBadge
-                          className={
-                            peer.status === "ONLINE"
-                              ? "bg-status"
-                              : "bg-muted-foreground"
-                          }
-                        />
                       </Avatar>
-                      <span className="truncate">{peer.displayName}</span>
+                      <span className="truncate">
+                        {conversation.peer.displayName}
+                      </span>
                       {conversation.unreadCount > 0 && (
                         <Badge className="ml-auto h-5 min-w-5 px-1 text-[10px]">
                           {conversation.unreadCount}
@@ -413,7 +432,7 @@ function WorkspaceNavigation({
 
       {activeOrganization && (
         <Link
-          href={`/app/${activeOrganization.id}/settings`}
+          href={`/app/${organizationId}/settings`}
           onClick={onNavigate}
           className="mt-2 flex h-9 items-center gap-2 rounded-xl px-3 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
         >
@@ -423,19 +442,26 @@ function WorkspaceNavigation({
       <div className="mt-2 flex items-center gap-2 rounded-2xl border border-sidebar-border bg-background/30 p-2">
         <Avatar>
           <AvatarFallback>
-            {initials(state.currentUser.displayName)}
+            {initials(user?.displayName ?? "InTouch User")}
           </AvatarFallback>
           <AvatarBadge className="bg-status" />
         </Avatar>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold">
-            {state.currentUser.displayName}
-          </p>
+          <p className="truncate text-xs font-semibold">{user?.displayName}</p>
           <p className="truncate text-[11px] text-muted-foreground">
-            Frontend preview
+            @{user?.username}
           </p>
         </div>
         <ComingSoonButton label="Notifications" icon={<Bell />} />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Log out"
+          onClick={() => void logout().then(() => router.replace("/login"))}
+        >
+          <LogOut />
+        </Button>
       </div>
     </aside>
   );
@@ -443,6 +469,23 @@ function WorkspaceNavigation({
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const params = useParams<{ organizationId?: string }>();
+  const { connected, subscribeOrganization, unsubscribeOrganization } =
+    useRealtime();
+  const organizationId = params.organizationId;
+
+  useEffect(() => {
+    if (!connected || !organizationId) return;
+    void subscribeOrganization(organizationId);
+    return () => {
+      void unsubscribeOrganization(organizationId);
+    };
+  }, [
+    connected,
+    organizationId,
+    subscribeOrganization,
+    unsubscribeOrganization,
+  ]);
 
   return (
     <main className="flex h-dvh min-w-0 overflow-hidden bg-background text-foreground md:gap-3 md:p-3">
@@ -475,7 +518,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/app" aria-label="InTouch workspace hub">
             <BrandSignature
               className="gap-2 [&_[data-testid=brand-mark]]:size-8 [&_.brand-wordmark]:text-base"
-              priority
+              preload
             />
           </Link>
           <div className="ml-auto flex items-center gap-1">
@@ -488,5 +531,3 @@ export function AppShell({ children }: { children: ReactNode }) {
     </main>
   );
 }
-
-export { initials };

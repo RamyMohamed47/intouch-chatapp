@@ -35,6 +35,7 @@ const user: PublicUser = {
   updatedAt: new Date("2026-07-28T12:00:00.000Z"),
 };
 let googleLoginError: Error | undefined;
+let loggedOutToken: string | undefined;
 const authService: AuthService = {
   getGoogleAuthorizationUrl: (state) =>
     `https://accounts.google.test/oauth?state=${state}`,
@@ -59,6 +60,9 @@ const authService: AuthService = {
     accessToken: "rotated-access-token",
     refreshToken: "rotated-refresh-token",
   }),
+  logout: async (token) => {
+    loggedOutToken = token;
+  },
   getCurrentUser: async () => user,
 };
 const oauthStates = {
@@ -273,6 +277,49 @@ describe("auth routes", () => {
     assert.deepEqual(body, { accessToken: "rotated-access-token" });
     assert.ok(setCookie);
     assert.match(setCookie, /rotated-refresh-token/);
+  });
+
+  test("logs out idempotently and clears the refresh cookie", async () => {
+    loggedOutToken = undefined;
+    const response = await fetch(`${baseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+      headers: {
+        Cookie: "intouch_refresh=register-refresh-token",
+        Origin: origin,
+        "X-CSRF-Protection": "1",
+      },
+    });
+    const setCookie = response.headers.get("set-cookie");
+
+    assert.equal(response.status, 204);
+    assert.equal(loggedOutToken, "register-refresh-token");
+    assert.ok(setCookie);
+    assert.match(setCookie, /intouch_refresh=;/);
+    assert.match(setCookie, /Expires=Thu, 01 Jan 1970 00:00:00 GMT/i);
+  });
+
+  test("logs out successfully when the refresh cookie is absent", async () => {
+    loggedOutToken = "not-reset";
+    const response = await fetch(`${baseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+      headers: {
+        Origin: origin,
+        "X-CSRF-Protection": "1",
+      },
+    });
+
+    assert.equal(response.status, 204);
+    assert.equal(loggedOutToken, undefined);
+    assert.match(response.headers.get("set-cookie") ?? "", /intouch_refresh=;/);
+  });
+
+  test("requires CSRF protection for logout", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+      headers: { Origin: origin },
+    });
+
+    assert.equal(response.status, 403);
   });
 
   test("returns the current user for a Bearer token", async () => {

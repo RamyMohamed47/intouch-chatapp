@@ -20,6 +20,14 @@ export class ApiError extends Error {
 
 let refreshRequest: Promise<string | null> | null = null;
 
+const withRefreshLock = async <T>(work: () => Promise<T>): Promise<T> => {
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    return navigator.locks.request("intouch-refresh-session", work);
+  }
+
+  return work();
+};
+
 const parseError = async (response: Response) => {
   const fallback = new ApiError(
     response.status,
@@ -44,26 +52,36 @@ const parseError = async (response: Response) => {
 };
 
 export const refreshAccessToken = () => {
-  refreshRequest ??= fetch("/api/v1/auth/refresh", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "X-CSRF-Protection": "1" },
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        setAccessToken(null);
-        return null;
-      }
-
-      const body = refreshResponseSchema.parse(await response.json());
-      setAccessToken(body.accessToken);
-      return body.accessToken;
-    })
-    .finally(() => {
-      refreshRequest = null;
+  refreshRequest ??= withRefreshLock(async () => {
+    const response = await fetch("/api/v1/auth/refresh", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-CSRF-Protection": "1" },
     });
 
+    if (!response.ok) {
+      setAccessToken(null);
+      return null;
+    }
+
+    const body = refreshResponseSchema.parse(await response.json());
+    setAccessToken(body.accessToken);
+    return body.accessToken;
+  }).finally(() => {
+    refreshRequest = null;
+  });
+
   return refreshRequest;
+};
+
+export const noContentSchema = {
+  parse(input: unknown) {
+    if (input !== undefined) {
+      throw new TypeError("Expected an empty response");
+    }
+
+    return undefined;
+  },
 };
 
 export const apiRequest = async <T>(

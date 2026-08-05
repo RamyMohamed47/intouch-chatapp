@@ -2,22 +2,41 @@
 
 import { ArrowRight, Check, Clock3, Inbox, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/workspace/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useDemoWorkspace } from "@/lib/demo/provider";
-import { formatShortDate } from "@/lib/demo/format";
+import { membershipsApi } from "@/lib/api/memberships";
+import { useInvitations } from "@/lib/query/hooks";
+import { queryKeys } from "@/lib/query/keys";
 import { initials } from "@/components/workspace/app-shell";
 
 export function InvitationsPage() {
-  const { state, acceptInvitation, declineInvitation } = useDemoWorkspace();
+  const queryClient = useQueryClient();
+  const invitationsQuery = useInvitations();
   const [notice, setNotice] = useState<string | null>(null);
-  const invitations = state.invitations.filter(
-    (item) => item.invitedUserId === state.currentUser.id,
-  );
+  const invitations = invitationsQuery.data ?? [];
+  const acceptInvitation = useMutation({
+    mutationFn: (invitationId: string) =>
+      membershipsApi.acceptInvitation(invitationId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.invitations.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.organizations.all,
+        }),
+      ]);
+    },
+  });
+  const declineInvitation = useMutation({
+    mutationFn: (invitationId: string) =>
+      membershipsApi.declineInvitation(invitationId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.invitations.all }),
+  });
 
   return (
     <>
@@ -36,7 +55,19 @@ export function InvitationsPage() {
               {notice}
             </div>
           )}
-          {invitations.length === 0 ? (
+          {invitationsQuery.isPending ? (
+            <p className="rounded-2xl border border-border p-6 text-sm text-muted-foreground">
+              Loading invitations...
+            </p>
+          ) : invitationsQuery.isError ? (
+            <button
+              type="button"
+              onClick={() => void invitationsQuery.refetch()}
+              className="w-full rounded-2xl border border-destructive/30 p-6 text-left text-sm text-destructive"
+            >
+              Invitations could not be loaded. Select to retry.
+            </button>
+          ) : invitations.length === 0 ? (
             <section className="grid min-h-[55vh] place-items-center rounded-[2rem] border border-dashed border-border bg-background/20 p-8 text-center">
               <div className="max-w-md">
                 <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
@@ -58,13 +89,7 @@ export function InvitationsPage() {
             <div className="grid gap-5 lg:grid-cols-[1fr_0.48fr]">
               <section className="grid gap-4">
                 {invitations.map((invitation) => {
-                  const organization = state.organizations.find(
-                    (item) => item.id === invitation.organizationId,
-                  );
-                  const inviter = state.memberships
-                    .map((item) => item.user)
-                    .find((user) => user.id === invitation.invitedByUserId);
-                  if (!organization) return null;
+                  const organization = invitation.organization;
                   return (
                     <article
                       key={invitation.id}
@@ -85,13 +110,15 @@ export function InvitationsPage() {
                             </Badge>
                           </div>
                           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            {inviter?.displayName ?? "An organization owner"}{" "}
-                            invited you to collaborate as a member.
+                            An organization owner invited you to collaborate as
+                            a member.
                           </p>
                           <div className="mt-4 flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                             <span className="flex items-center gap-1.5">
                               <Clock3 className="size-3.5" /> Expires{" "}
-                              {formatShortDate(invitation.expiresAt)}
+                              {new Intl.DateTimeFormat(undefined, {
+                                dateStyle: "medium",
+                              }).format(new Date(invitation.expiresAt))}
                             </span>
                             <span className="flex items-center gap-1.5">
                               <ShieldCheck className="size-3.5" /> Member access
@@ -101,14 +128,19 @@ export function InvitationsPage() {
                             <Button
                               type="button"
                               className="rounded-full"
-                              onClick={() => {
-                                const result = acceptInvitation(invitation.id);
-                                setNotice(
-                                  result.success
-                                    ? `${organization.name} was added to your workspaces.`
-                                    : (result.error ?? null),
-                                );
-                              }}
+                              disabled={
+                                acceptInvitation.isPending ||
+                                declineInvitation.isPending
+                              }
+                              onClick={() =>
+                                acceptInvitation.mutate(invitation.id, {
+                                  onSuccess: () =>
+                                    setNotice(
+                                      `${organization.name} was added to your workspaces.`,
+                                    ),
+                                  onError: (error) => setNotice(error.message),
+                                })
+                              }
                             >
                               <Check /> Accept invitation
                             </Button>
@@ -116,12 +148,19 @@ export function InvitationsPage() {
                               type="button"
                               variant="ghost"
                               className="rounded-full"
-                              onClick={() => {
-                                declineInvitation(invitation.id);
-                                setNotice(
-                                  `Invitation to ${organization.name} declined.`,
-                                );
-                              }}
+                              disabled={
+                                acceptInvitation.isPending ||
+                                declineInvitation.isPending
+                              }
+                              onClick={() =>
+                                declineInvitation.mutate(invitation.id, {
+                                  onSuccess: () =>
+                                    setNotice(
+                                      `Invitation to ${organization.name} declined.`,
+                                    ),
+                                  onError: (error) => setNotice(error.message),
+                                })
+                              }
                             >
                               <X /> Decline
                             </Button>

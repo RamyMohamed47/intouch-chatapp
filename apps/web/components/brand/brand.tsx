@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 type BrandProps = {
   className?: string;
-  priority?: boolean;
+  preload?: boolean;
 };
 
 type BrandMarkProps = BrandProps & {
@@ -14,7 +14,7 @@ type BrandMarkProps = BrandProps & {
 export function BrandMark({
   className,
   decorative = true,
-  priority = false,
+  preload = false,
 }: BrandMarkProps) {
   return (
     <span
@@ -29,7 +29,7 @@ export function BrandMark({
         src="/brand/intouch-mark.png"
         alt=""
         fill
-        priority={priority}
+        preload={preload}
         sizes="96px"
         className="object-contain p-[5%]"
       />
@@ -37,14 +37,14 @@ export function BrandMark({
   );
 }
 
-export function BrandSignature({ className, priority = false }: BrandProps) {
+export function BrandSignature({ className, preload = false }: BrandProps) {
   return (
     <span
       className={cn("inline-flex min-w-0 items-center gap-2.5", className)}
       aria-label="InTouch"
       data-testid="brand-signature"
     >
-      <BrandMark className="size-10" priority={priority} />
+      <BrandMark className="size-10" preload={preload} />
       <span className="brand-wordmark text-lg font-semibold tracking-[-0.04em]">
         <span className="brand-wordmark-warm">In</span>
         <span className="brand-wordmark-cool">Touch</span>
@@ -53,7 +53,7 @@ export function BrandSignature({ className, priority = false }: BrandProps) {
   );
 }
 
-export function BrandLockup({ className, priority = false }: BrandProps) {
+export function BrandLockup({ className, preload = false }: BrandProps) {
   return (
     <span
       className={cn("brand-lockup relative block", className)}
@@ -65,7 +65,7 @@ export function BrandLockup({ className, priority = false }: BrandProps) {
         src="/brand/intouch-lockup-dark.webp"
         alt=""
         fill
-        priority={priority}
+        preload={preload}
         sizes="(min-width: 1024px) 440px, 300px"
         className="brand-lockup-dark object-contain"
       />
@@ -73,7 +73,7 @@ export function BrandLockup({ className, priority = false }: BrandProps) {
         src="/brand/intouch-lockup-light.webp"
         alt=""
         fill
-        priority={priority}
+        preload={preload}
         sizes="(min-width: 1024px) 440px, 300px"
         className="brand-lockup-light object-contain"
       />

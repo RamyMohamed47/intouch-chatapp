@@ -129,6 +129,25 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke the current refresh session
+      description: |
+        Idempotently revokes the refresh session identified by the refresh
+        cookie and clears that cookie. No request body is accepted.
+      security:
+        - refreshCookie: []
+      parameters:
+        - $ref: "#/components/parameters/RefreshCsrfHeader"
+      responses:
+        "204":
+          description: Session revoked or already absent; refresh cookie cleared
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
   /auth/me:
     get:
       tags: [Authentication]

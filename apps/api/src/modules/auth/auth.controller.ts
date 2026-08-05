@@ -27,6 +27,7 @@ export interface AuthController {
   googleStart: RequestHandler;
   register: RequestHandler;
   login: RequestHandler;
+  logout: RequestHandler;
   refresh: RequestHandler;
   me: RequestHandler;
 }
@@ -195,6 +196,14 @@ const createAuthController = (
       clearRefreshCookie(res, cookie);
       throw error;
     }
+  }),
+
+  logout: catchAsync(async (req, res) => {
+    const refreshToken = getCookie(req.cookies as unknown, cookie.name);
+
+    await authService.logout(refreshToken);
+    clearRefreshCookie(res, cookie);
+    res.status(204).send();
   }),
 
   me: catchAsync(async (_req, res) => {

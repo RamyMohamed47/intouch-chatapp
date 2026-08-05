@@ -7,56 +7,79 @@ import {
   Inbox,
   MessageCircle,
   Plus,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
+import { useQueries } from "@tanstack/react-query";
 
 import { BrandLockup } from "@/components/brand/brand";
 import { PageHeader } from "@/components/workspace/page-header";
+import { initials } from "@/components/workspace/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useDemoWorkspace } from "@/lib/demo/provider";
-import {
-  getDirectPeer,
-  getLastMessage,
-  getOrganizationChannels,
-  getOrganizationDirectMessages,
-  getOrganizationMembers,
-} from "@/lib/demo/selectors";
-import { formatTime } from "@/lib/demo/format";
-import { initials } from "@/components/workspace/app-shell";
+import { conversationsApi } from "@/lib/api/conversations";
+import { useAuth } from "@/lib/auth/provider";
+import { useInvitations, useOrganizations } from "@/lib/query/hooks";
+import { queryKeys } from "@/lib/query/keys";
+
+const formatTime = (value: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 
 export function AppHub() {
-  const { state } = useDemoWorkspace();
-  const organizations = state.organizations.filter(
-    (item) => item.currentUserRole !== null,
-  );
-  const invitations = state.invitations.filter(
-    (item) => item.invitedUserId === state.currentUser.id,
-  );
-  const recentConversations = state.conversations
-    .filter((conversation) =>
-      organizations.some(
-        (organization) => organization.id === conversation.organizationId,
+  const { user } = useAuth();
+  const organizations = useOrganizations();
+  const invitations = useInvitations();
+  const organizationList = organizations.data ?? [];
+  const channelQueries = useQueries({
+    queries: organizationList.map((organization) => ({
+      queryKey: queryKeys.conversations.channels(organization.id),
+      queryFn: () => conversationsApi.listChannels(organization.id),
+    })),
+  });
+  const directMessageQueries = useQueries({
+    queries: organizationList.map((organization) => ({
+      queryKey: queryKeys.conversations.directMessagePreview(organization.id),
+      queryFn: () =>
+        conversationsApi.listDirectMessages(organization.id, { limit: 30 }),
+    })),
+  });
+
+  const cards = organizationList.map((organization, index) => {
+    const channels = channelQueries[index]?.data ?? [];
+    const directMessages =
+      directMessageQueries[index]?.data?.directMessages ?? [];
+    const conversations = [...channels, ...directMessages];
+    return {
+      organization,
+      channels,
+      directMessages,
+      unread: conversations.reduce(
+        (total, conversation) => total + (conversation.unreadCount ?? 0),
+        0,
+      ),
+    };
+  });
+  const recent = cards
+    .flatMap(({ organization, channels, directMessages }) =>
+      [...channels, ...directMessages]
+        .filter((conversation) => conversation.lastMessage)
+        .map((conversation) => ({ organization, conversation })),
+    )
+    .sort((left, right) =>
+      right.conversation.lastMessage!.createdAt.localeCompare(
+        left.conversation.lastMessage!.createdAt,
       ),
     )
-    .map((conversation) => ({
-      conversation,
-      message: getLastMessage(state, conversation),
-      organization: organizations.find(
-        (item) => item.id === conversation.organizationId,
-      ),
-    }))
-    .filter((item) => item.message)
-    .sort((a, b) => b.message!.createdAt.localeCompare(a.message!.createdAt))
-    .slice(0, 4);
+    .slice(0, 5);
 
   return (
     <>
       <PageHeader
         eyebrow="Workspace hub"
-        title={`Good afternoon, ${state.currentUser.displayName.split(" ")[0]}.`}
+        title={`Welcome back, ${user?.displayName.split(" ")[0] ?? "there"}.`}
         description="Choose where to focus or pick up a recent conversation."
         actions={
           <LinkButton className="rounded-full" href="/app/new-organization">
@@ -71,99 +94,83 @@ export function AppHub() {
             <div className="absolute -right-10 -bottom-20 size-48 rounded-full bg-brand-orange/10 blur-3xl" />
             <BrandLockup className="relative mx-auto h-36 w-full max-w-sm" />
           </section>
-          <section>
-            <div className="mb-4 flex items-end justify-between gap-4">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
-                  Your organizations
-                </p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-                  Pick a place to move work forward.
-                </h2>
+
+          {organizations.isPending ? (
+            <p className="rounded-2xl border border-border p-6 text-sm text-muted-foreground">
+              Loading your organizations...
+            </p>
+          ) : organizations.isError ? (
+            <button
+              type="button"
+              onClick={() => void organizations.refetch()}
+              className="w-full rounded-2xl border border-destructive/30 p-6 text-left text-sm text-destructive"
+            >
+              Organizations could not be loaded. Select to retry.
+            </button>
+          ) : (
+            <section>
+              <div className="mb-4 flex items-end justify-between gap-4">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
+                    Your organizations
+                  </p>
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+                    Pick a place to move work forward.
+                  </h2>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {cards.length} active
+                </span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {organizations.length} active
-              </span>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {organizations.map((organization, index) => {
-                const channels = getOrganizationChannels(
-                  state,
-                  organization.id,
-                );
-                const dms = getOrganizationDirectMessages(
-                  state,
-                  organization.id,
-                );
-                const members = getOrganizationMembers(state, organization.id);
-                const unread = [...channels, ...dms].reduce(
-                  (total, item) => total + item.unreadCount,
-                  0,
-                );
-                return (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {cards.map(
+                  ({ organization, channels, directMessages, unread }) => (
+                    <Link
+                      key={organization.id}
+                      href={`/app/${organization.id}`}
+                      className="group relative overflow-hidden rounded-[1.75rem] border border-border bg-background/35 p-5 shadow-lg transition hover:-translate-y-0.5 hover:border-primary/35"
+                    >
+                      <div className="relative flex items-start gap-3">
+                        <span className="grid size-12 place-items-center rounded-2xl border border-border bg-card text-sm font-bold">
+                          {initials(organization.name)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <strong className="truncate">
+                              {organization.name}
+                            </strong>
+                            <Badge
+                              variant="outline"
+                              className="rounded-full text-[9px]"
+                            >
+                              {organization.currentUserRole}
+                            </Badge>
+                          </span>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            {organization.visibility.toLowerCase()} workspace
+                          </span>
+                        </span>
+                        <ArrowRight className="size-4 text-muted-foreground transition group-hover:translate-x-1" />
+                      </div>
+                      <div className="relative mt-8 grid grid-cols-3 gap-2">
+                        <Metric value={channels.length} label="Channels" />
+                        <Metric value={directMessages.length} label="DMs" />
+                        <Metric value={unread} label="Unread" accent />
+                      </div>
+                    </Link>
+                  ),
+                )}
+                {cards.length === 0 && (
                   <Link
-                    key={organization.id}
-                    href={`/app/${organization.id}`}
-                    className="group relative overflow-hidden rounded-[1.75rem] border border-border bg-background/35 p-5 shadow-lg transition hover:-translate-y-0.5 hover:border-primary/35 hover:bg-background/50"
+                    href="/app/new-organization"
+                    className="grid min-h-48 place-items-center rounded-[1.75rem] border border-dashed border-border p-6 text-center text-sm text-muted-foreground"
                   >
-                    <div
-                      className={`absolute -top-20 -right-20 size-52 rounded-full blur-3xl ${
-                        index % 2 === 0 ? "bg-primary/10" : "bg-status/10"
-                      }`}
-                    />
-                    <div className="relative flex items-start gap-3">
-                      <span className="grid size-12 place-items-center rounded-2xl border border-border bg-card text-sm font-bold">
-                        {initials(organization.name)}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <strong className="truncate text-base">
-                            {organization.name}
-                          </strong>
-                          <Badge
-                            variant="outline"
-                            className="rounded-full text-[9px]"
-                          >
-                            {organization.currentUserRole}
-                          </Badge>
-                        </span>
-                        <span className="mt-1 block text-xs text-muted-foreground">
-                          {organization.visibility.toLowerCase()} workspace
-                        </span>
-                      </span>
-                      <ArrowRight className="size-4 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-primary" />
-                    </div>
-                    <div className="relative mt-8 grid grid-cols-3 gap-2">
-                      <div>
-                        <p className="text-lg font-semibold">
-                          {channels.length}
-                        </p>
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Channels
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-lg font-semibold">
-                          {members.length}
-                        </p>
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          People
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-lg font-semibold text-primary">
-                          {unread}
-                        </p>
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Unread
-                        </p>
-                      </div>
-                    </div>
+                    Create your first organization
                   </Link>
-                );
-              })}
-            </div>
-          </section>
+                )}
+              </div>
+            </section>
+          )}
 
           <div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
             <section className="rounded-[1.75rem] border border-border bg-background/30 p-5 md:p-6">
@@ -179,64 +186,53 @@ export function AppHub() {
                 <MessageCircle className="size-5 text-muted-foreground" />
               </div>
               <div className="mt-5 grid gap-2">
-                {recentConversations.map(
-                  ({ conversation, message, organization }) => {
-                    if (!message || !organization) return null;
-                    const peer = getDirectPeer(state, conversation);
-                    const label =
-                      conversation.type === "CHANNEL"
-                        ? conversation.name
-                        : peer?.displayName;
-                    const href =
-                      conversation.type === "CHANNEL"
-                        ? `/app/${organization.id}/channels/${conversation.id}`
-                        : `/app/${organization.id}/direct-messages/${conversation.id}`;
-                    return (
-                      <Link
-                        key={conversation.id}
-                        href={href}
-                        className="flex items-center gap-3 rounded-2xl border border-transparent p-3 hover:border-border hover:bg-card/60"
-                      >
-                        <span className="grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
-                          {conversation.type === "CHANNEL" ? (
-                            <Hash />
-                          ) : (
-                            <MessageCircle />
-                          )}
+                {recent.map(({ organization, conversation }) => {
+                  const message = conversation.lastMessage!;
+                  const isChannel = conversation.type === "CHANNEL";
+                  const href = isChannel
+                    ? `/app/${organization.id}/channels/${conversation.id}`
+                    : `/app/${organization.id}/direct-messages/${conversation.id}`;
+                  return (
+                    <Link
+                      key={conversation.id}
+                      href={href}
+                      className="flex items-center gap-3 rounded-2xl p-3 hover:bg-card/60"
+                    >
+                      <span className="grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
+                        {isChannel ? <Hash /> : <MessageCircle />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {isChannel
+                            ? conversation.name
+                            : conversation.peer.displayName}
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-2 text-sm font-medium">
-                            <span className="truncate">{label}</span>
-                            <span className="truncate text-xs font-normal text-muted-foreground">
-                              {organization.name}
-                            </span>
-                          </span>
-                          <span className="mt-1 block truncate text-xs text-muted-foreground">
-                            {message.deletedAt
-                              ? "Message deleted"
-                              : message.content}
-                          </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {message.deletedAt
+                            ? "Message deleted"
+                            : message.content}
                         </span>
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          {formatTime(message.createdAt)}
-                        </span>
-                      </Link>
-                    );
-                  },
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {formatTime(message.createdAt)}
+                      </span>
+                    </Link>
+                  );
+                })}
+                {recent.length === 0 && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Recent conversations will appear after the first message.
+                  </p>
                 )}
               </div>
             </section>
 
             <section className="relative overflow-hidden rounded-[1.75rem] border border-primary/20 bg-primary/10 p-6">
-              <div className="absolute -right-10 -bottom-12 size-40 rounded-full border-[2.5rem] border-primary/10" />
               <Inbox className="size-5 text-primary" />
-              <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
-                Invitations
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-                {invitations.length === 0
-                  ? "Your inbox is clear."
-                  : `${invitations.length} workspace is waiting.`}
+              <h2 className="mt-6 text-2xl font-semibold tracking-tight">
+                {invitations.data?.length
+                  ? `${invitations.data.length} invitation${invitations.data.length === 1 ? "" : "s"} waiting.`
+                  : "Your invitation inbox is clear."}
               </h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
                 Review invitations before they expire and join when the context
@@ -252,44 +248,48 @@ export function AppHub() {
             </section>
           </div>
 
-          <section className="grid gap-3 sm:grid-cols-3">
-            {[
-              [Building2, "Organizations", organizations.length],
-              [
-                Users,
-                "People in reach",
-                new Set(state.memberships.map((item) => item.user.id)).size,
-              ],
-              [
-                MessageCircle,
-                "Direct threads",
-                state.conversations.filter((item) => item.type === "DIRECT")
-                  .length,
-              ],
-            ].map(([Icon, label, value]) => {
-              const CardIcon = Icon as typeof Building2;
-              return (
-                <div
-                  key={label as string}
-                  className="flex items-center gap-3 rounded-2xl border border-border bg-card/35 p-4"
-                >
-                  <span className="grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
-                    <CardIcon />
-                  </span>
-                  <span>
-                    <span className="block text-lg font-semibold">
-                      {value as number}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {label as string}
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
+          <section className="flex items-center gap-3 rounded-2xl border border-border bg-card/35 p-4">
+            <span className="grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
+              <Building2 />
+            </span>
+            <span>
+              <span className="block text-lg font-semibold">
+                {cards.length}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Organizations in reach
+              </span>
+            </span>
           </section>
         </div>
       </ScrollArea>
     </>
+  );
+}
+
+function Metric({
+  value,
+  label,
+  accent = false,
+}: {
+  value: number;
+  label: string;
+  accent?: boolean;
+}) {
+  return (
+    <div>
+      <p
+        className={
+          accent
+            ? "text-lg font-semibold text-primary"
+            : "text-lg font-semibold"
+        }
+      >
+        {value}
+      </p>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+    </div>
   );
 }
