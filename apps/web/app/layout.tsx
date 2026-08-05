@@ -11,10 +11,36 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "InTouch - Team communication",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001",
+  ),
+  title: {
+    default: "InTouch - Team communication",
+    template: "%s | InTouch",
+  },
   description:
     "A focused workspace for teams to talk, decide, and move work forward.",
-  generator: "v0.app",
+  applicationName: "InTouch",
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "32x32" }],
+    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
+  },
+  manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    siteName: "InTouch",
+    title: "InTouch - Team communication",
+    description:
+      "Conversations, decisions, and people together in one focused workspace.",
+    images: [{ url: "/brand/intouch-og.png", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "InTouch - Team communication",
+    description:
+      "Conversations, decisions, and people together in one focused workspace.",
+    images: ["/brand/intouch-og.png"],
+  },
 };
 
 export const viewport: Viewport = {

@@ -39,10 +39,24 @@ Health check:
 GET /health
 ```
 
-Run the full verification suite:
+Run formatting, linting, strict TypeScript, shared/API tests, and production
+builds without launching browser tests:
 
 ```bash
 npm run check
+```
+
+Run Playwright separately only when frontend end-to-end verification is
+needed:
+
+```bash
+npm run test:web:e2e
+```
+
+To run both workflows explicitly:
+
+```bash
+npm run check:all
 ```
 
 ## Runtime

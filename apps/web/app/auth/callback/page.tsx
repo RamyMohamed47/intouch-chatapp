@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { googleAuthRedirectQuerySchema } from "@intouch/shared/auth";
 
+import { BrandLockup } from "@/components/brand/brand";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LinkButton } from "@/components/ui/link-button";
 
@@ -25,6 +26,7 @@ function CallbackState() {
       </div>
       <div className="absolute top-1/4 left-1/4 size-72 rounded-full bg-primary/10 blur-3xl" />
       <section className="relative w-full max-w-md rounded-[2rem] border border-border bg-card/80 p-8 text-center shadow-2xl backdrop-blur-xl">
+        <BrandLockup className="mx-auto mb-6 h-36 w-full max-w-xs" priority />
         <span
           className={`mx-auto grid size-16 place-items-center rounded-2xl ${
             isFailure

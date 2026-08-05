@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
+import { BrandLockup, BrandSignature } from "@/components/brand/brand";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,19 +38,16 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       <section className="relative hidden min-h-[calc(100dvh-2.5rem)] overflow-hidden rounded-[2.2rem] border border-border bg-card/60 p-10 shadow-2xl backdrop-blur-xl lg:flex lg:flex-col">
         <div className="absolute -top-20 -left-24 size-80 rounded-full bg-primary/15 blur-3xl" />
         <div className="absolute right-[-8rem] bottom-[-8rem] size-[28rem] rounded-full border-[5rem] border-primary/10" />
-        <Link href="/login" className="relative flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-2xl bg-primary font-mono text-sm font-black text-primary-foreground">
-            IN
-          </span>
-          <span>
-            <span className="block text-sm font-semibold">InTouch</span>
-            <span className="block font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              Work in context
-            </span>
-          </span>
+        <Link
+          href="/login"
+          className="relative w-fit"
+          aria-label="InTouch home"
+        >
+          <BrandSignature priority />
         </Link>
 
         <div className="relative my-auto max-w-xl py-16">
+          <BrandLockup className="mb-7 h-52 w-full max-w-sm" priority />
           <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
             <Sparkles className="size-3.5" /> Focused collaboration
           </div>
@@ -88,12 +86,10 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
         <div className="w-full max-w-md">
           <Link
             href="/login"
-            className="mb-10 flex items-center gap-3 lg:hidden"
+            className="mb-10 inline-flex lg:hidden"
+            aria-label="InTouch home"
           >
-            <span className="grid size-10 place-items-center rounded-xl bg-primary font-mono text-xs font-black text-primary-foreground">
-              IN
-            </span>
-            <span className="font-semibold">InTouch</span>
+            <BrandSignature priority />
           </Link>
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">
             {isRegister ? "Create your account" : "Welcome back"}

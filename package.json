@@ -36,14 +36,15 @@
     "start:api": "npm run start --workspace @intouch/api",
     "start:web": "npm run start --workspace @intouch/web",
     "typecheck": "npm run typecheck --workspace @intouch/shared && npm run build:shared && npm run typecheck --workspace @intouch/api && npm run typecheck --workspace @intouch/web",
-    "test": "npm run build:shared && npm test --workspace @intouch/shared && npm test --workspace @intouch/api && npm run test:e2e --workspace @intouch/web",
+    "test": "npm run build:shared && npm test --workspace @intouch/shared && npm test --workspace @intouch/api",
     "test:web:e2e": "npm run build:shared && npm run test:e2e --workspace @intouch/web",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "migrate:remove-user-status": "npm run migrate:remove-user-status --workspace @intouch/api",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build"
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
+    "check:all": "npm run check && npm run test:web:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

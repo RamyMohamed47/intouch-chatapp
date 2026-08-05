@@ -16,12 +16,23 @@ test.beforeEach(async ({ page }) => {
 
 test("root redirects to the visual login and auth routes remain frontend-only", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login$/);
   await expect(
     page.getByRole("heading", { name: "Pick up where the work is." }),
   ).toBeVisible();
+  if (testInfo.project.name.includes("mobile")) {
+    await expect(
+      page.locator('[data-testid="brand-signature"]:visible'),
+    ).toBeVisible();
+  } else {
+    await expect(page.getByTestId("brand-lockup")).toBeVisible();
+  }
+  const brandHome = page.locator('a[aria-label="InTouch home"]:visible');
+  await expect(brandHome).toBeVisible();
+  await brandHome.focus();
+  await expect(brandHome).toBeFocused();
 
   await page.getByRole("link", { name: "Create an account" }).click();
   await expect(page).toHaveURL(/\/register$/);
@@ -33,8 +44,73 @@ test("root redirects to the visual login and auth routes remain frontend-only", 
   await expect(
     page.getByRole("heading", { name: "Your workspace is ready." }),
   ).toBeVisible();
+  await expect(page.getByTestId("brand-lockup")).toBeVisible();
   await page.getByRole("link", { name: /Continue to workspace/ }).click();
   await expect(page).toHaveURL(/\/app$/);
+});
+
+test("brand metadata and install assets are available", async ({ request }) => {
+  const assets = [
+    "/icon.png",
+    "/apple-icon.png",
+    "/manifest.webmanifest",
+    "/brand/intouch-icon-192.png",
+    "/brand/intouch-icon-512.png",
+    "/brand/intouch-og.png",
+  ];
+
+  for (const asset of assets) {
+    const response = await request.get(asset);
+    expect(response.ok(), `${asset} should resolve`).toBe(true);
+  }
+});
+
+test("brand lockups adapt across all four themes", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name.includes("mobile"),
+    "One desktop visual pass covers theme variants",
+  );
+
+  await page.goto("/login");
+  for (const theme of ["ink", "cloud", "aurora", "ember"]) {
+    await page.evaluate((selectedTheme) => {
+      localStorage.setItem("intouch-theme", selectedTheme);
+    }, theme);
+    await page.reload();
+
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expect(page.getByTestId("brand-lockup")).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath(`brand-login-${theme}.png`),
+      fullPage: true,
+    });
+  }
+});
+
+test("workspace branding remains visible in responsive navigation", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/app");
+  await expect(
+    page.locator('[data-testid="brand-mark"]:visible').first(),
+  ).toBeVisible();
+  await expect(page.getByTestId("brand-lockup")).toBeVisible();
+
+  if (testInfo.project.name.includes("mobile")) {
+    await expect(
+      page.locator('a[aria-label="InTouch workspace hub"]:visible'),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Open workspace navigation" })
+      .click();
+    await expect(
+      page
+        .getByRole("dialog", { name: "Workspace navigation" })
+        .locator('[data-testid="brand-mark"]'),
+    ).toBeVisible();
+  }
 });
 
 test("callback renders processing and failure states", async ({ page }) => {
@@ -191,6 +267,7 @@ test("new direct message picker navigates to a private thread", async ({
   await page.getByRole("button", { name: /Lina Okafor/ }).click();
   await expect(page).toHaveURL(
     new RegExp(`/app/${ids.northstar}/direct-messages/[a-f0-9]{24}$`),
+    { timeout: 20_000 },
   );
   await expect(
     page.getByRole("heading", { name: "Lina Okafor", exact: true }),

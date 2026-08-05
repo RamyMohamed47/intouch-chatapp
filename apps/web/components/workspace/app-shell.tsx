@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
+import { BrandMark, BrandSignature } from "@/components/brand/brand";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Avatar, AvatarBadge, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -200,13 +201,15 @@ function WorkspaceNavigation({
       <Link
         href="/app"
         onClick={onNavigate}
+        aria-label="InTouch workspace hub"
         className="flex items-center gap-3 rounded-2xl border border-sidebar-border bg-sidebar-accent/65 p-3"
       >
-        <span className="grid size-10 place-items-center rounded-xl bg-primary font-mono text-sm font-black text-primary-foreground">
-          IN
-        </span>
+        <BrandMark className="size-10" priority />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">InTouch</span>
+          <span className="brand-wordmark block text-sm font-semibold">
+            <span className="brand-wordmark-warm">In</span>
+            <span className="brand-wordmark-cool">Touch</span>
+          </span>
           <span className="block truncate text-xs text-muted-foreground">
             {activeOrganization?.name ?? "Workspace hub"}
           </span>
@@ -469,11 +472,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               />
             </SheetContent>
           </Sheet>
-          <Link href="/app" className="flex items-center gap-2 font-semibold">
-            <span className="grid size-8 place-items-center rounded-lg bg-primary font-mono text-xs font-black text-primary-foreground">
-              IN
-            </span>
-            InTouch
+          <Link href="/app" aria-label="InTouch workspace hub">
+            <BrandSignature
+              className="gap-2 [&_[data-testid=brand-mark]]:size-8 [&_.brand-wordmark]:text-base"
+              priority
+            />
           </Link>
           <div className="ml-auto flex items-center gap-1">
             <ThemeSwitcher />

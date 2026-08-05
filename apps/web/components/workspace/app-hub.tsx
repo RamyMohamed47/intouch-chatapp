@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { BrandLockup } from "@/components/brand/brand";
 import { PageHeader } from "@/components/workspace/page-header";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
@@ -65,6 +66,11 @@ export function AppHub() {
       />
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto max-w-6xl space-y-10 p-5 md:p-8 lg:p-10">
+          <section className="relative overflow-hidden rounded-[1.75rem] border border-brand-blue/20 bg-background/30 px-6 py-5 sm:px-8">
+            <div className="absolute -top-16 -left-12 size-44 rounded-full bg-brand-blue/12 blur-3xl" />
+            <div className="absolute -right-10 -bottom-20 size-48 rounded-full bg-brand-orange/10 blur-3xl" />
+            <BrandLockup className="relative mx-auto h-36 w-full max-w-sm" />
+          </section>
           <section>
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
