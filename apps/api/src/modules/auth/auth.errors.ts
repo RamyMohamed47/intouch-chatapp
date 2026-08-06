@@ -1,5 +1,6 @@
 import ConflictError from "../../errors/ConflictError.js";
 import ServiceUnavailableError from "../../errors/ServiceUnavailableError.js";
+import TooManyRequestsError from "../../errors/TooManyRequestsError.js";
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
 
 export class DuplicateIdentityError extends ConflictError {
@@ -11,6 +12,12 @@ export class DuplicateIdentityError extends ConflictError {
 export class InvalidCredentialsError extends UnauthorizedError {
   constructor() {
     super("Invalid email or password");
+  }
+}
+
+export class LoginAttemptsExceededError extends TooManyRequestsError {
+  constructor() {
+    super("Too many login attempts. Try again later.");
   }
 }
 

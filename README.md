@@ -67,6 +67,7 @@ load the same local file. Start from `apps/api/config.env.example`; required
 values are:
 
 - `ACCESS_TOKEN_SECRET`, at least 32 bytes
+- `LOGIN_THROTTLE_SECRET`, an independent secret of at least 32 bytes
 - `CLIENT_ORIGINS`, comma-separated exact frontend origins
 - `DATABASE`
 - `DB_PASSWORD`
@@ -99,17 +100,28 @@ Optional:
 - `ACCESS_TOKEN_ISSUER`, defaults to `intouch-api`
 - `PORT`, defaults to `3000`
 - `LOG_LEVEL`, defaults to `info` outside tests
+- `LOGIN_ATTEMPT_LIMIT`, defaults to `10`
+- `LOGIN_ATTEMPT_WINDOW_MS`, defaults to `900000` (15 minutes)
+- `LOGIN_ATTEMPT_COOLDOWN_MS`, defaults to `900000` (15 minutes)
 
 Example development auth configuration:
 
 ```dotenv
 ACCESS_TOKEN_SECRET=replace-with-at-least-32-random-bytes
+LOGIN_THROTTLE_SECRET=replace-with-an-independent-32-byte-secret
 CLIENT_ORIGINS=http://localhost:3001
 GOOGLE_OAUTH_CLIENT_ID=replace-with-google-web-client-id
 GOOGLE_OAUTH_CLIENT_SECRET=replace-with-google-web-client-secret
 GOOGLE_OAUTH_CALLBACK_URL=http://localhost:3001/api/v1/auth/oauth/google/callback
 GOOGLE_OAUTH_FRONTEND_REDIRECT_URL=http://localhost:3001/auth/callback
 ```
+
+Password login uses independent per-IP and MongoDB-backed per-account limits.
+Account attempts are keyed by an HMAC of the normalized email, the first ten
+attempts within fifteen minutes are admitted, and further attempts receive a
+generic `429` response during a non-extending fifteen-minute cooldown.
+Successful password or verified Google authentication clears the account
+attempt state.
 
 ## Google OAuth
 
@@ -211,6 +223,18 @@ Socket.IO connects directly to `NEXT_PUBLIC_SOCKET_ORIGIN`. REST and Google
 OAuth continue through the frontend `/api` proxy. The current presence and
 typing stores are process-local, so realtime deployment remains single-instance
 until Redis-backed stores and the Socket.IO Redis adapter are introduced.
+
+Authenticated messaging writes and realtime resource-acquiring events are
+protected by per-user token buckets. Active sockets are capped at five per
+user, and cleanup events remain unthrottled. These counters are process-local
+in the current single-instance deployment; horizontal scaling requires
+Redis-backed rate-limit and connection stores.
+
+The Next.js frontend emits a per-request nonce Content Security Policy for page
+documents. Production scripts require the nonce, Socket.IO connections are
+restricted to `NEXT_PUBLIC_SOCKET_ORIGIN`, framing and object embedding are
+disabled, and the theme bootstrap receives the request nonce. Inline styles
+remain permitted for runtime component positioning.
 
 Development logs are formatted for readability. Production logs are structured
 JSON written to stdout.

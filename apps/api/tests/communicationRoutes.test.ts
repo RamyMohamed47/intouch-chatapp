@@ -121,6 +121,7 @@ const requireAccessToken: RequestHandler = (_req, res, next) => {
   res.locals.userId = userId;
   next();
 };
+const allowAuthenticatedAction: RequestHandler = (_req, _res, next) => next();
 
 const categoryController = createCategoryController(categories);
 const conversationController = createConversationController(conversations);
@@ -130,12 +131,17 @@ const app = createApp({
   conversationMessageRouter: createConversationMessageRouter(
     messageController,
     requireAccessToken,
+    allowAuthenticatedAction,
   ),
   conversationRouter: createConversationRouter(
     conversationController,
     requireAccessToken,
   ),
-  messageRouter: createMessageRouter(messageController, requireAccessToken),
+  messageRouter: createMessageRouter(
+    messageController,
+    requireAccessToken,
+    allowAuthenticatedAction,
+  ),
   organizationConversationRouter: createOrganizationConversationRouter(
     conversationController,
     requireAccessToken,

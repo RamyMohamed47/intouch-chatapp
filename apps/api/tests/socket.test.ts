@@ -17,6 +17,10 @@ import type {
   SocketData,
 } from "../src/contracts/socket.js";
 import type { AccessTokenManager } from "../src/modules/auth/auth.types.js";
+import {
+  createInMemoryRateLimitStore,
+  createRateLimitService,
+} from "../src/modules/abuse-protection/index.js";
 import { ConversationNotFoundError } from "../src/modules/conversations/conversation.errors.js";
 import type { ConversationRecord } from "../src/modules/conversations/conversation.types.js";
 import {
@@ -82,17 +86,28 @@ const conversations = {
 let raceAuthorizationChecks = 0;
 const gateway = createSocketRealtimeGateway();
 const typing = createTypingService({ realtime: gateway, timeoutMs: 50 });
+const rateLimitStore = createInMemoryRateLimitStore();
+const rateLimits = createRateLimitService({ store: rateLimitStore });
+let denyConnection = false;
 let baseUrl: string;
 const clients: Socket[] = [];
 
 before(async () => {
   gateway.setTypingService(typing);
   configureSocket(io, accessTokens, conversations, undefined, {
+    connections: {
+      admit: async () => ({
+        allowed: !denyConnection,
+        retryAfterMs: denyConnection ? 2_000 : 0,
+      }),
+      release: async () => undefined,
+    },
     memberships: { assertMember: async () => undefined },
     presence: {
       markOnline: async () => undefined,
       markOffline: async () => undefined,
     },
+    rateLimits,
     typing,
   });
   gateway.setSocketServer(io);
@@ -107,6 +122,7 @@ after(async () => {
   await new Promise<void>((resolve) => {
     io.close(() => resolve());
   });
+  rateLimitStore.close();
 });
 
 const connect = (token = "good-token") =>
@@ -132,6 +148,30 @@ describe("authenticated conversation sockets", () => {
       connect("bad-token"),
       /Invalid or expired access token/,
     );
+  });
+
+  test("returns typed connection throttling details", async () => {
+    denyConnection = true;
+    const client = createClient(baseUrl, {
+      auth: { accessToken: "good-token" },
+      transports: ["websocket"],
+      forceNew: true,
+    });
+    clients.push(client);
+    try {
+      const error = await new Promise<Error & { data?: unknown }>((resolve) => {
+        client.once("connect_error", resolve);
+      });
+      assert.equal(error.message, "Too many realtime connection attempts");
+      assert.deepEqual(error.data, {
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many realtime connection attempts",
+        retryAfterMs: 2_000,
+      });
+    } finally {
+      denyConnection = false;
+      client.disconnect();
+    }
   });
 
   test("authorizes joins and isolates message events by room", async () => {
@@ -257,5 +297,30 @@ describe("authenticated conversation sockets", () => {
       isTyping: true,
     });
     assert.equal(authorReceived, false);
+  });
+
+  test("shares subscription limits across a user's sockets but permits cleanup", async () => {
+    const first = await connect("second-token");
+    const second = await connect("second-token");
+    let limited = false;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const client = attempt % 2 === 0 ? first : second;
+      const result = await new Promise<{
+        error?: { code: string };
+        success: boolean;
+      }>((resolve) => {
+        client.emit("organization:subscribe", { organizationId }, resolve);
+      });
+      if (!result.success && result.error?.code === "TOO_MANY_REQUESTS") {
+        limited = true;
+        break;
+      }
+    }
+    assert.equal(limited, true);
+
+    const cleanup = await new Promise<{ success: boolean }>((resolve) => {
+      first.emit("organization:unsubscribe", { organizationId }, resolve);
+    });
+    assert.deepEqual(cleanup, { success: true });
   });
 });

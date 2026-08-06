@@ -7,6 +7,7 @@ export interface AccessTokenClaims {
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
   compare(password: string, passwordHash: string): Promise<boolean>;
+  compareDummy(password: string): Promise<boolean>;
 }
 
 export interface AccessTokenManager {

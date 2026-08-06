@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   conversationSocketSchema,
   organizationSocketSchema,
+  socketConnectionErrorSchema,
 } from "../realtime/index.js";
 
 describe("shared realtime schemas", () => {
@@ -18,6 +19,29 @@ describe("shared realtime schemas", () => {
     assert.equal(
       conversationSocketSchema.safeParse({ conversationId: id, extra: true })
         .success,
+      false,
+    );
+  });
+
+  test("validates strict Socket.IO connection errors", () => {
+    assert.deepEqual(
+      socketConnectionErrorSchema.parse({
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many realtime connection attempts",
+        retryAfterMs: 2_000,
+      }),
+      {
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many realtime connection attempts",
+        retryAfterMs: 2_000,
+      },
+    );
+    assert.equal(
+      socketConnectionErrorSchema.safeParse({
+        code: "UNAUTHORIZED",
+        message: "Invalid access token",
+        extra: true,
+      }).success,
       false,
     );
   });

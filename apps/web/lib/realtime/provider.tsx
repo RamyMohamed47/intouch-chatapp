@@ -6,6 +6,7 @@ import {
   presenceEventSchema,
   readReceiptEventSchema,
   socketAcknowledgementSchema,
+  socketConnectionErrorSchema,
   typingEventSchema,
   type MessageEvent,
   type ReadReceiptEvent,
@@ -152,7 +153,10 @@ export function RealtimeProvider({
 
     const nextSocket = socketFactory();
     let refreshing = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     nextSocket.on("connect", () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
       refreshing = false;
       setConnected(true);
     });
@@ -163,10 +167,24 @@ export function RealtimeProvider({
         void refreshAccessToken();
       }
     });
-    nextSocket.on("connect_error", () => {
-      if (refreshing) return;
-      refreshing = true;
-      void refreshAccessToken();
+    nextSocket.on("connect_error", (error) => {
+      const parsed = socketConnectionErrorSchema.safeParse(
+        (error as Error & { data?: unknown }).data,
+      );
+      if (!parsed.success) return;
+      if (parsed.data.code === "UNAUTHORIZED") {
+        if (refreshing) return;
+        refreshing = true;
+        void refreshAccessToken();
+        return;
+      }
+      if (parsed.data.code === "TOO_MANY_REQUESTS") {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(
+          () => nextSocket.connect(),
+          parsed.data.retryAfterMs ?? 15_000,
+        );
+      }
     });
 
     const handleMessage = (raw: MessageEvent, prepend: boolean) => {
@@ -251,6 +269,7 @@ export function RealtimeProvider({
     setSocket(nextSocket);
     nextSocket.connect();
     return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       nextSocket.disconnect();
       setConnected(false);
     };

@@ -56,6 +56,11 @@ paths:
     post:
       tags: [Authentication]
       summary: Authenticate user
+      description: |
+        Password login is protected by independent per-IP and per-account
+        attempt limits. The first ten account attempts within fifteen minutes
+        are admitted. Further attempts receive a generic 429 response during a
+        non-extending fifteen-minute cooldown.
       security: []
       requestBody:
         $ref: "#/components/requestBodies/LoginRequest"
@@ -536,6 +541,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /conversations/{conversationId}:
     get:
@@ -666,6 +673,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   #
   # Messages
@@ -715,6 +724,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /messages/{messageId}:
     patch:
@@ -737,6 +748,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
     delete:
       tags: [Messages]
@@ -752,6 +765,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
 components:
 
@@ -1247,7 +1262,13 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
     TooManyRequests:
-      description: Authentication rate limit exceeded.
+      description: A request limit was exceeded.
+      headers:
+        Retry-After:
+          description: Seconds until the authenticated action may be retried. Authentication limits may omit this header.
+          schema:
+            type: integer
+            minimum: 1
       content:
         application/json:
           schema:

@@ -14,6 +14,7 @@ describe("auth token primitives", () => {
     assert.notEqual(hash, password);
     assert.equal(await passwords.compare(password, hash), true);
     assert.equal(await passwords.compare("incorrect", hash), false);
+    assert.equal(await passwords.compareDummy(password), false);
   });
 
   test("signs and verifies access-token claims", async () => {

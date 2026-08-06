@@ -17,6 +17,7 @@ import {
 export const createConversationMessageRouter = (
   controller: MessageController,
   requireAccessToken: RequestHandler,
+  createMessageLimit: RequestHandler,
 ) => {
   const router = express.Router();
   router.use(requireAccessToken);
@@ -28,6 +29,7 @@ export const createConversationMessageRouter = (
       controller.list,
     )
     .post(
+      createMessageLimit,
       validateParams(conversationMessagesParamsSchema),
       validateBody(createMessageSchema),
       controller.create,
@@ -38,16 +40,22 @@ export const createConversationMessageRouter = (
 export const createMessageRouter = (
   controller: MessageController,
   requireAccessToken: RequestHandler,
+  mutateMessageLimit: RequestHandler,
 ) => {
   const router = express.Router();
   router.use(requireAccessToken);
   router
     .route("/:messageId")
     .patch(
+      mutateMessageLimit,
       validateParams(messageParamsSchema),
       validateBody(updateMessageSchema),
       controller.update,
     )
-    .delete(validateParams(messageParamsSchema), controller.delete);
+    .delete(
+      mutateMessageLimit,
+      validateParams(messageParamsSchema),
+      controller.delete,
+    );
   return router;
 };

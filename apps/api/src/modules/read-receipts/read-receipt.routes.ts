@@ -13,11 +13,13 @@ import {
 const createReadReceiptRouter = (
   controller: ReadReceiptController,
   requireAccessToken: RequestHandler,
+  updateReadReceiptLimit: RequestHandler,
 ) => {
   const router = express.Router();
   router.use(requireAccessToken);
   router.put(
     "/:conversationId/read-receipt",
+    updateReadReceiptLimit,
     validateParams(readReceiptParamsSchema),
     validateBody(updateReadReceiptSchema),
     controller.advance,

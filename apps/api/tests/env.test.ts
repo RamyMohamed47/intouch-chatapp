@@ -14,6 +14,7 @@ const validEnv: NodeJS.ProcessEnv = {
   GOOGLE_OAUTH_CLIENT_ID: "google-client-id",
   GOOGLE_OAUTH_CLIENT_SECRET: "google-client-secret",
   GOOGLE_OAUTH_FRONTEND_REDIRECT_URL: "https://app.example.com/auth/callback",
+  LOGIN_THROTTLE_SECRET: "a-login-throttle-secret-that-is-over-32-bytes",
 };
 
 describe("auth environment configuration", () => {
@@ -37,6 +38,22 @@ describe("auth environment configuration", () => {
       config.googleOAuthStateCookieName,
       "intouch_google_oauth_state",
     );
+    assert.equal(config.loginAttemptLimit, 10);
+    assert.equal(config.loginAttemptWindowMs, 900_000);
+    assert.equal(config.loginAttemptCooldownMs, 900_000);
+  });
+
+  test("accepts bounded login-attempt configuration", () => {
+    const config = loadConfig({
+      ...validEnv,
+      LOGIN_ATTEMPT_LIMIT: "5",
+      LOGIN_ATTEMPT_WINDOW_MS: "60000",
+      LOGIN_ATTEMPT_COOLDOWN_MS: "120000",
+    });
+
+    assert.equal(config.loginAttemptLimit, 5);
+    assert.equal(config.loginAttemptWindowMs, 60_000);
+    assert.equal(config.loginAttemptCooldownMs, 120_000);
   });
 
   test("uses a secure-prefixed cookie in production", () => {
@@ -61,6 +78,29 @@ describe("auth environment configuration", () => {
       () => loadConfig({ ...validEnv, ACCESS_TOKEN_SECRET: "too-short" }),
       /at least 32 bytes/,
     );
+  });
+
+  test("rejects missing or short login-throttle secrets", () => {
+    assert.throws(
+      () => loadConfig({ ...validEnv, LOGIN_THROTTLE_SECRET: "too-short" }),
+      /LOGIN_THROTTLE_SECRET must be at least 32 bytes/,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnv, LOGIN_THROTTLE_SECRET: undefined }),
+      /LOGIN_THROTTLE_SECRET env var is required/,
+    );
+  });
+
+  test("rejects invalid login-attempt bounds", () => {
+    for (const invalidEnv of [
+      { LOGIN_ATTEMPT_LIMIT: "0" },
+      { LOGIN_ATTEMPT_LIMIT: "101" },
+      { LOGIN_ATTEMPT_WINDOW_MS: "1.5" },
+      { LOGIN_ATTEMPT_WINDOW_MS: "86400001" },
+      { LOGIN_ATTEMPT_COOLDOWN_MS: "-1" },
+    ]) {
+      assert.throws(() => loadConfig({ ...validEnv, ...invalidEnv }));
+    }
   });
 
   test("requires Google OAuth URLs to use allowlisted origins", () => {

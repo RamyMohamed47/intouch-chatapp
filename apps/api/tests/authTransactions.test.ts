@@ -10,6 +10,7 @@ import createMongooseAuthSessionRepository, {
 } from "../src/modules/auth/auth.repository.js";
 import { createRefreshTokenManager } from "../src/modules/auth/auth.refresh-token.js";
 import createAuthService from "../src/modules/auth/auth.service.js";
+import type { LoginProtectionService } from "../src/modules/auth/auth.login-protection.js";
 import type { AuthUnitOfWork } from "../src/modules/auth/auth.unit-of-work.js";
 import type {
   AccessTokenManager,
@@ -42,6 +43,11 @@ after(async () => {
 const passwords: PasswordHasher = {
   hash: async (password) => `hashed:${password}`,
   compare: async () => true,
+  compareDummy: async () => false,
+};
+const loginProtection: LoginProtectionService = {
+  reserveAttempt: async () => undefined,
+  clearAttempts: async () => undefined,
 };
 const accessTokens: AccessTokenManager = {
   sign: async (userId) => `access:${userId}`,
@@ -76,6 +82,7 @@ describe("authentication transactions", () => {
     const service = createAuthService({
       accessTokens,
       googleOAuth,
+      loginProtection,
       passwords,
       refreshTokens: createRefreshTokenManager(),
       sessions: createMongooseAuthSessionRepository(),

@@ -13,6 +13,7 @@ import type {
   SocketData,
 } from "./contracts/socket.js";
 import createAuthModule from "./modules/auth/index.js";
+import createAbuseProtectionModule from "./modules/abuse-protection/index.js";
 import createOrganizationModule from "./modules/organizations/index.js";
 import configureSocket from "./sockets/socket.js";
 import { createTypingService } from "./modules/typing/index.js";
@@ -28,6 +29,7 @@ type InTouchServer = Server<
 >;
 
 const resources: {
+  closeAbuseProtection?: () => void;
   server?: http.Server;
   io?: InTouchServer;
 } = {};
@@ -102,6 +104,7 @@ const shutdown = (
     try {
       await closeSocketServer();
       await closeHttpServer();
+      resources.closeAbuseProtection?.();
       await disconnectDatabase(logger);
       clearTimeout(forceShutdownTimer);
       logger.info({ reason }, "Graceful shutdown complete");
@@ -134,6 +137,8 @@ process.once("SIGINT", () => {
 });
 
 const config = loadConfig();
+const abuseProtection = createAbuseProtectionModule(logger);
+resources.closeAbuseProtection = abuseProtection.close;
 const realtimeGateway = createSocketRealtimeGateway();
 const typingService = createTypingService({ realtime: realtimeGateway });
 realtimeGateway.setTypingService(typingService);
@@ -158,11 +163,18 @@ const auth = createAuthModule({
       maxAgeMs: 10 * 60 * 1000,
     },
   },
+  loginProtection: {
+    attemptLimit: config.loginAttemptLimit,
+    cooldownMs: config.loginAttemptCooldownMs,
+    hashSecret: config.loginThrottleSecret,
+    windowMs: config.loginAttemptWindowMs,
+  },
 });
 const organizations = createOrganizationModule({
   conversationRealtime: realtimeGateway,
   messageBroadcaster: realtimeGateway,
   presenceRealtime: realtimeGateway,
+  rateLimits: abuseProtection.rateLimits,
   readReceiptRealtime: realtimeGateway,
   requireAccessToken: auth.requireAccessToken,
 });
@@ -192,6 +204,7 @@ const io = new Server<
     credentials: true,
     origin: [...config.clientOrigins],
   },
+  maxHttpBufferSize: 10 * 1024,
 });
 resources.server = server;
 resources.io = io;
@@ -203,8 +216,10 @@ configureSocket(
   organizations.conversationService,
   logger,
   {
+    connections: abuseProtection.socketConnections,
     memberships: organizations.membershipDirectory,
     presence: organizations.presenceService,
+    rateLimits: abuseProtection.rateLimits,
     typing: typingService,
   },
 );

@@ -18,6 +18,15 @@ Connections with a missing, invalid, or expired token are rejected. The server
 disconnects an established socket when that access token expires. Refresh the
 token through REST, reconnect, and join the required rooms again.
 
+Connection middleware errors expose `{ code, message, retryAfterMs? }` through
+Socket.IO's `connect_error.data`. `UNAUTHORIZED` is the only connection error
+that should trigger an access-token refresh. `TOO_MANY_REQUESTS` should be
+retried after `retryAfterMs` without rotating the refresh token.
+
+Each user may keep at most five active sockets. Connection attempts use a
+10-token bucket that refills one token every three seconds. Socket payloads are
+limited to 10 KB.
+
 ## Client Events
 
 ### `conversation:join`
@@ -46,6 +55,17 @@ authorized conversation room. Typing expires after five seconds, so active
 clients should refresh `typing:start` about every three seconds. Both events use
 the standard acknowledgement shape.
 
+## Authenticated Abuse Limits
+
+- `conversation:join` and `organization:subscribe` share a 20-token bucket that
+  refills one token per second per user.
+- `typing:start` has a 10-token bucket that refills one token every two seconds
+  per user.
+- Limited events acknowledge `TOO_MANY_REQUESTS` before validation,
+  authorization, or broadcast work.
+- `conversation:leave`, `organization:unsubscribe`, and `typing:stop` are not
+  throttled so cleanup always remains available.
+
 ## Server Events
 
 - `message:created` carries the complete public message DTO.
@@ -67,3 +87,6 @@ Presence and typing use replaceable in-memory stores in this iteration. The
 backend must run as one application instance. A multi-instance deployment needs
 Redis-backed stores plus the Socket.IO Redis adapter. Process restarts clear
 runtime presence and typing; clients reconnect and rebuild subscriptions.
+Authenticated abuse counters and active-socket accounting are also
+process-local and require Redis-backed implementations before horizontal API
+scaling.

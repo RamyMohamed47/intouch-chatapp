@@ -1,6 +1,7 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -58,9 +59,11 @@ const themeScript = `(() => {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', colors[theme]);
 })()`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html
       lang="en"
@@ -70,7 +73,10 @@ export default function RootLayout({
     >
       <head>
         <meta name="theme-color" content="#0d1120" />
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: themeScript }}
+        />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

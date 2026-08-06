@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { InvalidRefreshTokenError } from "../src/modules/auth/auth.errors.js";
 import type { AuthSessionRepository } from "../src/modules/auth/auth.repository.js";
 import createAuthService from "../src/modules/auth/auth.service.js";
+import type { LoginProtectionService } from "../src/modules/auth/auth.login-protection.js";
 import type { AuthUnitOfWork } from "../src/modules/auth/auth.unit-of-work.js";
 import { createRefreshTokenManager } from "../src/modules/auth/auth.refresh-token.js";
 import type {
@@ -56,6 +57,9 @@ const createHarness = () => {
   let googleProviderUser: PublicUser | null = null;
   let googleProviderResults: Array<PublicUser | null> | undefined;
   let linkGoogleResult: PublicUser | null = user;
+  const reservedLoginEmails: string[] = [];
+  const clearedLoginEmails: string[] = [];
+  const dummyComparisons: string[] = [];
   let linkedGoogleProvider:
     { providerAccountId: string; usedAt: Date; userId: string } | undefined;
   const existingUsernames = new Set<string>();
@@ -122,6 +126,10 @@ const createHarness = () => {
   const passwords: PasswordHasher = {
     hash: async (password) => `hashed:${password}`,
     compare: async (password, hash) => hash === `hashed:${password}`,
+    compareDummy: async (password) => {
+      dummyComparisons.push(password);
+      return false;
+    },
   };
   const accessTokens: AccessTokenManager = {
     sign: async (userId) => `access:${userId}`,
@@ -136,12 +144,21 @@ const createHarness = () => {
   const unitOfWork: AuthUnitOfWork = {
     run: (work) => work({ sessions, users }),
   };
+  const loginProtection: LoginProtectionService = {
+    reserveAttempt: async (email) => {
+      reservedLoginEmails.push(email);
+    },
+    clearAttempts: async (email) => {
+      clearedLoginEmails.push(email);
+    },
+  };
   const service = createAuthService({
     users,
     sessions,
     passwords,
     accessTokens,
     googleOAuth,
+    loginProtection,
     refreshTokens,
     unitOfWork,
     now: () => now,
@@ -150,6 +167,9 @@ const createHarness = () => {
 
   return {
     service,
+    clearedLoginEmails,
+    dummyComparisons,
+    reservedLoginEmails,
     sessionRecords,
     getCreatedInput: () => createdInput,
     getCreatedGoogleInput: () => createdGoogleInput,
@@ -209,6 +229,7 @@ describe("authService", () => {
     });
     assert.match(result.refreshToken, /^[^.]+\.[^.]+$/);
     assert.equal(harness.sessionRecords.size, 1);
+    assert.deepEqual(harness.clearedLoginEmails, ["new.user@example.com"]);
   });
 
   test("links Google to an existing account with the same email", async () => {
@@ -332,6 +353,21 @@ describe("authService", () => {
       }),
       { statusCode: 401, message: "Invalid email or password" },
     );
+    assert.deepEqual(harness.reservedLoginEmails, [user.email]);
+    assert.deepEqual(harness.clearedLoginEmails, []);
+  });
+
+  test("performs dummy password work for an unknown account", async () => {
+    const harness = createHarness();
+    const password = "correct horse battery staple";
+
+    await assert.rejects(
+      harness.service.login({ email: user.email, password }),
+      { statusCode: 401, message: "Invalid email or password" },
+    );
+
+    assert.deepEqual(harness.dummyComparisons, [password]);
+    assert.deepEqual(harness.clearedLoginEmails, []);
   });
 
   test("allows independent sessions across successful logins", async () => {
@@ -351,6 +387,8 @@ describe("authService", () => {
     });
 
     assert.equal(harness.sessionRecords.size, 2);
+    assert.deepEqual(harness.reservedLoginEmails, [user.email, user.email]);
+    assert.deepEqual(harness.clearedLoginEmails, [user.email, user.email]);
   });
 
   test("rotates refresh tokens and revokes the session on replay", async () => {

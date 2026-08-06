@@ -14,6 +14,10 @@ export const socketAcknowledgementSchema = z.discriminatedUnion("success", [
   z.object({ success: z.literal(false), error: errorDtoSchema }),
 ]);
 
+export const socketConnectionErrorSchema = errorDtoSchema
+  .extend({ retryAfterMs: z.number().int().positive().optional() })
+  .strict();
+
 export const presenceEventSchema = z.object({
   userId: z.string().min(1),
   status: presenceStatusSchema,
@@ -41,6 +45,7 @@ export type SocketHandshakeAuth = z.infer<typeof socketHandshakeAuthSchema>;
 export type SocketAcknowledgementResult = z.infer<
   typeof socketAcknowledgementSchema
 >;
+export type SocketConnectionError = z.infer<typeof socketConnectionErrorSchema>;
 export type PresenceEvent = z.infer<typeof presenceEventSchema>;
 export type TypingEvent = z.infer<typeof typingEventSchema>;
 export type ConversationAccessRevokedEvent = z.infer<

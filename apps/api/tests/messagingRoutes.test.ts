@@ -67,15 +67,18 @@ const requireAccessToken: RequestHandler = (_req, res, next) => {
   res.locals.userId = userId;
   next();
 };
+const allowAuthenticatedAction: RequestHandler = (_req, _res, next) => next();
 
 const app = createApp({
   directMessageRouter: createDirectMessageRouter(
     createDirectMessageController(directMessages),
     requireAccessToken,
+    allowAuthenticatedAction,
   ),
   readReceiptRouter: createReadReceiptRouter(
     createReadReceiptController(readReceipts),
     requireAccessToken,
+    allowAuthenticatedAction,
   ),
 });
 const server = http.createServer(app);

@@ -15,6 +15,7 @@ import {
 const createDirectMessageRouter = (
   controller: DirectMessageController,
   requireAccessToken: RequestHandler,
+  createDirectMessageLimit: RequestHandler,
 ) => {
   const router = express.Router();
   router.use(requireAccessToken);
@@ -26,6 +27,7 @@ const createDirectMessageRouter = (
       controller.list,
     )
     .post(
+      createDirectMessageLimit,
       validateParams(directMessageOrganizationParamsSchema),
       validateBody(createDirectMessageSchema),
       controller.create,

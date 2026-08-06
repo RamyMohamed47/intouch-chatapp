@@ -1,6 +1,11 @@
 import type { RequestHandler } from "express";
 
 import type { MessageBroadcaster } from "../../broadcasting/messageBroadcaster.js";
+import createAuthenticatedRateLimit from "../../middleware/authenticatedRateLimit.js";
+import {
+  RateLimitAction,
+  type AuthenticatedRateLimiter,
+} from "../abuse-protection/index.js";
 import {
   createDirectMessageController,
   createDirectMessageRouter,
@@ -68,6 +73,7 @@ export interface OrganizationModuleDependencies {
   messageBroadcaster: MessageBroadcaster;
   presenceRealtime: PresenceRealtime;
   readReceiptRealtime: ReadReceiptRealtime;
+  rateLimits: AuthenticatedRateLimiter;
   requireAccessToken: RequestHandler;
 }
 
@@ -75,9 +81,30 @@ const createOrganizationModule = ({
   conversationRealtime,
   messageBroadcaster,
   presenceRealtime,
+  rateLimits,
   readReceiptRealtime,
   requireAccessToken,
 }: OrganizationModuleDependencies) => {
+  const createDirectMessageLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.DIRECT_MESSAGE_CREATE,
+    "Too many direct message creation attempts",
+  );
+  const createMessageLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.MESSAGE_CREATE,
+    "Too many message creation attempts",
+  );
+  const mutateMessageLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.MESSAGE_MUTATE,
+    "Too many message mutation attempts",
+  );
+  const updateReadReceiptLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.READ_RECEIPT_UPDATE,
+    "Too many read receipt updates",
+  );
   const categories = createMongooseCategoryRepository();
   const conversations = createMongooseConversationRepository();
   const conversationParticipants =
@@ -205,18 +232,22 @@ const createOrganizationModule = ({
   const directMessageRouter = createDirectMessageRouter(
     directMessageController,
     requireAccessToken,
+    createDirectMessageLimit,
   );
   const readReceiptRouter = createReadReceiptRouter(
     readReceiptController,
     requireAccessToken,
+    updateReadReceiptLimit,
   );
   const conversationMessageRouter = createConversationMessageRouter(
     messageController,
     requireAccessToken,
+    createMessageLimit,
   );
   const messageRouter = createMessageRouter(
     messageController,
     requireAccessToken,
+    mutateMessageLimit,
   );
 
   return {

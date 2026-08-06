@@ -8,6 +8,8 @@ import { createOAuthStateManager } from "./auth.oauth-state.js";
 import { createBcryptPasswordHasher } from "./auth.password.js";
 import { createRefreshTokenManager } from "./auth.refresh-token.js";
 import createMongooseAuthSessionRepository from "./auth.repository.js";
+import createMongooseLoginAttemptRepository from "./auth.login-attempt.repository.js";
+import createLoginProtectionService from "./auth.login-protection.js";
 import createAuthRouter from "./auth.routes.js";
 import createAuthService from "./auth.service.js";
 import createMongooseAuthUnitOfWork from "./auth.unit-of-work.js";
@@ -26,6 +28,12 @@ export interface AuthModuleConfig {
     frontendRedirectUrl: string;
     stateCookie: AuthCookieConfig;
   };
+  loginProtection: {
+    attemptLimit: number;
+    cooldownMs: number;
+    hashSecret: string;
+    windowMs: number;
+  };
   rateLimitsEnabled?: boolean;
 }
 
@@ -33,6 +41,7 @@ const createAuthModule = (config: AuthModuleConfig) => {
   const logger = getLogger();
   const users = createMongooseUserRepository();
   const sessions = createMongooseAuthSessionRepository();
+  const loginAttempts = createMongooseLoginAttemptRepository();
   const unitOfWork = createMongooseAuthUnitOfWork();
   const passwords = createBcryptPasswordHasher();
   const accessTokens = createJwtAccessTokenManager({
@@ -50,12 +59,25 @@ const createAuthModule = (config: AuthModuleConfig) => {
     },
   });
   const oauthStates = createOAuthStateManager();
+  const loginProtection = createLoginProtectionService({
+    attempts: loginAttempts,
+    policy: config.loginProtection,
+    observer: {
+      throttled(details) {
+        logger.warn(
+          { securityEvent: "auth.login.throttled", ...details },
+          "Account login attempts throttled",
+        );
+      },
+    },
+  });
   const service = createAuthService({
     users,
     sessions,
     passwords,
     accessTokens,
     googleOAuth,
+    loginProtection,
     refreshTokens,
     unitOfWork,
   });
@@ -93,8 +115,11 @@ export { createBcryptPasswordHasher } from "./auth.password.js";
 export { createGoogleOAuthClient } from "./auth.google.js";
 export { createOAuthStateManager } from "./auth.oauth-state.js";
 export { createRefreshTokenManager } from "./auth.refresh-token.js";
+export { default as createLoginProtectionService } from "./auth.login-protection.js";
+export { default as createMongooseLoginAttemptRepository } from "./auth.login-attempt.repository.js";
 export { default as createMongooseAuthUnitOfWork } from "./auth.unit-of-work.js";
 export type { AuthController } from "./auth.controller.js";
 export type { AuthMiddleware } from "./auth.middleware.js";
 export type { AuthService } from "./auth.service.js";
 export type { AuthUnitOfWork } from "./auth.unit-of-work.js";
+export type { LoginProtectionService } from "./auth.login-protection.js";

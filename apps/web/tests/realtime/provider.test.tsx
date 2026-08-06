@@ -20,6 +20,7 @@ import { server } from "../mocks/server";
 type Listener = (...args: unknown[]) => void;
 
 class FakeSocket {
+  connectCalls = 0;
   connected = false;
   readonly emitted: { event: string; input: unknown }[] = [];
   private readonly listeners: Record<string, Listener[]> = {};
@@ -30,6 +31,7 @@ class FakeSocket {
   }
 
   connect() {
+    this.connectCalls += 1;
     this.connected = true;
     this.trigger("connect");
     return this;
@@ -180,5 +182,56 @@ describe("RealtimeProvider", () => {
       fakeSocket.trigger("conversation:access-revoked", { conversationId });
     });
     expect(screen.getByText(conversationId)).toBeInTheDocument();
+  });
+
+  it("refreshes only authentication failures and delays throttled reconnects", async () => {
+    let refreshCalls = 0;
+    server.use(
+      http.post("http://localhost:3000/api/v1/auth/refresh", () => {
+        refreshCalls += 1;
+        return HttpResponse.json({ accessToken: "socket-token" });
+      }),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const fakeSocket = new FakeSocket();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <RealtimeProvider
+            socketFactory={() => fakeSocket as unknown as InTouchSocket}
+          >
+            <Probe />
+          </RealtimeProvider>
+        </AuthProvider>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("connected");
+    expect(refreshCalls).toBe(1);
+    act(() => {
+      fakeSocket.trigger("connect_error", new Error("network unavailable"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(refreshCalls).toBe(1);
+
+    const throttled = Object.assign(new Error("limited"), {
+      data: {
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many realtime connection attempts",
+        retryAfterMs: 10,
+      },
+    });
+    act(() => fakeSocket.trigger("connect_error", throttled));
+    await waitFor(() => expect(fakeSocket.connectCalls).toBe(2));
+    expect(refreshCalls).toBe(1);
+
+    const unauthorized = Object.assign(new Error("expired"), {
+      data: { code: "UNAUTHORIZED", message: "Invalid access token" },
+    });
+    act(() => fakeSocket.trigger("connect_error", unauthorized));
+    await waitFor(() => expect(refreshCalls).toBe(2));
   });
 });

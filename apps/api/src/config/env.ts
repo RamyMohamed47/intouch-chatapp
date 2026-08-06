@@ -14,6 +14,10 @@ export interface AppConfig {
   googleOAuthClientSecret: string;
   googleOAuthFrontendRedirectUrl: string;
   googleOAuthStateCookieName: string;
+  loginAttemptCooldownMs: number;
+  loginAttemptLimit: number;
+  loginAttemptWindowMs: number;
+  loginThrottleSecret: string;
   port: number;
   trustProxy: boolean | number;
 }
@@ -28,7 +32,8 @@ const requireEnv = (
     | "GOOGLE_OAUTH_CALLBACK_URL"
     | "GOOGLE_OAUTH_CLIENT_ID"
     | "GOOGLE_OAUTH_CLIENT_SECRET"
-    | "GOOGLE_OAUTH_FRONTEND_REDIRECT_URL",
+    | "GOOGLE_OAUTH_FRONTEND_REDIRECT_URL"
+    | "LOGIN_THROTTLE_SECRET",
 ) => {
   const value = env[name];
 
@@ -57,6 +62,31 @@ const validateAccessTokenSecret = (secret: string) => {
   }
 
   return secret;
+};
+
+const validateSecret = (secret: string, name: string) => {
+  if (new TextEncoder().encode(secret).byteLength < 32) {
+    throw new Error(`${name} must be at least 32 bytes`);
+  }
+
+  return secret;
+};
+
+const parseBoundedInteger = (
+  value: string | undefined,
+  defaultValue: number,
+  name: string,
+  maximum: number,
+) => {
+  const parsed = value === undefined ? defaultValue : Number(value);
+
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > maximum) {
+    throw new Error(
+      `${name} must be a positive integer no greater than ${maximum}`,
+    );
+  }
+
+  return parsed;
 };
 
 const parsePort = (value: string | undefined) => {
@@ -147,6 +177,28 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     googleOAuthStateCookieName: isProduction
       ? "__Secure-intouch_google_oauth_state"
       : "intouch_google_oauth_state",
+    loginAttemptCooldownMs: parseBoundedInteger(
+      env.LOGIN_ATTEMPT_COOLDOWN_MS,
+      15 * 60 * 1000,
+      "LOGIN_ATTEMPT_COOLDOWN_MS",
+      24 * 60 * 60 * 1000,
+    ),
+    loginAttemptLimit: parseBoundedInteger(
+      env.LOGIN_ATTEMPT_LIMIT,
+      10,
+      "LOGIN_ATTEMPT_LIMIT",
+      100,
+    ),
+    loginAttemptWindowMs: parseBoundedInteger(
+      env.LOGIN_ATTEMPT_WINDOW_MS,
+      15 * 60 * 1000,
+      "LOGIN_ATTEMPT_WINDOW_MS",
+      24 * 60 * 60 * 1000,
+    ),
+    loginThrottleSecret: validateSecret(
+      requireEnv(env, "LOGIN_THROTTLE_SECRET"),
+      "LOGIN_THROTTLE_SECRET",
+    ),
     port: parsePort(env.PORT),
     trustProxy: isProduction ? 1 : false,
   };

@@ -13,6 +13,7 @@ import {
 } from "./auth.errors.js";
 import type { AuthSessionRepository } from "./auth.repository.js";
 import type { AuthUnitOfWork } from "./auth.unit-of-work.js";
+import type { LoginProtectionService } from "./auth.login-protection.js";
 import type {
   AccessTokenManager,
   AuthResult,
@@ -33,6 +34,7 @@ export interface AuthServiceDependencies {
   passwords: PasswordHasher;
   accessTokens: AccessTokenManager;
   googleOAuth: GoogleOAuthClient;
+  loginProtection: LoginProtectionService;
   refreshTokens: RefreshTokenManager;
   unitOfWork: AuthUnitOfWork;
   now?: () => Date;
@@ -45,6 +47,7 @@ const createAuthService = ({
   passwords,
   accessTokens,
   googleOAuth,
+  loginProtection,
   refreshTokens,
   unitOfWork,
   now = () => new Date(),
@@ -213,6 +216,8 @@ const createAuthService = ({
 
     async loginWithGoogle(code: string): Promise<GoogleAuthResult> {
       const identity = await googleOAuth.exchangeCode(code);
+      await loginProtection.clearAttempts(identity.email);
+
       return unitOfWork.run(async (context) => {
         const user = await resolveGoogleUser(context.users, identity);
         return {
@@ -250,14 +255,17 @@ const createAuthService = ({
     },
 
     async login(input: LoginInput): Promise<AuthResult> {
+      await loginProtection.reserveAttempt(input.email);
       const passwordUser = await users.findPasswordUserByEmail(input.email);
+      const passwordMatches = passwordUser
+        ? await passwords.compare(input.password, passwordUser.passwordHash)
+        : await passwords.compareDummy(input.password);
 
-      if (
-        !passwordUser ||
-        !(await passwords.compare(input.password, passwordUser.passwordHash))
-      ) {
+      if (!passwordUser || !passwordMatches) {
         throw new InvalidCredentialsError();
       }
+
+      await loginProtection.clearAttempts(input.email);
 
       return unitOfWork.run(async (context) => {
         await context.users.touchPasswordProvider(passwordUser.user.id, now());

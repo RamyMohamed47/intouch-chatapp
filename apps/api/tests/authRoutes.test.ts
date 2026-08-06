@@ -4,7 +4,10 @@ import { after, before, describe, test } from "node:test";
 
 import createApp from "../src/app.js";
 import createAuthController from "../src/modules/auth/auth.controller.js";
-import { GoogleProviderUnavailableError } from "../src/modules/auth/auth.errors.js";
+import {
+  GoogleProviderUnavailableError,
+  LoginAttemptsExceededError,
+} from "../src/modules/auth/auth.errors.js";
 import createAuthMiddleware from "../src/modules/auth/auth.middleware.js";
 import createAuthRouter from "../src/modules/auth/auth.routes.js";
 import type { AuthService } from "../src/modules/auth/auth.service.js";
@@ -35,6 +38,7 @@ const user: PublicUser = {
   updatedAt: new Date("2026-07-28T12:00:00.000Z"),
 };
 let googleLoginError: Error | undefined;
+let loginError: Error | undefined;
 let loggedOutToken: string | undefined;
 const authService: AuthService = {
   getGoogleAuthorizationUrl: (state) =>
@@ -51,11 +55,15 @@ const authService: AuthService = {
     accessToken: "register-access-token",
     refreshToken: "register-refresh-token",
   }),
-  login: async () => ({
-    user,
-    accessToken: "login-access-token",
-    refreshToken: "login-refresh-token",
-  }),
+  login: async () => {
+    if (loginError) throw loginError;
+
+    return {
+      user,
+      accessToken: "login-access-token",
+      refreshToken: "login-refresh-token",
+    };
+  },
   refresh: async () => ({
     accessToken: "rotated-access-token",
     refreshToken: "rotated-refresh-token",
@@ -355,6 +363,35 @@ describe("auth routes", () => {
     });
 
     assert.equal(response.status, 400);
+  });
+
+  test("returns the standard envelope when account attempts are exhausted", async () => {
+    loginError = new LoginAttemptsExceededError();
+
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: origin,
+        },
+        body: JSON.stringify({
+          email: user.email,
+          password: "correct horse battery staple",
+        }),
+      });
+
+      assert.equal(response.status, 429);
+      assert.deepEqual(await response.json(), {
+        success: false,
+        error: {
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many login attempts. Try again later.",
+        },
+      });
+    } finally {
+      loginError = undefined;
+    }
   });
 
   test("returns credentialed CORS headers for an allowed origin", async () => {

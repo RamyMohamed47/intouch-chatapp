@@ -12,6 +12,7 @@ export {
   presenceEventSchema,
   readReceiptEventSchema,
   socketAcknowledgementSchema,
+  socketConnectionErrorSchema,
   socketHandshakeAuthSchema,
   typingEventSchema,
 } from "./realtime.dto.js";
@@ -21,6 +22,7 @@ export type {
   PresenceEvent,
   ReadReceiptEvent,
   SocketAcknowledgementResult,
+  SocketConnectionError,
   SocketHandshakeAuth,
   TypingEvent,
 } from "./realtime.dto.js";
