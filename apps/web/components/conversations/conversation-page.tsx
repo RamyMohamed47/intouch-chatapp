@@ -10,7 +10,13 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import { useEffect, useState, type SubmitEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type SubmitEvent,
+} from "react";
 import {
   useMutation,
   useQueryClient,
@@ -26,6 +32,12 @@ import {
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
 import { initials } from "@/components/workspace/app-shell";
+import { InviteMemberDialog } from "@/components/memberships/invite-member-dialog";
+import {
+  isNearConversationBottom,
+  restoredScrollTop,
+  shouldSendMessageFromKey,
+} from "@/components/conversations/conversation-interactions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,6 +109,15 @@ export function ConversationPage({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  const messageViewportRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+  const forceBottomScrollRef = useRef(false);
+  const scrollStateRef = useRef<{
+    conversationId: string;
+    initialized: boolean;
+    newestMessageId: string | null;
+  }>({ conversationId, initialized: false, newestMessageId: null });
   const [documentActive, setDocumentActive] = useState(
     () =>
       typeof document === "undefined" || document.visibilityState === "visible",
@@ -151,6 +172,45 @@ export function ConversationPage({
     )
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   const newestMessage = allMessages.at(-1);
+
+  useLayoutEffect(() => {
+    if (scrollStateRef.current.conversationId !== conversationId) {
+      scrollStateRef.current = {
+        conversationId,
+        initialized: false,
+        newestMessageId: null,
+      };
+      isNearBottomRef.current = true;
+      forceBottomScrollRef.current = false;
+    }
+
+    if (messages.isPending) return;
+
+    const viewport = messageViewportRef.current;
+    if (!viewport) return;
+
+    const newestMessageId = newestMessage?.id ?? null;
+    if (!scrollStateRef.current.initialized) {
+      viewport.scrollTop = viewport.scrollHeight;
+      scrollStateRef.current.initialized = true;
+      scrollStateRef.current.newestMessageId = newestMessageId;
+      isNearBottomRef.current = true;
+      return;
+    }
+
+    if (scrollStateRef.current.newestMessageId === newestMessageId) return;
+
+    scrollStateRef.current.newestMessageId = newestMessageId;
+    const shouldScroll =
+      forceBottomScrollRef.current || isNearBottomRef.current;
+    forceBottomScrollRef.current = false;
+    if (shouldScroll) {
+      messageEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }
+  }, [conversationId, messages.isPending, newestMessage?.id]);
   const receipt = useMutation({
     mutationFn: (messageId: string) =>
       messagesApi.updateReadReceipt(conversationId, { messageId }),
@@ -237,8 +297,29 @@ export function ConversationPage({
       return;
     }
     setError(null);
+    forceBottomScrollRef.current = true;
     sendMessage.mutate(parsed.data.content, {
-      onError: (requestError) => setError(requestError.message),
+      onError: (requestError) => {
+        forceBottomScrollRef.current = false;
+        setError(requestError.message);
+      },
+    });
+  };
+
+  const loadEarlierMessages = async () => {
+    const viewport = messageViewportRef.current;
+    const previousHeight = viewport?.scrollHeight ?? 0;
+    const previousTop = viewport?.scrollTop ?? 0;
+
+    await messages.fetchNextPage();
+    window.requestAnimationFrame(() => {
+      const currentViewport = messageViewportRef.current;
+      if (!currentViewport) return;
+      currentViewport.scrollTop = restoredScrollTop({
+        previousHeight,
+        previousTop,
+        currentHeight: currentViewport.scrollHeight,
+      });
     });
   };
 
@@ -304,13 +385,28 @@ export function ConversationPage({
             : `Private conversation in ${organization.data.name}`
         }
         actions={
-          <Badge variant="outline" className="rounded-full">
-            {connected ? "Live" : "Reconnecting"}
-          </Badge>
+          <>
+            {organization.data.currentUserRole === "OWNER" && (
+              <InviteMemberDialog
+                organizationId={organizationId}
+                organizationName={organization.data.name}
+              />
+            )}
+            <Badge variant="outline" className="rounded-full">
+              {connected ? "Live" : "Reconnecting"}
+            </Badge>
+          </>
         }
       />
       <div className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea
+          className="min-h-0 flex-1"
+          viewportRef={messageViewportRef}
+          onViewportScroll={(event) => {
+            const viewport = event.currentTarget;
+            isNearBottomRef.current = isNearConversationBottom(viewport);
+          }}
+        >
           <div className="mx-auto max-w-4xl p-5 md:p-8">
             {messages.hasNextPage && (
               <div className="mb-6 text-center">
@@ -319,7 +415,7 @@ export function ConversationPage({
                   variant="outline"
                   className="rounded-full"
                   disabled={messages.isFetchingNextPage}
-                  onClick={() => void messages.fetchNextPage()}
+                  onClick={() => void loadEarlierMessages()}
                 >
                   {messages.isFetchingNextPage
                     ? "Loading..."
@@ -475,6 +571,7 @@ export function ConversationPage({
                   </p>
                 </div>
               )}
+              <div ref={messageEndRef} aria-hidden="true" />
             </div>
           </div>
         </ScrollArea>
@@ -504,6 +601,22 @@ export function ConversationPage({
                 onChange={(event) => setContent(event.target.value)}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
+                onKeyDown={(event) => {
+                  if (
+                    !shouldSendMessageFromKey({
+                      key: event.key,
+                      shiftKey: event.shiftKey,
+                      isComposing: event.nativeEvent.isComposing,
+                    })
+                  ) {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  if (!sendMessage.isPending && content.trim()) {
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
                 placeholder={`Message ${title}`}
                 className="min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
                 maxLength={4000}

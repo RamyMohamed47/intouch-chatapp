@@ -26,9 +26,9 @@ import {
   updateConversationSchema,
   type ChannelConversationDto,
 } from "@intouch/shared/conversations";
-import { inviteMemberSchema } from "@intouch/shared/memberships";
 import { updateOrganizationSchema } from "@intouch/shared/organizations";
 
+import { InviteMemberForm } from "@/components/memberships/invite-member-form";
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
 import { initials } from "@/components/workspace/app-shell";
@@ -44,7 +44,6 @@ import { Select } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { categoriesApi } from "@/lib/api/categories";
 import { conversationsApi } from "@/lib/api/conversations";
-import { membershipsApi } from "@/lib/api/memberships";
 import { organizationsApi } from "@/lib/api/organizations";
 import {
   useCategories,
@@ -591,55 +590,14 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
 }
 
 function MemberSettings({ organizationId }: { organizationId: string }) {
-  const queryClient = useQueryClient();
   const members = useMembers(organizationId);
-  const [notice, setNotice] = useState<string | null>(null);
-  const invite = useMutation({
-    mutationFn: (email: string) =>
-      membershipsApi.invite(organizationId, { email }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.invitations.all }),
-    onError: (error) => setNotice(error.message),
-  });
   return (
     <div className="grid gap-5 xl:grid-cols-[0.72fr_1.28fr]">
-      <form
-        className="h-fit rounded-[1.75rem] border border-primary/20 bg-primary/10 p-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const parsed = inviteMemberSchema.safeParse({
-            email: getFormString(new FormData(form), "email"),
-          });
-          if (!parsed.success) return setNotice(firstIssue(parsed.error));
-          invite.mutate(parsed.data.email, {
-            onSuccess: () => {
-              form.reset();
-              setNotice("Invitation created.");
-            },
-          });
-        }}
-      >
+      <section className="h-fit rounded-[1.75rem] border border-primary/20 bg-primary/10 p-6">
         <MailPlus className="size-5 text-primary" />
         <h2 className="mt-5 text-lg font-semibold">Invite a registered user</h2>
-        <div className="mt-5 grid gap-2">
-          <Label htmlFor="invite-email">Email address</Label>
-          <Input
-            id="invite-email"
-            name="email"
-            type="email"
-            placeholder="person@company.com"
-          />
-        </div>
-        <Notice message={notice} />
-        <Button
-          type="submit"
-          className="mt-5 rounded-full"
-          disabled={invite.isPending}
-        >
-          <MailPlus /> Send invitation
-        </Button>
-      </form>
+        <InviteMemberForm organizationId={organizationId} className="mt-5" />
+      </section>
       <section className="rounded-[1.75rem] border border-border bg-background/30 p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Organization members</h2>
