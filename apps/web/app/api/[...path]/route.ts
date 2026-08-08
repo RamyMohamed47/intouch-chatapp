@@ -20,7 +20,7 @@ const proxy = async (request: NextRequest, path: string[]) => {
   target.search = request.nextUrl.search;
 
   const headers = new Headers(request.headers);
-  headers.delete("accept-encoding");
+  headers.set("accept-encoding", "identity");
   headers.delete("connection");
   headers.delete("content-length");
   headers.delete("host");
@@ -37,6 +37,8 @@ const proxy = async (request: NextRequest, path: string[]) => {
   });
   const responseHeaders = new Headers(response.headers);
   responseHeaders.delete("connection");
+  responseHeaders.delete("content-encoding");
+  responseHeaders.delete("content-length");
   responseHeaders.delete("transfer-encoding");
 
   return new Response(response.body, {
