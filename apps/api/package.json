@@ -7,7 +7,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "dev": "tsx watch src/server.ts",
-    "build": "npm run clean && tsc --project tsconfig.build.json",
+    "build": "npm run clean && tsc --project tsconfig.build.json && node dist/docs/copy-openapi.js",
     "start": "node --enable-source-maps dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
@@ -28,7 +28,9 @@
     "mongoose": "^8.24.1",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "swagger-ui-dist": "^5.32.13",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

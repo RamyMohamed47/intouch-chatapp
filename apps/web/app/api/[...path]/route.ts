@@ -1,23 +1,12 @@
 import type { NextRequest } from "next/server";
 
+import { buildBackendProxyTarget } from "@/lib/api/proxy-target";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const getBackendOrigin = () => {
-  const configuredOrigin =
-    process.env.BACKEND_ORIGIN ?? "http://localhost:3000";
-  const url = new URL(configuredOrigin);
-
-  if (!["http:", "https:"].includes(url.protocol)) {
-    throw new Error("BACKEND_ORIGIN must be an HTTP(S) origin");
-  }
-
-  return url.origin;
-};
-
-const proxy = async (request: NextRequest, path: string[]) => {
-  const target = new URL(`/api/${path.join("/")}`, getBackendOrigin());
-  target.search = request.nextUrl.search;
+const proxy = async (request: NextRequest) => {
+  const target = buildBackendProxyTarget(request.nextUrl);
 
   const headers = new Headers(request.headers);
   headers.set("accept-encoding", "identity");
@@ -48,12 +37,7 @@ const proxy = async (request: NextRequest, path: string[]) => {
   });
 };
 
-type RouteContext = { params: Promise<{ path: string[] }> };
-
-const handle = async (request: NextRequest, context: RouteContext) => {
-  const { path } = await context.params;
-  return proxy(request, path);
-};
+const handle = (request: NextRequest) => proxy(request);
 
 export {
   handle as DELETE,

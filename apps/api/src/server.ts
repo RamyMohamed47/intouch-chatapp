@@ -6,6 +6,8 @@ import createSocketRealtimeGateway from "./broadcasting/socketRealtimeGateway.js
 import { loadConfig, loadEnvFile } from "./config/env.js";
 import connectDatabase, { disconnectDatabase } from "./config/database.js";
 import { getLogger } from "./config/logger.js";
+import { createApiDocsRouter } from "./docs/api-docs.router.js";
+import { loadOpenApiContract } from "./docs/openapi.contract.js";
 import type {
   ClientToServerEvents,
   InterServerEvents,
@@ -137,6 +139,7 @@ process.once("SIGINT", () => {
 });
 
 const config = loadConfig();
+const apiDocsRouter = createApiDocsRouter(loadOpenApiContract());
 const abuseProtection = createAbuseProtectionModule(logger);
 resources.closeAbuseProtection = abuseProtection.close;
 const realtimeGateway = createSocketRealtimeGateway();
@@ -180,6 +183,7 @@ const organizations = createOrganizationModule({
 });
 const app = createApp({
   allowedOrigins: config.clientOrigins,
+  apiDocsRouter,
   authRouter: auth.router,
   categoryRouter: organizations.categoryRouter,
   conversationMessageRouter: organizations.conversationMessageRouter,

@@ -13,6 +13,7 @@ import createHttpLogger from "./middleware/httpLogger.js";
 
 export interface AppDependencies {
   allowedOrigins?: readonly string[];
+  apiDocsRouter?: Router;
   authRouter?: Router;
   categoryRouter?: Router;
   conversationMessageRouter?: Router;
@@ -29,6 +30,7 @@ export interface AppDependencies {
 
 const createApp = ({
   allowedOrigins = ["http://localhost:5173"],
+  apiDocsRouter,
   authRouter,
   categoryRouter,
   conversationMessageRouter,
@@ -75,6 +77,10 @@ const createApp = ({
       }),
     );
   });
+
+  if (apiDocsRouter) {
+    app.use("/api", apiDocsRouter);
+  }
 
   if (authRouter) {
     app.use("/api/v1/auth", authRouter);

@@ -29,14 +29,34 @@ npm run dev:web
 
 Frontend server settings are documented in `apps/web/.env.example`.
 `BACKEND_ORIGIN` is server-only and powers the same-origin API proxy;
-`NEXT_PUBLIC_SOCKET_ORIGIN` is the direct Socket.IO endpoint. The imported v0
-workspace shell still uses presentation mock data until its individual screens
-are connected to the frontend auth and API clients.
+`NEXT_PUBLIC_SOCKET_ORIGIN` is the direct Socket.IO endpoint. The application
+uses the proxy for REST and OAuth while Socket.IO connects directly to the API.
 
 Health check:
 
 ```http
 GET /health
+```
+
+## API Documentation
+
+Public, read-only Swagger documentation is available through the frontend's
+same-origin proxy:
+
+- `/api/docs/` for the branded Swagger UI
+- `/api/openapi.yaml` for the canonical YAML contract
+- `/api/openapi.json` for tools that consume JSON
+
+The same paths are available directly on the API origin. Swagger is configured
+for browsing only: request execution and persisted authorization are disabled.
+Use the application, Postman, curl, or another authorized client for manual API
+requests. Socket.IO is outside OpenAPI and remains documented in
+`.agents/sockets/Socket Events.md`.
+
+The authored contract remains `.agents/api/openapi.yaml`. Validate it with:
+
+```bash
+npm run openapi:lint
 ```
 
 Run formatting, linting, strict TypeScript, shared/API tests, and production
