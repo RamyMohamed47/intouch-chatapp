@@ -32,7 +32,7 @@ const documentationHtml = `<!doctype html>
   </head>
   <body>
     <header class="intouch-header">
-      <a class="intouch-brand" href="/api/docs/" aria-label="InTouch API documentation">
+      <a class="intouch-brand" href="/api/docs" aria-label="InTouch API documentation">
         <span class="intouch-brand-warm">In</span><span class="intouch-brand-cool">Touch</span>
         <span class="intouch-brand-label">API</span>
       </a>
@@ -141,11 +141,7 @@ export const createApiDocsRouter = ({ document, yaml }: OpenApiContract) => {
     next();
   });
 
-  router.get(/^\/docs$/, (_req, res) => {
-    res.redirect(308, "/api/docs/");
-  });
-
-  router.get("/docs/", (_req, res) => {
+  router.get(/^\/docs\/?$/, (_req, res) => {
     res.set("Cache-Control", "no-cache");
     res.type("html").send(documentationHtml);
   });

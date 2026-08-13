@@ -57,25 +57,27 @@ after(async () => {
 });
 
 describe("API documentation", () => {
-  test("redirects the unambiguous docs path to its trailing-slash URL", async () => {
-    const response = await fetch(`${baseUrl}/api/docs`, {
+  const assertDocumentationShell = async (path: string) => {
+    const response = await fetch(`${baseUrl}${path}`, {
       redirect: "manual",
     });
-
-    assert.equal(response.status, 308);
-    assert.equal(response.headers.get("location"), "/api/docs/");
-  });
-
-  test("serves a branded, public documentation shell", async () => {
-    const response = await fetch(`${baseUrl}/api/docs/`);
     const html = await response.text();
 
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get("location"), null);
     assert.match(response.headers.get("content-type") ?? "", /^text\/html/);
     assert.match(html, /<title>InTouch API Documentation<\/title>/);
     assert.match(html, /Documentation only/);
     assert.match(html, /\/api\/docs\/swagger-initializer\.js/);
     assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)[^>]*>/i);
+  };
+
+  test("serves the branded shell at the canonical URL", async () => {
+    await assertDocumentationShell("/api/docs");
+  });
+
+  test("also serves the branded shell with a trailing slash", async () => {
+    await assertDocumentationShell("/api/docs/");
   });
 
   test("serves self-hosted Swagger assets with their expected MIME types", async () => {

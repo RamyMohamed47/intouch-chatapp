@@ -4,7 +4,7 @@
 **Audience:** Authorized manual QA and security tester  
 **Frontend URL:** `<add deployed frontend URL>`  
 **API URL:** `<add deployed API URL>`  
-**Swagger URL:** `<frontend URL>/api/docs/`  
+**Swagger URL:** `<frontend URL>/api/docs`
 **Commit/build tested:** `<add Git commit SHA or Railway deployment ID>`
 
 ## 1. Project Description
@@ -37,7 +37,7 @@ Implemented capabilities include:
 - Public, read-only Swagger UI plus downloadable OpenAPI YAML and JSON
   contracts.
 
-Browse the API contract at `<frontend URL>/api/docs/`, download it from
+Browse the API contract at `<frontend URL>/api/docs`, download it from
 `<frontend URL>/api/openapi.yaml` or `<frontend URL>/api/openapi.json`, and use
 `.agents/api/openapi.yaml` as the repository source. The Swagger UI is
 documentation-only and cannot execute requests. Socket.IO events are documented

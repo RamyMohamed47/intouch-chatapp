@@ -43,7 +43,7 @@ GET /health
 Public, read-only Swagger documentation is available through the frontend's
 same-origin proxy:
 
-- `/api/docs/` for the branded Swagger UI
+- `/api/docs` for the branded Swagger UI
 - `/api/openapi.yaml` for the canonical YAML contract
 - `/api/openapi.json` for tools that consume JSON
 
