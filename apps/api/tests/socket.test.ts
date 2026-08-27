@@ -242,6 +242,29 @@ describe("authenticated conversation sockets", () => {
     assert.equal(outsideReceived, false);
   });
 
+  test("isolates anonymous reaction invalidations to the conversation room", async () => {
+    const firstClient = await connect();
+    const secondClient = await connect();
+    await join(firstClient, firstConversationId);
+    await join(secondClient, secondConversationId);
+    let outsideReceived = false;
+    secondClient.on("message-reactions:changed", () => {
+      outsideReceived = true;
+    });
+    const event = {
+      activityId: "3d46f75a-83c4-4ac6-a3cb-24aa830c77e8",
+      conversationId: firstConversationId,
+      messageId: "507f1f77bcf86cd799439020",
+    };
+    const received = new Promise<unknown>((resolve) => {
+      firstClient.once("message-reactions:changed", resolve);
+    });
+    gateway.messageReactionsChanged(event);
+    assert.deepEqual(await received, event);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(outsideReceived, false);
+  });
+
   test("broadcasts anonymous channel receipt invalidations except to the reader", async () => {
     const reader = await connect();
     const sender = await connect("second-token");

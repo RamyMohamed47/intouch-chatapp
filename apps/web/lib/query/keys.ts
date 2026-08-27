@@ -35,5 +35,7 @@ export const queryKeys = {
       ["conversations", conversationId, "messages"] as const,
     messageReaders: (conversationId: string, messageId: string) =>
       ["conversations", conversationId, "message-readers", messageId] as const,
+    reactionUsers: (messageId: string, emoji: string) =>
+      ["messages", messageId, "reaction-users", emoji] as const,
   },
 };

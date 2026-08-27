@@ -6,6 +6,7 @@ import {
   conversationActivityEventSchema,
   conversationSocketSchema,
   membershipJoinedEventSchema,
+  messageReactionsChangedEventSchema,
   organizationSocketSchema,
   presenceEventSchema,
   socketConnectionErrorSchema,
@@ -135,6 +136,22 @@ describe("shared realtime schemas", () => {
       channelReadReceiptsChangedEventSchema.safeParse({
         conversationId,
         userId: actorUserId,
+      }).success,
+      false,
+    );
+  });
+
+  test("validates anonymous message reaction invalidations", () => {
+    const event = {
+      activityId: "3d46f75a-83c4-4ac6-a3cb-24aa830c77e8",
+      conversationId: "507f1f77bcf86cd799439011",
+      messageId: "507f1f77bcf86cd799439012",
+    };
+    assert.deepEqual(messageReactionsChangedEventSchema.parse(event), event);
+    assert.equal(
+      messageReactionsChangedEventSchema.safeParse({
+        ...event,
+        userId: "507f1f77bcf86cd799439013",
       }).success,
       false,
     );

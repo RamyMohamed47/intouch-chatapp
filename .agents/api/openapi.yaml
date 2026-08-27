@@ -790,6 +790,100 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /messages/{messageId}/reactions:
+    get:
+      tags: [Messages]
+      summary: Get the caller's personalized reaction state
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageReactionStateResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /messages/{messageId}/reactions/me:
+    put:
+      tags: [Messages]
+      summary: Set or replace the caller's reaction
+      description: A user has at most one reaction per message. Repeating the current emoji is idempotent.
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      requestBody:
+        $ref: "#/components/requestBodies/SetMessageReactionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageReactionStateResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+    delete:
+      tags: [Messages]
+      summary: Remove the caller's reaction
+      description: Removal is idempotent.
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageReactionStateResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /messages/{messageId}/reactions/users:
+    get:
+      tags: [Messages]
+      summary: List users who selected an emoji reaction
+      description: Results include only current users who retain access to the conversation.
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+        - name: emoji
+          in: query
+          required: true
+          description: Exactly one normalized Unicode emoji sequence.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 32
+        - name: before
+          in: query
+          schema:
+            type: string
+            pattern: "^[a-fA-F0-9]{24}$"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageReactionUsersResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
 
   securitySchemes:
@@ -979,6 +1073,14 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/MessageContentInput"
+
+    SetMessageReactionRequest:
+      description: Defined by the shared message-reaction contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SetMessageReactionInput"
 
   responses:
 
@@ -1259,6 +1361,25 @@ components:
                   - type: string
                   - type: "null"
 
+    MessageReactionStateResponse:
+      description: Authoritative personalized reaction state for one message.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [reactionState]
+            properties:
+              reactionState:
+                $ref: "#/components/schemas/MessageReactionState"
+
+    MessageReactionUsersResponse:
+      description: Cursor-paginated users for one emoji reaction.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MessageReactionUsers"
+
     ValidationError:
       description: Validation failed.
       content:
@@ -1461,7 +1582,7 @@ components:
           format: date-time
         lastMessage:
           oneOf:
-            - $ref: "#/components/schemas/Message"
+            - $ref: "#/components/schemas/MessageCore"
             - type: "null"
         unreadCount:
           type: integer
@@ -1487,7 +1608,7 @@ components:
           $ref: "#/components/schemas/PeerUser"
         lastMessage:
           oneOf:
-            - $ref: "#/components/schemas/Message"
+            - $ref: "#/components/schemas/MessageCore"
             - type: "null"
         unreadCount:
           type: integer
@@ -1621,7 +1742,18 @@ components:
           maxLength: 4000
           pattern: ".*\\S.*"
 
-    Message:
+    SetMessageReactionInput:
+      type: object
+      additionalProperties: false
+      required: [emoji]
+      properties:
+        emoji:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Exactly one NFC-normalized Unicode emoji sequence. Composed and skin-tone variants are distinct.
+
+    MessageCore:
       type: object
       required:
         [id, conversationId, senderId, content, messageType, editedAt, deletedAt, createdAt, updatedAt]
@@ -1655,6 +1787,75 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    MessageReactionSummary:
+      type: object
+      additionalProperties: false
+      required: [emoji, count]
+      properties:
+        emoji:
+          type: string
+          minLength: 1
+        count:
+          type: integer
+          minimum: 1
+
+    MessageReactionState:
+      type: object
+      additionalProperties: false
+      required: [messageId, reactions, currentUserReaction]
+      properties:
+        messageId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        reactions:
+          type: array
+          description: Sorted by descending count and then emoji.
+          items:
+            $ref: "#/components/schemas/MessageReactionSummary"
+        currentUserReaction:
+          oneOf:
+            - type: string
+            - type: "null"
+
+    MessageReactionUsers:
+      type: object
+      additionalProperties: false
+      required: [messageId, emoji, total, users, nextCursor]
+      properties:
+        messageId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        emoji:
+          type: string
+          minLength: 1
+        total:
+          type: integer
+          minimum: 0
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantUser"
+        nextCursor:
+          oneOf:
+            - type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            - type: "null"
+
+    Message:
+      allOf:
+        - $ref: "#/components/schemas/MessageCore"
+        - type: object
+          required: [reactions, currentUserReaction]
+          properties:
+            reactions:
+              type: array
+              items:
+                $ref: "#/components/schemas/MessageReactionSummary"
+            currentUserReaction:
+              oneOf:
+                - type: string
+                - type: "null"
 
     ReadReceipt:
       type: object

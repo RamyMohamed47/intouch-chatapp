@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 import { dateTimeDtoSchema, identifierDtoSchema } from "../common/index.js";
-import { messageDtoSchema, readReceiptDtoSchema } from "../messages/index.js";
+import {
+  messageCoreDtoSchema,
+  readReceiptDtoSchema,
+} from "../messages/index.js";
 import { publicUserSummaryDtoSchema } from "../users/index.js";
 import {
   ConversationType,
@@ -9,7 +12,7 @@ import {
 } from "./conversation.schema.js";
 
 const conversationSummaryShape = {
-  lastMessage: messageDtoSchema.nullable(),
+  lastMessage: messageCoreDtoSchema.nullable(),
   unreadCount: z.number().int().nonnegative(),
   readReceipt: readReceiptDtoSchema.nullable(),
 };

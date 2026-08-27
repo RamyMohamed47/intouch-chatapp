@@ -196,6 +196,12 @@ Message history and creation are scoped to
 deletions use `/api/v1/messages/:messageId`. History uses a `before` message-ID
 cursor and a `limit` from 1 to 100.
 
+Messages support one durable Unicode emoji reaction per user. Selecting another
+emoji replaces the previous reaction; selecting the active reaction removes it.
+Personalized summaries and paginated safe reactor lists are exposed under
+`/api/v1/messages/:messageId/reactions`, while anonymous Socket.IO invalidation
+keeps active conversation views synchronized after committed changes.
+
 One-to-one direct messages use the same `Conversation` collection with
 `type: DIRECT`. Create or retrieve the pair idempotently with
 `POST /api/v1/organizations/:organizationId/direct-messages`; list the caller's

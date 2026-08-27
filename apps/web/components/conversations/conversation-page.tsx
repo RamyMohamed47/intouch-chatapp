@@ -37,10 +37,16 @@ import { initials } from "@/components/workspace/app-shell";
 import { InviteMemberDialog } from "@/components/memberships/invite-member-dialog";
 import {
   isNearConversationBottom,
+  insertEmojiAtSelection,
   restoredScrollTop,
   shouldSendMessageFromKey,
 } from "@/components/conversations/conversation-interactions";
 import { TypingIndicator } from "@/components/conversations/typing-indicator";
+import { ComposerEmojiPicker } from "@/components/conversations/composer-emoji-picker";
+import {
+  MessageReactionPicker,
+  MessageReactionSummaries,
+} from "@/components/conversations/message-reactions";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +75,7 @@ import {
 import { queryKeys } from "@/lib/query/keys";
 import { useRealtime } from "@/lib/realtime/provider";
 import { hasReadMessage } from "@/lib/realtime/read-receipt-cache";
+import { mergeReactionState } from "@/lib/reactions/message-reaction-cache";
 
 const formatTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, {
@@ -188,6 +195,7 @@ export function ConversationPage({
   const [error, setError] = useState<string | null>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const isNearBottomRef = useRef(true);
   const failedReceiptMessageIdRef = useRef<string | null>(null);
   const pendingReceiptMessageIdRef = useRef<string | null>(null);
@@ -412,6 +420,51 @@ export function ConversationPage({
       await refreshSummaries();
     },
   });
+  const mutateReaction = useMutation({
+    mutationFn: ({
+      emoji,
+      messageId,
+      remove,
+    }: {
+      emoji: string;
+      messageId: string;
+      remove: boolean;
+    }) =>
+      remove
+        ? messagesApi.removeReaction(messageId)
+        : messagesApi.setReaction(messageId, { emoji }),
+    onSuccess: (state) => {
+      queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+        queryKeys.conversations.messages(conversationId),
+        (current) => mergeReactionState(current, state),
+      );
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "messages" &&
+          query.queryKey[1] === state.messageId &&
+          query.queryKey[2] === "reaction-users",
+      });
+      setError(null);
+    },
+    onError: (requestError) => setError(requestError.message),
+  });
+
+  const insertEmoji = (emoji: string) => {
+    const textarea = composerRef.current;
+    const start = textarea?.selectionStart ?? content.length;
+    const end = textarea?.selectionEnd ?? content.length;
+    const insertion = insertEmojiAtSelection({ content, emoji, start, end });
+    if (!insertion) {
+      setError("Message cannot exceed 4,000 characters");
+      return;
+    }
+    setContent(insertion.content);
+    setError(null);
+    window.requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(insertion.caret, insertion.caret);
+    });
+  };
 
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -625,6 +678,23 @@ export function ConversationPage({
                           </span>
                         )}
                         <div className="ml-auto flex gap-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
+                          {!message.deletedAt && (
+                            <MessageReactionPicker
+                              currentReaction={message.currentUserReaction}
+                              disabled={
+                                mutateReaction.isPending &&
+                                mutateReaction.variables?.messageId ===
+                                  message.id
+                              }
+                              onSelect={(emoji) =>
+                                mutateReaction.mutate({
+                                  emoji,
+                                  messageId: message.id,
+                                  remove: message.currentUserReaction === emoji,
+                                })
+                              }
+                            />
+                          )}
                           {own && !message.deletedAt && (
                             <Button
                               type="button"
@@ -696,6 +766,20 @@ export function ConversationPage({
                             : message.content}
                         </p>
                       )}
+                      <MessageReactionSummaries
+                        message={message}
+                        disabled={
+                          mutateReaction.isPending &&
+                          mutateReaction.variables?.messageId === message.id
+                        }
+                        onToggle={(emoji) =>
+                          mutateReaction.mutate({
+                            emoji,
+                            messageId: message.id,
+                            remove: message.currentUserReaction === emoji,
+                          })
+                        }
+                      />
                       {own &&
                         conversation.data.type === "DIRECT" &&
                         message.id === latestOutgoingMessage?.id && (
@@ -766,6 +850,7 @@ export function ConversationPage({
                 )}
               </span>
               <Textarea
+                ref={composerRef}
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 onFocus={() => setFocused(true)}
@@ -789,6 +874,10 @@ export function ConversationPage({
                 placeholder={`Message ${title}`}
                 className="min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
                 maxLength={4000}
+              />
+              <ComposerEmojiPicker
+                disabled={sendMessage.isPending}
+                onSelect={insertEmoji}
               />
               <Button
                 type="submit"

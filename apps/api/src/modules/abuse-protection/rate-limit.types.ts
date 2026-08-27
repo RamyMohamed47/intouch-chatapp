@@ -2,6 +2,7 @@ export const RateLimitAction = {
   DIRECT_MESSAGE_CREATE: "direct-message:create",
   MESSAGE_CREATE: "message:create",
   MESSAGE_MUTATE: "message:mutate",
+  MESSAGE_REACTION: "message:reaction",
   READ_RECEIPT_UPDATE: "read-receipt:update",
   SOCKET_CONNECT: "socket:connect",
   SOCKET_SUBSCRIBE: "socket:subscribe",

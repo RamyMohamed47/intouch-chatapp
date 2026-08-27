@@ -5,6 +5,10 @@ import {
   createMessageSchema,
   messageReadReceiptSummaryResponseSchema,
   messageHistoryQuerySchema,
+  messageReactionStateResponseSchema,
+  messageReactionUsersQuerySchema,
+  reactionEmojiSchema,
+  setMessageReactionSchema,
   updateReadReceiptSchema,
 } from "../messages/index.js";
 
@@ -77,6 +81,38 @@ describe("shared message schemas", () => {
         },
       }).success,
       false,
+    );
+  });
+
+  test("validates one normalized emoji and strict reaction inputs", () => {
+    assert.equal(reactionEmojiSchema.parse("👍🏽"), "👍🏽");
+    assert.equal(reactionEmojiSchema.parse("👨‍👩‍👧‍👦"), "👨‍👩‍👧‍👦");
+    assert.equal(reactionEmojiSchema.safeParse("hello").success, false);
+    assert.equal(reactionEmojiSchema.safeParse("👍🎉").success, false);
+    assert.deepEqual(setMessageReactionSchema.parse({ emoji: "❤️" }), {
+      emoji: "❤️",
+    });
+    assert.equal(
+      setMessageReactionSchema.safeParse({ emoji: "👍", extra: true }).success,
+      false,
+    );
+  });
+
+  test("normalizes reaction user pagination and reaction state DTOs", () => {
+    const messageId = "507f1f77bcf86cd799439011";
+    assert.deepEqual(
+      messageReactionUsersQuerySchema.parse({ emoji: "🎉", limit: "20" }),
+      { emoji: "🎉", limit: 20 },
+    );
+    assert.deepEqual(
+      messageReactionStateResponseSchema.parse({
+        reactionState: {
+          messageId,
+          reactions: [{ emoji: "🎉", count: 3 }],
+          currentUserReaction: null,
+        },
+      }).reactionState.reactions,
+      [{ emoji: "🎉", count: 3 }],
     );
   });
 });

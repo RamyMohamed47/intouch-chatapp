@@ -7,6 +7,7 @@ import type {
   ConversationSocketInput,
   MembershipJoinedEvent,
   MessageEvent,
+  MessageReactionsChangedEvent,
   OrganizationSocketInput,
   PresenceEvent,
   ReadReceiptEvent,
@@ -58,6 +59,7 @@ export interface ServerToClientEvents {
   "message:created": (message: MessageEvent) => void;
   "message:deleted": (message: MessageEvent) => void;
   "message:updated": (message: MessageEvent) => void;
+  "message-reactions:changed": (event: MessageReactionsChangedEvent) => void;
   "membership:joined": (event: MembershipJoinedEvent) => void;
   "presence:updated": (presence: PresenceEvent) => void;
   "typing:updated": (update: TypingEvent) => void;

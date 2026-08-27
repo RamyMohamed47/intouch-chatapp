@@ -1,6 +1,7 @@
 import type {
   CreateMessageInput,
   MessageHistoryQuery,
+  MessageReactionSummaryDto,
   UpdateMessageInput,
 } from "@intouch/shared/messages";
 import { MessageType, type MessageTypeValue } from "@intouch/shared/messages";
@@ -40,7 +41,12 @@ export interface CreateMessageRecordInput {
 }
 
 export interface MessagePage {
-  messages: MessageRecord[];
+  messages: Array<
+    MessageRecord & {
+      reactions: MessageReactionSummaryDto[];
+      currentUserReaction: string | null;
+    }
+  >;
   nextCursor: string | null;
 }
 

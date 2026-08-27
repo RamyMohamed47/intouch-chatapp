@@ -25,6 +25,9 @@ import {
 } from "../src/modules/message/message.routes.js";
 import type { MessageService } from "../src/modules/message/message.service.js";
 import { MessageType } from "../src/modules/message/message.types.js";
+import createMessageReactionController from "../src/modules/message-reactions/message-reaction.controller.js";
+import createMessageReactionRouter from "../src/modules/message-reactions/message-reaction.routes.js";
+import type { MessageReactionService } from "../src/modules/message-reactions/message-reaction.service.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const organizationId = "507f1f77bcf86cd799439012";
@@ -67,11 +70,15 @@ const message = {
   deletedAt: null,
   createdAt: now,
   updatedAt: now,
+  reactions: [],
+  currentUserReaction: null,
 };
 
 let receivedCategoryName: string | undefined;
 let receivedVisibility: string | undefined;
 let receivedHistoryLimit: number | undefined;
+let receivedReactionEmoji: string | undefined;
+let receivedReactionUserLimit: number | undefined;
 
 const categories: CategoryService = {
   create: async (_userId, _organizationId, input) => {
@@ -116,6 +123,35 @@ const messages: MessageService = {
   update: async () => message,
   delete: async () => undefined,
 };
+const reactionState = (emoji: string | null) => ({
+  messageId,
+  reactions: emoji ? [{ emoji, count: 1 }] : [],
+  currentUserReaction: emoji,
+});
+const messageReactions: MessageReactionService = {
+  decorate: async (_userId, _conversation, records) =>
+    records.map((record) => ({
+      ...record,
+      reactions: [],
+      currentUserReaction: null,
+    })),
+  getState: async () => reactionState(null),
+  set: async (_userId, _messageId, input) => {
+    receivedReactionEmoji = input.emoji;
+    return reactionState(input.emoji);
+  },
+  remove: async () => reactionState(null),
+  listUsers: async (_userId, _messageId, query) => {
+    receivedReactionUserLimit = query.limit;
+    return {
+      messageId,
+      emoji: query.emoji,
+      total: 1,
+      users: [{ id: userId, username: "ramy", displayName: "Ramy Mohamed" }],
+      nextCursor: null,
+    };
+  },
+};
 
 const requireAccessToken: RequestHandler = (_req, res, next) => {
   res.locals.userId = userId;
@@ -126,6 +162,8 @@ const allowAuthenticatedAction: RequestHandler = (_req, _res, next) => next();
 const categoryController = createCategoryController(categories);
 const conversationController = createConversationController(conversations);
 const messageController = createMessageController(messages);
+const messageReactionController =
+  createMessageReactionController(messageReactions);
 const app = createApp({
   categoryRouter: createCategoryRouter(categoryController, requireAccessToken),
   conversationMessageRouter: createConversationMessageRouter(
@@ -139,6 +177,11 @@ const app = createApp({
   ),
   messageRouter: createMessageRouter(
     messageController,
+    requireAccessToken,
+    allowAuthenticatedAction,
+  ),
+  messageReactionRouter: createMessageReactionRouter(
+    messageReactionController,
     requireAccessToken,
     allowAuthenticatedAction,
   ),
@@ -218,5 +261,47 @@ describe("category, conversation, and message routes", () => {
     });
     assert.equal(response.status, 204);
     assert.equal(await response.text(), "");
+  });
+
+  test("sets, lists, and removes a personalized message reaction", async () => {
+    const setResponse = await fetch(
+      `${baseUrl}/api/v1/messages/${messageId}/reactions/me`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ emoji: "👍" }),
+      },
+    );
+    assert.equal(setResponse.status, 200);
+    assert.equal(receivedReactionEmoji, "👍");
+    const stateResponse = await fetch(
+      `${baseUrl}/api/v1/messages/${messageId}/reactions`,
+    );
+    assert.equal(stateResponse.status, 200);
+    const usersResponse = await fetch(
+      `${baseUrl}/api/v1/messages/${messageId}/reactions/users?emoji=${encodeURIComponent("👍")}&limit=20`,
+    );
+    assert.equal(usersResponse.status, 200);
+    assert.equal(receivedReactionUserLimit, 20);
+    const usersBody = (await usersResponse.json()) as Record<string, unknown>;
+    assert.equal(usersBody.messageId, messageId);
+    assert.equal("reactionUsers" in usersBody, false);
+    const deleteResponse = await fetch(
+      `${baseUrl}/api/v1/messages/${messageId}/reactions/me`,
+      { method: "DELETE" },
+    );
+    assert.equal(deleteResponse.status, 200);
+  });
+
+  test("rejects non-emoji reaction input", async () => {
+    const response = await fetch(
+      `${baseUrl}/api/v1/messages/${messageId}/reactions/me`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ emoji: "not emoji" }),
+      },
+    );
+    assert.equal(response.status, 400);
   });
 });

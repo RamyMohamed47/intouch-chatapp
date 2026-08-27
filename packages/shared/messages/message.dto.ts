@@ -9,7 +9,7 @@ export const MessageType = {
 
 export const messageTypeSchema = z.enum(MessageType);
 
-export const messageDtoSchema = z.object({
+export const messageCoreDtoSchema = z.object({
   id: identifierDtoSchema,
   conversationId: identifierDtoSchema,
   senderId: identifierDtoSchema,
@@ -21,6 +21,26 @@ export const messageDtoSchema = z.object({
   updatedAt: dateTimeDtoSchema,
 });
 
+export const messageReactionSummaryDtoSchema = z
+  .object({
+    emoji: z.string().min(1),
+    count: z.number().int().positive(),
+  })
+  .strict();
+
+export const messageReactionStateDtoSchema = z
+  .object({
+    messageId: identifierDtoSchema,
+    reactions: z.array(messageReactionSummaryDtoSchema),
+    currentUserReaction: z.string().min(1).nullable(),
+  })
+  .strict();
+
+export const messageDtoSchema = messageCoreDtoSchema.extend({
+  reactions: z.array(messageReactionSummaryDtoSchema),
+  currentUserReaction: z.string().min(1).nullable(),
+});
+
 export const messageResponseSchema = z.object({
   message: messageDtoSchema,
 });
@@ -29,6 +49,22 @@ export const messageListResponseSchema = z.object({
   messages: z.array(messageDtoSchema),
   nextCursor: z.string().nullable(),
 });
+
+export const messageReactionStateResponseSchema = z
+  .object({ reactionState: messageReactionStateDtoSchema })
+  .strict();
+
+export const messageReactionUsersDtoSchema = z
+  .object({
+    messageId: identifierDtoSchema,
+    emoji: z.string().min(1),
+    total: z.number().int().nonnegative(),
+    users: z.array(publicUserSummaryDtoSchema),
+    nextCursor: identifierDtoSchema.nullable(),
+  })
+  .strict();
+
+export const messageReactionUsersResponseSchema = messageReactionUsersDtoSchema;
 
 export const readReceiptDtoSchema = z.object({
   id: identifierDtoSchema,
@@ -53,11 +89,27 @@ export const messageReadReceiptSummaryResponseSchema = z.object({
 });
 
 export type MessageTypeValue = z.infer<typeof messageTypeSchema>;
+export type MessageCoreDto = z.infer<typeof messageCoreDtoSchema>;
 export type MessageDto = z.infer<typeof messageDtoSchema>;
 export type MessageResponse = z.infer<typeof messageResponseSchema>;
 export type MessageListResponse = z.infer<typeof messageListResponseSchema>;
 export type ReadReceiptDto = z.infer<typeof readReceiptDtoSchema>;
 export type ReadReceiptResponse = z.infer<typeof readReceiptResponseSchema>;
+export type MessageReactionSummaryDto = z.infer<
+  typeof messageReactionSummaryDtoSchema
+>;
+export type MessageReactionStateDto = z.infer<
+  typeof messageReactionStateDtoSchema
+>;
+export type MessageReactionStateResponse = z.infer<
+  typeof messageReactionStateResponseSchema
+>;
+export type MessageReactionUsersDto = z.infer<
+  typeof messageReactionUsersDtoSchema
+>;
+export type MessageReactionUsersResponse = z.infer<
+  typeof messageReactionUsersResponseSchema
+>;
 export type MessageReadReceiptSummaryDto = z.infer<
   typeof messageReadReceiptSummaryDtoSchema
 >;

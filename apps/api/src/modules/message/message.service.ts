@@ -9,7 +9,7 @@ import type { ConversationActivityService } from "../conversation-activity/index
 import type { ConversationService } from "../conversations/conversation.service.js";
 import { ConversationNotFoundError } from "../conversations/conversation.errors.js";
 import type { ConversationPolicy } from "../conversations/conversation.policy.js";
-import type { MembershipService } from "../memberships/index.js";
+import type { MessageReactionService } from "../message-reactions/index.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
 import { MessageNotFoundError } from "./message.errors.js";
 import type { MessageRepository } from "./message.repository.js";
@@ -29,8 +29,8 @@ export interface MessageServiceDependencies {
     ConversationService,
     "getAccessible" | "getAccessibleInContext"
   >;
-  memberships: Pick<MembershipService, "findForUser">;
   messages: MessageRepository;
+  reactions: Pick<MessageReactionService, "decorate">;
   unitOfWork: OrganizationUnitOfWork;
 }
 
@@ -39,8 +39,8 @@ const createMessageService = ({
   broadcaster,
   conversationPolicy,
   conversations,
-  memberships,
   messages,
+  reactions,
   unitOfWork,
 }: MessageServiceDependencies) => ({
   async list(
@@ -48,7 +48,10 @@ const createMessageService = ({
     conversationId: string,
     query: MessageHistoryQuery,
   ): Promise<MessagePage> {
-    await conversations.getAccessible(userId, conversationId);
+    const conversation = await conversations.getAccessible(
+      userId,
+      conversationId,
+    );
     const records = await messages.listByConversation(
       conversationId,
       query.before,
@@ -57,7 +60,7 @@ const createMessageService = ({
     const hasMore = records.length > query.limit;
     const page = hasMore ? records.slice(0, query.limit) : records;
     return {
-      messages: page,
+      messages: await reactions.decorate(userId, conversation, page),
       nextCursor: hasMore ? (page.at(-1)?.id ?? null) : null,
     };
   },
@@ -98,7 +101,11 @@ const createMessageService = ({
     });
     broadcaster.messageCreated(result.message);
     await activity.messageCreated(result.conversation, userId);
-    return result.message;
+    return {
+      ...result.message,
+      reactions: [],
+      currentUserReaction: null,
+    };
   },
 
   async update(userId: string, messageId: string, input: UpdateMessageInput) {
@@ -117,31 +124,48 @@ const createMessageService = ({
     if (!message) throw new MessageNotFoundError();
     broadcaster.messageUpdated(message);
     await activity.messageUpdated(conversation, userId);
-    return message;
+    const [decorated] = await reactions.decorate(userId, conversation, [
+      message,
+    ]);
+    if (!decorated) throw new MessageNotFoundError();
+    return decorated;
   },
 
   async delete(userId: string, messageId: string) {
-    const existing = await messages.findById(messageId);
-    if (!existing) throw new MessageNotFoundError();
-    const conversation = await conversations.getAccessible(
-      userId,
-      existing.conversationId,
-    );
-    const membership = await memberships.findForUser(
-      userId,
-      conversation.organizationId,
-    );
-    conversationPolicy.assertMessageDeletable(
-      existing,
-      conversation,
-      userId,
-      membership,
-    );
-    if (existing.deletedAt) return;
-    const message = await messages.redact(messageId, new Date());
-    if (!message) throw new MessageNotFoundError();
-    broadcaster.messageDeleted(message);
-    await activity.messageDeleted(conversation, userId);
+    const result = await unitOfWork.run(async (context) => {
+      const existing = await context.messages.findById(messageId);
+      if (!existing) throw new MessageNotFoundError();
+      const conversation = await conversations.getAccessibleInContext(
+        userId,
+        existing.conversationId,
+        context,
+      );
+      const membership = await context.memberships.findForUser(
+        userId,
+        conversation.organizationId,
+      );
+      conversationPolicy.assertMessageDeletable(
+        existing,
+        conversation,
+        userId,
+        membership,
+      );
+      if (existing.deletedAt) return null;
+      if (
+        !(await context.organizations.lockForMutation(
+          conversation.organizationId,
+        ))
+      ) {
+        throw new MessageNotFoundError();
+      }
+      const message = await context.messages.redact(messageId, new Date());
+      if (!message) throw new MessageNotFoundError();
+      await context.messageReactions.deleteByMessageId(messageId);
+      return { conversation, message };
+    });
+    if (!result) return;
+    broadcaster.messageDeleted(result.message);
+    await activity.messageDeleted(result.conversation, userId);
   },
 });
 

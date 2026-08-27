@@ -57,6 +57,13 @@ import {
   createMongooseMessageRepository,
 } from "../message/index.js";
 import {
+  createMessageReactionController,
+  createMessageReactionRouter,
+  createMessageReactionService,
+  createMongooseMessageReactionRepository,
+  type MessageReactionRealtime,
+} from "../message-reactions/index.js";
+import {
   createMongooseConversationReadStateRepository,
   createReadReceiptController,
   createReadReceiptRouter,
@@ -80,6 +87,7 @@ export interface OrganizationModuleDependencies {
   conversationRealtime: ConversationRealtime;
   membershipRealtime: MembershipRealtime;
   messageBroadcaster: MessageBroadcaster;
+  messageReactionRealtime: MessageReactionRealtime;
   logger: Logger;
   presenceRealtime: PresenceRealtime;
   readReceiptRealtime: ReadReceiptRealtime;
@@ -92,6 +100,7 @@ const createOrganizationModule = ({
   conversationRealtime,
   membershipRealtime,
   messageBroadcaster,
+  messageReactionRealtime,
   logger,
   presenceRealtime,
   rateLimits,
@@ -113,6 +122,11 @@ const createOrganizationModule = ({
     RateLimitAction.MESSAGE_MUTATE,
     "Too many message mutation attempts",
   );
+  const mutateMessageReactionLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.MESSAGE_REACTION,
+    "Too many message reaction attempts",
+  );
   const updateReadReceiptLimit = createAuthenticatedRateLimit(
     rateLimits,
     RateLimitAction.READ_RECEIPT_UPDATE,
@@ -123,6 +137,7 @@ const createOrganizationModule = ({
   const conversationParticipants =
     createMongooseConversationParticipantRepository();
   const messages = createMongooseMessageRepository();
+  const messageReactions = createMongooseMessageReactionRepository();
   const conversationReadStates =
     createMongooseConversationReadStateRepository();
   const conversationSummaries = createMongooseConversationSummaryRepository();
@@ -180,13 +195,24 @@ const createOrganizationModule = ({
     unitOfWork,
     users,
   });
+  const messageReactionService = createMessageReactionService({
+    conversations: conversationService,
+    logger,
+    memberships,
+    messages,
+    participants: conversationParticipants,
+    reactions: messageReactions,
+    realtime: messageReactionRealtime,
+    unitOfWork,
+    users,
+  });
   const messageService = createMessageService({
     activity: conversationActivity,
     broadcaster: messageBroadcaster,
     conversationPolicy,
     conversations: conversationService,
-    memberships,
     messages,
+    reactions: messageReactionService,
     unitOfWork,
   });
   const directMessageService = createDirectMessageService({
@@ -208,6 +234,9 @@ const createOrganizationModule = ({
   const conversationController =
     createConversationController(conversationService);
   const messageController = createMessageController(messageService);
+  const messageReactionController = createMessageReactionController(
+    messageReactionService,
+  );
   const directMessageController =
     createDirectMessageController(directMessageService);
   const readReceiptController = createReadReceiptController(readReceiptService);
@@ -271,6 +300,11 @@ const createOrganizationModule = ({
     requireAccessToken,
     mutateMessageLimit,
   );
+  const messageReactionRouter = createMessageReactionRouter(
+    messageReactionController,
+    requireAccessToken,
+    mutateMessageReactionLimit,
+  );
 
   return {
     accessRouter,
@@ -281,6 +315,7 @@ const createOrganizationModule = ({
     directMessageRouter,
     invitationRouter,
     messageRouter,
+    messageReactionRouter,
     membershipDirectory,
     organizationConversationRouter,
     presenceService,

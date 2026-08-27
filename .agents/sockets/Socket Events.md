@@ -74,9 +74,9 @@ the next heartbeat within approximately three seconds.
 
 ## Server Events
 
-- `message:created` carries the complete public message DTO.
-- `message:updated` carries the complete updated message DTO.
-- `message:deleted` carries the redacted message tombstone.
+- `message:created` carries the non-personalized message core DTO.
+- `message:updated` carries the non-personalized updated message core DTO.
+- `message:deleted` carries the non-personalized redacted message tombstone.
 - `membership:joined` carries `{ organizationId, userId }` after an invitation acceptance or public join commits. Organization subscribers invalidate that organization's safe member roster; the event is an invalidation signal and does not duplicate user profile data.
 - `conversation:access-revoked` carries `{ conversationId }` before the socket is removed from that room.
 - `presence:updated` carries `{ userId, status, lastSeenAt }` to subscribed organization rooms. Online updates always use `lastSeenAt: null`; confirmed offline updates carry the persisted final-disconnect timestamp.
@@ -84,6 +84,7 @@ the next heartbeat within approximately three seconds.
 - `read-receipt:updated` carries the durable read-state DTO and is emitted only when a direct-message high-water mark advances. Events are idempotent; clients ignore stale, duplicate, and self updates and merge newer peer state into their server-state cache.
 - `conversation:activity` carries `{ organizationId, conversationId, conversationType, actorUserId, activityId, kind }` to authorized `user:<userId>` rooms. Kinds are `CONVERSATION_CREATED`, `MESSAGE_CREATED`, `MESSAGE_UPDATED`, and `MESSAGE_DELETED`. The payload intentionally contains no message content.
 - `channel-read-receipts:changed` carries only `{ conversationId }` to the active channel room when a channel high-water mark advances. It is an anonymous cache-invalidation signal and excludes every socket belonging to the reader.
+- `message-reactions:changed` carries `{ activityId, conversationId, messageId }` after a reaction transaction commits. It contains no reactor identity and is scoped to the authorized conversation room. Clients handle duplicate activity IDs idempotently and fetch `GET /api/v1/messages/:messageId/reactions` before merging authoritative personalized summaries.
 
 Messages are written through REST. Socket.IO only manages authorized room
 subscriptions and scoped server events; no event is broadcast globally.
@@ -120,3 +121,9 @@ queries after reconnecting. Clients also reconcile cached channel and direct
 conversation summaries after reconnecting or rotating an access token. Channel
 reader identities never appear in socket events; only the sender may request a
 bounded reader summary through REST.
+
+Reaction mutations also remain REST-only. Socket.IO delivers anonymous
+post-commit invalidation rather than personalized reaction data, so every client
+reconciles against MongoDB and stale or unauthorized reactor identities cannot
+leak through room events. Reaction changes do not create notifications, unread
+counts, last-message activity, or typing/read-receipt changes.

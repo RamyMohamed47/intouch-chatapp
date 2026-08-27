@@ -21,6 +21,7 @@ export interface AppDependencies {
   directMessageRouter?: Router;
   invitationRouter?: Router;
   messageRouter?: Router;
+  messageReactionRouter?: Router;
   organizationAccessRouter?: Router;
   organizationConversationRouter?: Router;
   organizationRouter?: Router;
@@ -38,6 +39,7 @@ const createApp = ({
   directMessageRouter,
   invitationRouter,
   messageRouter,
+  messageReactionRouter,
   organizationAccessRouter,
   organizationConversationRouter,
   organizationRouter,
@@ -124,6 +126,10 @@ const createApp = ({
 
   if (messageRouter) {
     app.use("/api/v1/messages", messageRouter);
+  }
+
+  if (messageReactionRouter) {
+    app.use("/api/v1/messages", messageReactionRouter);
   }
 
   app.use((req, _res, next) => {

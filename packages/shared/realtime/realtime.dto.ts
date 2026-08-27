@@ -2,7 +2,10 @@ import { z } from "zod";
 
 import { errorDtoSchema } from "../common/index.js";
 import { PresenceStatus } from "../memberships/index.js";
-import { messageDtoSchema, readReceiptDtoSchema } from "../messages/index.js";
+import {
+  messageCoreDtoSchema,
+  readReceiptDtoSchema,
+} from "../messages/index.js";
 import { ConversationType } from "../conversations/index.js";
 import {
   conversationSocketSchema,
@@ -57,8 +60,16 @@ export const membershipJoinedEventSchema = organizationSocketSchema.extend({
 });
 
 export const conversationAccessRevokedEventSchema = conversationSocketSchema;
-export const messageEventSchema = messageDtoSchema;
+export const messageEventSchema = messageCoreDtoSchema;
 export const readReceiptEventSchema = readReceiptDtoSchema;
+
+export const messageReactionsChangedEventSchema = z
+  .object({
+    activityId: z.string().uuid(),
+    conversationId: socketIdentifierSchema,
+    messageId: socketIdentifierSchema,
+  })
+  .strict();
 
 export const ConversationActivityKind = {
   CONVERSATION_CREATED: "CONVERSATION_CREATED",
@@ -94,6 +105,9 @@ export type ConversationAccessRevokedEvent = z.infer<
   typeof conversationAccessRevokedEventSchema
 >;
 export type MessageEvent = z.infer<typeof messageEventSchema>;
+export type MessageReactionsChangedEvent = z.infer<
+  typeof messageReactionsChangedEventSchema
+>;
 export type ReadReceiptEvent = z.infer<typeof readReceiptEventSchema>;
 export type ConversationActivityKindValue = z.infer<
   typeof conversationActivityKindSchema

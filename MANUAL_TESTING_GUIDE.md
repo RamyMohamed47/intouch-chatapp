@@ -28,7 +28,7 @@ Implemented capabilities include:
 - Private-channel participant management.
 - Organization-scoped one-to-one direct messages.
 - Message history, sending, editing, redacted deletion, and pagination.
-- Unread counts and durable read receipts.
+- Unread counts, durable read receipts, and durable emoji reactions.
 - Realtime message delivery, typing indicators, online presence, and access
   revocation.
 - Per-IP, per-account, and authenticated per-user abuse protection.
@@ -61,7 +61,7 @@ Treat these as known limitations unless behavior differs from the description:
   and adding a password to a Google-only account are not implemented.
 - Public organization discovery is not implemented. Public organizations are
   joinable only through a known organization URL.
-- Group DMs, attachments, reactions, threads, mentions, notifications, search,
+- Group DMs, attachments, custom emoji, threads, mentions, notifications, search,
   meetings, and message delivery receipts are not implemented.
 - Organization deletion is permanent. Deleted messages remain as redacted
   tombstones, but deleted organizations/channels are hard-deleted.
@@ -205,26 +205,32 @@ Record each case as `Pass`, `Fail`, `Blocked`, or `Not Run`.
 
 ### Direct Messages and Messaging
 
-| ID     | Test                            | Steps                                                                                            | Expected result                                                                                            |
-| ------ | ------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| MSG-01 | Create DM                       | Start a DM with another current organization member.                                             | One-to-one DM opens and appears for both participants.                                                     |
-| MSG-02 | Idempotent DM                   | Start a DM with the same person again.                                                           | Existing conversation opens; no duplicate pair is created.                                                 |
-| MSG-03 | DM boundaries                   | Attempt self-DM, outsider DM, and direct access by a third organization member.                  | Self request is `400`; outsider/inaccessible DM is concealed as `404`.                                     |
-| MSG-04 | Send button                     | Send a normal message with the button.                                                           | It appears once, composer clears, and the other participant receives it live.                              |
-| MSG-05 | Keyboard sending                | Press Enter with text; then use Shift+Enter in another message.                                  | Enter sends once; Shift+Enter creates a newline without sending prematurely.                               |
-| MSG-06 | Message validation              | Try empty, whitespace-only, and over-4,000-character content.                                    | Invalid content is not created and a clear validation error appears.                                       |
-| MSG-07 | Scoped realtime delivery        | Open two different conversations in separate clients and send in one.                            | Event appears only in the joined conversation room and relevant summaries update.                          |
-| MSG-08 | REST/socket deduplication       | Send while both REST and Socket.IO are active.                                                   | The message appears exactly once despite REST response and socket broadcast.                               |
-| MSG-09 | Initial and sent-message scroll | Open a long conversation and send from while scrolled upward.                                    | Initial history opens at the bottom; locally sent message scrolls smoothly to the bottom.                  |
-| MSG-10 | Incoming scroll policy          | Receive a message while near the bottom, then while reading older history.                       | Near-bottom view follows the message; reading position is preserved when scrolled up.                      |
-| MSG-11 | Load earlier history            | Select Load earlier messages in a paginated conversation.                                        | Older messages prepend, current visible position is preserved, and no duplicates appear.                   |
-| MSG-12 | Edit own message                | Edit a message you sent.                                                                         | Content updates live, `edited` appears, and timestamp/identity remain coherent.                            |
-| MSG-13 | Reject foreign edit             | Attempt to edit another user's message through the API.                                          | Returns `403`; content is unchanged.                                                                       |
-| MSG-14 | Delete own message              | Delete your message.                                                                             | Content becomes a `Message deleted` tombstone for all viewers; timeline position remains.                  |
-| MSG-15 | Channel owner moderation        | As owner, delete a member's channel message.                                                     | Deletion succeeds and broadcasts a tombstone.                                                              |
-| MSG-16 | DM privacy                      | As organization owner who is not the sender, attempt to delete another participant's DM message. | Returns `403`; organization ownership does not grant DM moderation.                                        |
-| MSG-17 | Repeated deletion               | Delete the same message again through the API.                                                   | Operation remains idempotent and does not restore or duplicate data.                                       |
-| MSG-18 | Unread summaries                | Send messages from another account while recipient is elsewhere.                                 | Channel/DM summaries show correct unread counts; sender's own messages do not increase their unread count. |
+| ID     | Test                            | Steps                                                                                            | Expected result                                                                                                                      |
+| ------ | ------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| MSG-01 | Create DM                       | Start a DM with another current organization member.                                             | One-to-one DM opens and appears for both participants.                                                                               |
+| MSG-02 | Idempotent DM                   | Start a DM with the same person again.                                                           | Existing conversation opens; no duplicate pair is created.                                                                           |
+| MSG-03 | DM boundaries                   | Attempt self-DM, outsider DM, and direct access by a third organization member.                  | Self request is `400`; outsider/inaccessible DM is concealed as `404`.                                                               |
+| MSG-04 | Send button                     | Send a normal message with the button.                                                           | It appears once, composer clears, and the other participant receives it live.                                                        |
+| MSG-05 | Keyboard sending                | Press Enter with text; then use Shift+Enter in another message.                                  | Enter sends once; Shift+Enter creates a newline without sending prematurely.                                                         |
+| MSG-06 | Message validation              | Try empty, whitespace-only, and over-4,000-character content.                                    | Invalid content is not created and a clear validation error appears.                                                                 |
+| MSG-07 | Scoped realtime delivery        | Open two different conversations in separate clients and send in one.                            | Event appears only in the joined conversation room and relevant summaries update.                                                    |
+| MSG-08 | REST/socket deduplication       | Send while both REST and Socket.IO are active.                                                   | The message appears exactly once despite REST response and socket broadcast.                                                         |
+| MSG-09 | Initial and sent-message scroll | Open a long conversation and send from while scrolled upward.                                    | Initial history opens at the bottom; locally sent message scrolls smoothly to the bottom.                                            |
+| MSG-10 | Incoming scroll policy          | Receive a message while near the bottom, then while reading older history.                       | Near-bottom view follows the message; reading position is preserved when scrolled up.                                                |
+| MSG-11 | Load earlier history            | Select Load earlier messages in a paginated conversation.                                        | Older messages prepend, current visible position is preserved, and no duplicates appear.                                             |
+| MSG-12 | Edit own message                | Edit a message you sent.                                                                         | Content updates live, `edited` appears, and timestamp/identity remain coherent.                                                      |
+| MSG-13 | Reject foreign edit             | Attempt to edit another user's message through the API.                                          | Returns `403`; content is unchanged.                                                                                                 |
+| MSG-14 | Delete own message              | Delete your message.                                                                             | Content becomes a `Message deleted` tombstone for all viewers; timeline position remains.                                            |
+| MSG-15 | Channel owner moderation        | As owner, delete a member's channel message.                                                     | Deletion succeeds and broadcasts a tombstone.                                                                                        |
+| MSG-16 | DM privacy                      | As organization owner who is not the sender, attempt to delete another participant's DM message. | Returns `403`; organization ownership does not grant DM moderation.                                                                  |
+| MSG-17 | Repeated deletion               | Delete the same message again through the API.                                                   | Operation remains idempotent and does not restore or duplicate data.                                                                 |
+| MSG-18 | Unread summaries                | Send messages from another account while recipient is elsewhere.                                 | Channel/DM summaries show correct unread counts; sender's own messages do not increase their unread count.                           |
+| MSG-19 | Composer emoji picker           | Place the caret within text, select text, and choose emoji from the composer picker.             | Emoji inserts at the caret or replaces the selection, focus returns to the composer, and the 4,000-character limit remains enforced. |
+| MSG-20 | Quick reaction                  | Select a quick reaction on another user's and your own nondeleted messages.                      | The selected emoji appears once, is highlighted for the caller, and updates other active clients without a refresh or notification.  |
+| MSG-21 | Replace and remove reaction     | Select a different emoji, then select the active emoji again.                                    | The reaction is replaced rather than duplicated, then removed; each user has at most one reaction per message.                       |
+| MSG-22 | Reaction member list            | Open a reaction count with more than 30 reactors and load another page.                          | The popover shows safe current-user summaries, total count, cursor pagination, and no inaccessible former members.                   |
+| MSG-23 | Deleted-message reaction rule   | Delete a reacted message, then attempt to react through the API.                                 | Existing reactions are removed atomically; the new attempt returns `409`, and the tombstone has no controls.                         |
+| MSG-24 | Reaction access isolation       | Attempt reaction APIs for an inaccessible private channel or DM.                                 | The message is concealed as `404`, and no realtime invalidation reaches unauthorized sockets.                                        |
 
 ### Presence, Typing, and Read Receipts
 
@@ -289,6 +295,7 @@ deployment. Never reuse another real user's credentials.
 | Edit/delete message combined         | Burst 10; refill 1 every 3 seconds per user                              |
 | Read receipt                         | Burst 30; refill 1 every 500 ms per user                                 |
 | Create DM                            | Burst 5; refill 1 every 12 seconds per user                              |
+| Set/remove message reaction          | Burst 20; refill 1 per second per user                                   |
 | Active sockets                       | Maximum 5 per user                                                       |
 | Socket connection attempts           | Burst 10; refill 1 every 3 seconds per user                              |
 | Join/organization subscribe combined | Burst 20; refill 1 per second per user                                   |

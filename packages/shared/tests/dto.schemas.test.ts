@@ -137,6 +137,8 @@ describe("shared DTO schemas", () => {
       deletedAt: null,
       createdAt: now,
       updatedAt: now,
+      reactions: [{ emoji: "👍", count: 2 }],
+      currentUserReaction: "👍",
     };
     const receipt = {
       id,

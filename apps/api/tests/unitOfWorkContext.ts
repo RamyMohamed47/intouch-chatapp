@@ -2,6 +2,7 @@ import type { CategoryRepository } from "../src/modules/categories/category.repo
 import type { ConversationParticipantRepository } from "../src/modules/conversations/conversation-participant.repository.js";
 import type { ConversationRepository } from "../src/modules/conversations/conversation.repository.js";
 import type { MessageRepository } from "../src/modules/message/message.repository.js";
+import type { MessageReactionRepository } from "../src/modules/message-reactions/message-reaction.repository.js";
 import type { ConversationReadStateRepository } from "../src/modules/read-receipts/read-receipt.repository.js";
 import type { InvitationRepository } from "../src/modules/invitations/invitation.repository.js";
 import type { MembershipService } from "../src/modules/memberships/membership.service.js";
@@ -64,6 +65,19 @@ const messages: MessageRepository = {
   deleteByConversationIds: async () => 0,
 };
 
+const messageReactions: MessageReactionRepository = {
+  findForUser: async () => null,
+  upsert: async () => unused(),
+  deleteForUser: async () => false,
+  summarize: async () => [],
+  listUsers: async () => ({ records: [], total: 0 }),
+  deleteByMessageId: async () => 0,
+  deleteByConversationId: async () => 0,
+  deleteByConversationIds: async () => 0,
+  deleteByConversationAndUser: async () => 0,
+  deleteByConversationExceptUsers: async () => 0,
+};
+
 const conversationReadStates: ConversationReadStateRepository = {
   advance: async () => unused(),
   find: async () => null,
@@ -82,6 +96,7 @@ export const emptyCommunicationContext = {
   conversations,
   conversationParticipants,
   conversationReadStates,
+  messageReactions,
   messages,
 };
 

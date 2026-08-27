@@ -9,7 +9,6 @@ import {
 import type { MessageBroadcaster } from "../src/broadcasting/messageBroadcaster.js";
 import createConversationPolicy from "../src/modules/conversations/conversation.policy.js";
 import type { ConversationRecord } from "../src/modules/conversations/conversation.types.js";
-import { MembershipRole } from "../src/modules/memberships/membership.types.js";
 import type { MessageRepository } from "../src/modules/message/message.repository.js";
 import createMessageService from "../src/modules/message/message.service.js";
 import {
@@ -98,16 +97,15 @@ const createService = (
       getAccessible: async () => conversation,
       getAccessibleInContext: async () => conversation,
     },
-    memberships: {
-      findForUser: async () => ({
-        id: "membership-1",
-        userId,
-        organizationId: conversation.organizationId,
-        role: MembershipRole.MEMBER,
-        joinedAt: now,
-      }),
-    },
     messages: repository,
+    reactions: {
+      decorate: async (_actorUserId, _conversation, records) =>
+        records.map((record) => ({
+          ...record,
+          reactions: [],
+          currentUserReaction: null,
+        })),
+    },
     unitOfWork: createTestUnitOfWork({
       conversations: {
         create: async () => {
@@ -134,7 +132,10 @@ describe("messageService", () => {
   test("returns cursor-paginated history", async () => {
     const service = createService(createRepository(), createBroadcaster());
     const result = await service.list(userId, conversationId, { limit: 50 });
-    assert.deepEqual(result, { messages: [message], nextCursor: null });
+    assert.deepEqual(result, {
+      messages: [{ ...message, reactions: [], currentUserReaction: null }],
+      nextCursor: null,
+    });
   });
 
   test("creates and broadcasts a scoped message", async () => {
@@ -150,7 +151,11 @@ describe("messageService", () => {
     const result = await service.create(userId, conversationId, {
       content: "Hello",
     });
-    assert.equal(result, message);
+    assert.deepEqual(result, {
+      ...message,
+      reactions: [],
+      currentUserReaction: null,
+    });
     assert.deepEqual(broadcaster.created, [message]);
     assert.deepEqual(activityCalls, [userId]);
   });

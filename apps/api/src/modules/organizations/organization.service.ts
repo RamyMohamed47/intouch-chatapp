@@ -201,6 +201,7 @@ const createOrganizationService = ({
       const conversationIds =
         await context.conversations.listIdsByOrganization(organizationId);
       deletedConversationIds = conversationIds;
+      await context.messageReactions.deleteByConversationIds(conversationIds);
       await context.messages.deleteByConversationIds(conversationIds);
       await context.conversationReadStates.deleteByOrganizationId(
         organizationId,

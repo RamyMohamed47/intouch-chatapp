@@ -9,6 +9,7 @@ import MembershipModel from "../src/modules/memberships/membership.model.js";
 import { MembershipRole } from "../src/modules/memberships/membership.types.js";
 import OrganizationModel from "../src/modules/organizations/organization.model.js";
 import MessageModel from "../src/modules/message/message.model.js";
+import MessageReactionModel from "../src/modules/message-reactions/message-reaction.model.js";
 import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
 
 describe("organization persistence indexes", () => {
@@ -102,6 +103,18 @@ describe("organization persistence indexes", () => {
     assert.equal(directActivityIndexes.length, 2);
     assert.equal(participant?.[1].unique, true);
     assert.ok(messageCursor);
+    const messageReaction = MessageReactionModel.schema
+      .indexes()
+      .find(([, options]) => options.name === "unique_message_user_reaction");
+    assert.equal(messageReaction?.[1].unique, true);
+    assert.ok(
+      MessageReactionModel.schema
+        .indexes()
+        .some(
+          ([, options]) =>
+            options.name === "reactions_by_conversation_message_emoji",
+        ),
+    );
     const readState = ConversationReadStateModel.schema
       .indexes()
       .find(

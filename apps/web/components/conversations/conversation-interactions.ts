@@ -28,3 +28,21 @@ export const shouldSendMessageFromKey = ({
   key: string;
   shiftKey: boolean;
 }) => key === "Enter" && !shiftKey && !isComposing;
+
+export const insertEmojiAtSelection = ({
+  content,
+  emoji,
+  end,
+  maxLength = 4_000,
+  start,
+}: {
+  content: string;
+  emoji: string;
+  end: number;
+  maxLength?: number;
+  start: number;
+}) => {
+  const nextContent = `${content.slice(0, start)}${emoji}${content.slice(end)}`;
+  if (nextContent.length > maxLength) return null;
+  return { content: nextContent, caret: start + emoji.length };
+};

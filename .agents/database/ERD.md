@@ -107,6 +107,16 @@ erDiagram
         datetime deletedAt
     }
 
+    MessageReaction {
+        ObjectId id
+        ObjectId conversationId
+        ObjectId messageId
+        ObjectId userId
+        string emoji
+        datetime createdAt
+        datetime updatedAt
+    }
+
     ConversationReadState {
         ObjectId id
         ObjectId organizationId
@@ -152,6 +162,12 @@ erDiagram
     Conversation ||--o{ Message : contains
 
     User ||--o{ Message : sends
+
+    Message ||--o{ MessageReaction : receives
+
+    Conversation ||--o{ MessageReaction : scopes
+
+    User ||--o{ MessageReaction : selects
 
     Conversation ||--o{ ConversationReadState : tracks_reads
 
@@ -221,3 +237,13 @@ offline for the disconnect grace period.
 Deleted messages remain as redacted timeline tombstones: `content` is nullable
 only when `deletedAt` is set. Messages and conversation participants are removed
 transactionally when their channel or organization is deleted.
+
+`MessageReaction` stores one normalized Unicode emoji sequence per user and
+message. A unique `(messageId, userId)` index enforces the one-reaction rule;
+`(conversationId, messageId, emoji)` and `(messageId, emoji, id)` indexes support
+summary aggregation, cleanup, and cursor-paginated reactor lists. Personalized
+reaction summaries are derived from current memberships and, for private
+channels and direct messages, current participant records. Message redaction,
+conversation deletion, organization deletion, private-participant removal, and
+public-to-private visibility transitions delete reactions that no longer have a
+valid lifecycle or authorized owner.

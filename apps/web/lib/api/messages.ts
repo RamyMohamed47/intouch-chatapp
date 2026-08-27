@@ -1,11 +1,14 @@
 import {
   messageListResponseSchema,
   messageReadReceiptSummaryResponseSchema,
+  messageReactionStateResponseSchema,
+  messageReactionUsersResponseSchema,
   messageResponseSchema,
   readReceiptResponseSchema,
   type CreateMessageInput,
   type UpdateMessageInput,
   type UpdateReadReceiptInput,
+  type SetMessageReactionInput,
 } from "@intouch/shared/messages";
 
 import { apiRequest, noContentSchema } from "@/lib/api/client";
@@ -60,5 +63,44 @@ export const messagesApi = {
         messageReadReceiptSummaryResponseSchema,
       )
     ).readReceiptSummary;
+  },
+  async getReactionState(messageId: string) {
+    return (
+      await apiRequest(
+        `/api/v1/messages/${messageId}/reactions`,
+        messageReactionStateResponseSchema,
+      )
+    ).reactionState;
+  },
+  async setReaction(messageId: string, input: SetMessageReactionInput) {
+    return (
+      await apiRequest(
+        `/api/v1/messages/${messageId}/reactions/me`,
+        messageReactionStateResponseSchema,
+        { method: "PUT", body: JSON.stringify(input) },
+      )
+    ).reactionState;
+  },
+  async removeReaction(messageId: string) {
+    return (
+      await apiRequest(
+        `/api/v1/messages/${messageId}/reactions/me`,
+        messageReactionStateResponseSchema,
+        { method: "DELETE" },
+      )
+    ).reactionState;
+  },
+  async listReactionUsers(
+    messageId: string,
+    emoji: string,
+    before?: string,
+    limit = 30,
+  ) {
+    const query = new URLSearchParams({ emoji, limit: String(limit) });
+    if (before) query.set("before", before);
+    return apiRequest(
+      `/api/v1/messages/${messageId}/reactions/users?${query.toString()}`,
+      messageReactionUsersResponseSchema,
+    );
   },
 };

@@ -10,6 +10,7 @@ import {
   conversationActivityEventSchema,
   ConversationActivityKind,
   messageEventSchema,
+  messageReactionsChangedEventSchema,
   membershipJoinedEventSchema,
   presenceEventSchema,
   readReceiptEventSchema,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/auth/access-token";
 import { useAuth } from "@/lib/auth/provider";
 import { refreshAccessToken } from "@/lib/api/client";
+import { messagesApi } from "@/lib/api/messages";
 import { queryKeys } from "@/lib/query/keys";
 import {
   createRealtimeClient,
@@ -49,6 +51,7 @@ import {
   mergePeerReceiptIntoDirectMessagePage,
   mergePeerReceiptIntoInfiniteDirectMessages,
 } from "@/lib/realtime/read-receipt-cache";
+import { mergeReactionState } from "@/lib/reactions/message-reaction-cache";
 
 interface RealtimeContextValue {
   connected: boolean;
@@ -124,11 +127,17 @@ const upsertMessage = (
     messages: page.messages.map((current) => {
       if (current.id !== message.id) return current;
       found = true;
-      return message;
+      return { ...current, ...message };
     }),
   }));
   if (!found && prepend && pages[0]) {
-    pages[0] = { ...pages[0], messages: [message, ...pages[0].messages] };
+    pages[0] = {
+      ...pages[0],
+      messages: [
+        { ...message, reactions: [], currentUserReaction: null },
+        ...pages[0].messages,
+      ],
+    };
   }
   return { ...data, pages };
 };
@@ -180,6 +189,12 @@ export function RealtimeProvider({
     >();
     const seenActivityIds = new Set<string>();
     const seenActivityQueue: string[] = [];
+    const seenReactionActivityIds = new Set<string>();
+    const seenReactionActivityQueue: string[] = [];
+    const reactionTimers = new Map<
+      string,
+      { conversationId: string; timer: ReturnType<typeof setTimeout> }
+    >();
     nextSocket.on("connect", () => {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = undefined;
@@ -251,6 +266,40 @@ export function RealtimeProvider({
     nextSocket.on("message:deleted", (message) =>
       handleMessage(message, false),
     );
+    nextSocket.on("message-reactions:changed", (raw) => {
+      const parsed = messageReactionsChangedEventSchema.safeParse(raw);
+      if (!parsed.success) return;
+      if (seenReactionActivityIds.has(parsed.data.activityId)) return;
+      seenReactionActivityIds.add(parsed.data.activityId);
+      seenReactionActivityQueue.push(parsed.data.activityId);
+      if (seenReactionActivityQueue.length > 200) {
+        const oldest = seenReactionActivityQueue.shift();
+        if (oldest) seenReactionActivityIds.delete(oldest);
+      }
+      const existing = reactionTimers.get(parsed.data.messageId);
+      if (existing) clearTimeout(existing.timer);
+      reactionTimers.set(parsed.data.messageId, {
+        conversationId: parsed.data.conversationId,
+        timer: setTimeout(() => {
+          reactionTimers.delete(parsed.data.messageId);
+          void messagesApi
+            .getReactionState(parsed.data.messageId)
+            .then((state) => {
+              queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+                queryKeys.conversations.messages(parsed.data.conversationId),
+                (current) => mergeReactionState(current, state),
+              );
+              void queryClient.invalidateQueries({
+                predicate: (query) =>
+                  query.queryKey[0] === "messages" &&
+                  query.queryKey[1] === parsed.data.messageId &&
+                  query.queryKey[2] === "reaction-users",
+              });
+            })
+            .catch(() => undefined);
+        }, 100),
+      });
+    });
     nextSocket.on("conversation:activity", (raw) => {
       const parsed = conversationActivityEventSchema.safeParse(raw);
       if (!parsed.success || parsed.data.actorUserId === user?.id) return;
@@ -392,6 +441,12 @@ export function RealtimeProvider({
       );
     });
     nextSocket.on("conversation:access-revoked", ({ conversationId }) => {
+      for (const [messageId, pending] of reactionTimers) {
+        if (pending.conversationId === conversationId) {
+          clearTimeout(pending.timer);
+          reactionTimers.delete(messageId);
+        }
+      }
       joinedConversationIdsRef.current.delete(conversationId);
       clearTypingConversation(conversationId);
       setRevokedConversationId(conversationId);
@@ -409,6 +464,9 @@ export function RealtimeProvider({
       if (reconnectTimer) clearTimeout(reconnectTimer);
       for (const timer of receiptInvalidationTimers.values()) {
         clearTimeout(timer);
+      }
+      for (const pending of reactionTimers.values()) {
+        clearTimeout(pending.timer);
       }
       joinedConversationIdsRef.current.clear();
       clearAllTyping();

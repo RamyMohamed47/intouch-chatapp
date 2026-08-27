@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isNearConversationBottom,
+  insertEmojiAtSelection,
   restoredScrollTop,
   shouldSendMessageFromKey,
 } from "@/components/conversations/conversation-interactions";
@@ -56,5 +57,25 @@ describe("conversation interactions", () => {
         currentHeight: 1_600,
       }),
     ).toBe(840);
+  });
+
+  it("inserts emoji at the current selection and returns the next caret", () => {
+    expect(
+      insertEmojiAtSelection({
+        content: "Hello team",
+        emoji: "🎉",
+        start: 6,
+        end: 10,
+      }),
+    ).toEqual({ content: "Hello 🎉", caret: 8 });
+    expect(
+      insertEmojiAtSelection({
+        content: "1234",
+        emoji: "👍",
+        start: 4,
+        end: 4,
+        maxLength: 5,
+      }),
+    ).toBeNull();
   });
 });

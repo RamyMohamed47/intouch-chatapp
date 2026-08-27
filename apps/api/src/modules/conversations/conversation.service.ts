@@ -401,6 +401,10 @@ const createConversationService = ({
               conversationId,
             );
             if (input.visibility === ConversationVisibility.PRIVATE) {
+              await context.messageReactions.deleteByConversationExceptUsers(
+                conversationId,
+                [userId],
+              );
               await context.conversationParticipants.create({
                 organizationId: channel.organizationId,
                 conversationId,
@@ -467,6 +471,7 @@ const createConversationService = ({
         const count = await context.conversations.countByCategory(
           channel.categoryId,
         );
+        await context.messageReactions.deleteByConversationId(conversationId);
         await context.messages.deleteByConversationId(conversationId);
         await context.conversationReadStates.deleteByConversationId(
           conversationId,
@@ -599,6 +604,10 @@ const createConversationService = ({
         ) {
           throw new ParticipantNotFoundError();
         }
+        await context.messageReactions.deleteByConversationAndUser(
+          conversationId,
+          participantUserId,
+        );
       });
       await realtime.evictUser(conversationId, participantUserId);
     },

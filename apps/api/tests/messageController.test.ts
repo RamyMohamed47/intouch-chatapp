@@ -22,6 +22,11 @@ const message: MessageRecord = {
   createdAt: now,
   updatedAt: now,
 };
+const messageView = {
+  ...message,
+  reactions: [],
+  currentUserReaction: null,
+};
 
 interface MockResponse {
   body: unknown;
@@ -49,8 +54,8 @@ const createService = (
   overrides: Partial<MessageService> = {},
 ): MessageService => ({
   list: async () => ({ messages: [], nextCursor: null }),
-  create: async () => message,
-  update: async () => message,
+  create: async () => messageView,
+  update: async () => messageView,
   delete: async () => undefined,
   ...overrides,
 });
@@ -73,7 +78,7 @@ describe("messageController", () => {
     assert.equal(res.statusCode, 201);
     assert.deepEqual(res.body, {
       message: {
-        ...message,
+        ...messageView,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       },

@@ -24,6 +24,8 @@ import createMongooseMembershipRepository from "../src/modules/memberships/membe
 import createMembershipService from "../src/modules/memberships/membership.service.js";
 import MessageModel from "../src/modules/message/message.model.js";
 import createMongooseMessageRepository from "../src/modules/message/message.repository.js";
+import MessageReactionModel from "../src/modules/message-reactions/message-reaction.model.js";
+import createMongooseMessageReactionRepository from "../src/modules/message-reactions/message-reaction.repository.js";
 import createMongooseConversationSummaryRepository from "../src/modules/message/conversation-summary.repository.js";
 import createMessageService from "../src/modules/message/message.service.js";
 import { MessageType } from "../src/modules/message/message.types.js";
@@ -53,6 +55,7 @@ before(async () => {
     ConversationModel.syncIndexes(),
     ConversationParticipantModel.syncIndexes(),
     MessageModel.syncIndexes(),
+    MessageReactionModel.syncIndexes(),
     ConversationReadStateModel.syncIndexes(),
     UserModel.syncIndexes(),
   ]);
@@ -66,6 +69,7 @@ beforeEach(async () => {
     ConversationModel.deleteMany({}).exec(),
     ConversationParticipantModel.deleteMany({}).exec(),
     MessageModel.deleteMany({}).exec(),
+    MessageReactionModel.deleteMany({}).exec(),
     ConversationReadStateModel.deleteMany({}).exec(),
     UserModel.deleteMany({}).exec(),
   ]);
@@ -117,8 +121,15 @@ const createHarness = (
     },
     conversationPolicy: createConversationPolicy(),
     conversations: conversationService,
-    memberships,
     messages: createMongooseMessageRepository(),
+    reactions: {
+      decorate: async (_userId, _conversation, records) =>
+        records.map((record) => ({
+          ...record,
+          reactions: [],
+          currentUserReaction: null,
+        })),
+    },
     unitOfWork,
   });
   return {
@@ -501,6 +512,7 @@ describe("category and conversation transactions", () => {
               createMongooseMembershipRepository(session),
             ),
             messages: createMongooseMessageRepository(session),
+            messageReactions: createMongooseMessageReactionRepository(session),
             conversationReadStates:
               createMongooseConversationReadStateRepository(session),
             organizations: createMongooseOrganizationRepository(session),
@@ -542,10 +554,102 @@ describe("category and conversation transactions", () => {
       visibility: ConversationVisibility.PUBLIC,
     });
     assert.equal(await ConversationParticipantModel.countDocuments(), 0);
+    const message = await createMongooseMessageRepository().create({
+      conversationId: conversation.id,
+      senderId: ownerId,
+      content: "public reaction target",
+      messageType: MessageType.TEXT,
+    });
+    await createMongooseMessageReactionRepository().upsert({
+      conversationId: conversation.id,
+      messageId: message.id,
+      userId: memberId,
+      emoji: "👍",
+    });
     await conversationService.update(ownerId, conversation.id, {
       visibility: ConversationVisibility.PRIVATE,
     });
     const remaining = await ConversationParticipantModel.find({}).lean().exec();
+    assert.equal(remaining.length, 1);
+    assert.equal(remaining[0]?.userId.toString(), ownerId);
+    assert.equal(await MessageReactionModel.countDocuments(), 0);
+  });
+
+  test("deletes reactions when a message is redacted", async () => {
+    const { category, conversationService, messageService, organization } =
+      await createOrganizationAndCategory();
+    const conversation = await conversationService.create(
+      ownerId,
+      organization.id,
+      {
+        categoryId: category.id,
+        name: "Reaction Cleanup",
+        visibility: ConversationVisibility.PUBLIC,
+      },
+    );
+    const message = await messageService.create(ownerId, conversation.id, {
+      content: "temporary reaction target",
+    });
+    await createMongooseMessageReactionRepository().upsert({
+      conversationId: conversation.id,
+      messageId: message.id,
+      userId: ownerId,
+      emoji: "🎉",
+    });
+
+    await messageService.delete(ownerId, message.id);
+
+    assert.equal(await MessageReactionModel.countDocuments(), 0);
+    const redacted = await MessageModel.findById(message.id).lean().exec();
+    assert.equal(redacted?.content, null);
+    assert.ok(redacted?.deletedAt);
+  });
+
+  test("deletes a removed private participant's reactions", async () => {
+    const { category, conversationService, memberships, organization } =
+      await createOrganizationAndCategory();
+    await memberships.createMember(memberId, organization.id);
+    const conversation = await conversationService.create(
+      ownerId,
+      organization.id,
+      {
+        categoryId: category.id,
+        name: "Private Reactions",
+        visibility: ConversationVisibility.PRIVATE,
+      },
+    );
+    await conversationService.addParticipant(
+      ownerId,
+      conversation.id,
+      memberId,
+    );
+    const message = await createMongooseMessageRepository().create({
+      conversationId: conversation.id,
+      senderId: ownerId,
+      content: "private reaction target",
+      messageType: MessageType.TEXT,
+    });
+    const reactions = createMongooseMessageReactionRepository();
+    await reactions.upsert({
+      conversationId: conversation.id,
+      messageId: message.id,
+      userId: ownerId,
+      emoji: "🎉",
+    });
+    await reactions.upsert({
+      conversationId: conversation.id,
+      messageId: message.id,
+      userId: memberId,
+      emoji: "👍",
+    });
+
+    await conversationService.removeParticipant(
+      ownerId,
+      conversation.id,
+      memberId,
+    );
+
+    const remaining = await MessageReactionModel.find({}).lean().exec();
     assert.equal(remaining.length, 1);
     assert.equal(remaining[0]?.userId.toString(), ownerId);
   });
@@ -568,6 +672,12 @@ describe("category and conversation transactions", () => {
       content: "hello",
       messageType: MessageType.TEXT,
     });
+    await createMongooseMessageReactionRepository().upsert({
+      conversationId: conversation.id,
+      messageId: message.id,
+      userId: ownerId,
+      emoji: "👍",
+    });
     await createMongooseConversationReadStateRepository().advance({
       organizationId: organization.id,
       conversationId: conversation.id,
@@ -581,6 +691,7 @@ describe("category and conversation transactions", () => {
     );
     await conversationService.delete(ownerId, conversation.id);
     assert.equal(await MessageModel.countDocuments(), 0);
+    assert.equal(await MessageReactionModel.countDocuments(), 0);
     assert.equal(await ConversationReadStateModel.countDocuments(), 0);
     await categoryService.delete(ownerId, organization.id, category.id);
     assert.equal(await CategoryModel.countDocuments(), 0);
@@ -621,11 +732,17 @@ describe("category and conversation transactions", () => {
         visibility: ConversationVisibility.PRIVATE,
       },
     );
-    await createMongooseMessageRepository().create({
+    const message = await createMongooseMessageRepository().create({
       conversationId: conversation.id,
       senderId: ownerId,
       content: "temporary",
       messageType: MessageType.TEXT,
+    });
+    await createMongooseMessageReactionRepository().upsert({
+      conversationId: conversation.id,
+      messageId: message.id,
+      userId: ownerId,
+      emoji: "❤️",
     });
 
     await organizationService.delete(ownerId, organization.id);
@@ -635,5 +752,6 @@ describe("category and conversation transactions", () => {
     assert.equal(await ConversationModel.countDocuments(), 0);
     assert.equal(await ConversationParticipantModel.countDocuments(), 0);
     assert.equal(await MessageModel.countDocuments(), 0);
+    assert.equal(await MessageReactionModel.countDocuments(), 0);
   });
 });
