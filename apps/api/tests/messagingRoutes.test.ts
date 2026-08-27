@@ -33,11 +33,13 @@ const directMessage = {
   lastMessage: null,
   unreadCount: 0,
   readReceipt: null,
+  peerReadReceipt: null,
 };
 let created = true;
 let receivedLimit: number | undefined;
 let receivedRecipientId: string | undefined;
 let receivedMessageId: string | undefined;
+let receivedReaderMessageId: string | undefined;
 
 const directMessages: DirectMessageService = {
   create: async (_userId, _organizationId, input) => {
@@ -59,6 +61,24 @@ const readReceipts: ReadReceiptService = {
       userId,
       lastReadMessageId: input.messageId,
       lastReadAt: now,
+    };
+  },
+  summarizeMessageReaders: async (
+    _userId,
+    _conversationId,
+    targetMessageId,
+  ) => {
+    receivedReaderMessageId = targetMessageId;
+    return {
+      messageId: targetMessageId,
+      readByCount: 1,
+      readers: [
+        {
+          id: recipientUserId,
+          username: "recipient",
+          displayName: "Recipient User",
+        },
+      ],
     };
   },
 };
@@ -130,5 +150,26 @@ describe("direct-message and read-receipt routes", () => {
     );
     assert.equal(receiptResponse.status, 200);
     assert.equal(receivedMessageId, messageId);
+  });
+
+  test("returns the sender-authorized channel reader summary", async () => {
+    const response = await fetch(
+      `${baseUrl}/api/v1/conversations/${conversationId}/messages/${messageId}/readers`,
+    );
+    assert.equal(response.status, 200);
+    assert.equal(receivedReaderMessageId, messageId);
+    assert.deepEqual(await response.json(), {
+      readReceiptSummary: {
+        messageId,
+        readByCount: 1,
+        readers: [
+          {
+            id: recipientUserId,
+            username: "recipient",
+            displayName: "Recipient User",
+          },
+        ],
+      },
+    });
   });
 });

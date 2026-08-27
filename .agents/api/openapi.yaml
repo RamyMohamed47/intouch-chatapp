@@ -657,7 +657,7 @@ paths:
     put:
       tags: [Messages]
       summary: Advance the caller's conversation read state
-      description: The high-water mark is monotonic. Direct-message updates are broadcast; channel read state remains private.
+      description: The caller's high-water mark is monotonic. Direct-message updates are broadcast; channel read state remains private. Direct-conversation responses also expose the peer's durable high-water mark.
       parameters:
         - $ref: "#/components/parameters/ConversationId"
       requestBody:
@@ -728,6 +728,26 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+
+  /conversations/{conversationId}/messages/{messageId}/readers:
+    get:
+      tags: [Messages]
+      summary: Summarize readers of the caller's channel message
+      description: Returns an anonymous total plus at most three safe reader previews. The caller must be the message sender, and direct-message conversations are not supported.
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - $ref: "#/components/parameters/MessageId"
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageReadReceiptSummaryResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /messages/{messageId}:
     patch:
@@ -1163,6 +1183,17 @@ components:
               readReceipt:
                 $ref: "#/components/schemas/ReadReceipt"
 
+    MessageReadReceiptSummaryResponse:
+      description: Sender-only channel read-receipt summary.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [readReceiptSummary]
+            properties:
+              readReceiptSummary:
+                $ref: "#/components/schemas/MessageReadReceiptSummary"
+
     OrganizationMemberListResponse:
       description: Organization member list.
       content:
@@ -1443,7 +1474,7 @@ components:
     DirectConversation:
       type: object
       required:
-        [id, organizationId, type, peer, lastMessage, unreadCount, readReceipt, createdAt, updatedAt]
+        [id, organizationId, type, peer, lastMessage, unreadCount, readReceipt, peerReadReceipt, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -1462,6 +1493,11 @@ components:
           type: integer
           minimum: 0
         readReceipt:
+          oneOf:
+            - $ref: "#/components/schemas/ReadReceipt"
+            - type: "null"
+        peerReadReceipt:
+          description: The direct-message peer's durable high-water read state.
           oneOf:
             - $ref: "#/components/schemas/ReadReceipt"
             - type: "null"
@@ -1635,6 +1671,23 @@ components:
         lastReadAt:
           type: string
           format: date-time
+
+    MessageReadReceiptSummary:
+      type: object
+      additionalProperties: false
+      required: [messageId, readByCount, readers]
+      properties:
+        messageId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        readByCount:
+          type: integer
+          minimum: 0
+        readers:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/ParticipantUser"
 
     InviteMemberInput:
       type: object

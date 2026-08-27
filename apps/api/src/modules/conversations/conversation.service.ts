@@ -117,13 +117,6 @@ const createConversationService = ({
     userId: string,
     records: readonly ConversationRecord[],
   ): Promise<ConversationSummary[]> => {
-    const states = await conversationSummaries.getStates(
-      records.map(({ id }) => id),
-      userId,
-    );
-    const statesByConversation = new Map(
-      states.map((state) => [state.conversationId, state]),
-    );
     const directIds = records
       .filter(({ type }) => type === ConversationType.DIRECT)
       .map(({ id }) => id);
@@ -138,9 +131,20 @@ const createConversationService = ({
         );
       }
     }
-    const peers = await users.findPublicByIds([
-      ...new Set(peerIdByConversation.values()),
+    const [states, peers] = await Promise.all([
+      conversationSummaries.getStates(
+        records.map(({ id }) => id),
+        userId,
+        [...peerIdByConversation].map(([conversationId, peerUserId]) => ({
+          conversationId,
+          userId: peerUserId,
+        })),
+      ),
+      users.findPublicByIds([...new Set(peerIdByConversation.values())]),
     ]);
+    const statesByConversation = new Map(
+      states.map((state) => [state.conversationId, state]),
+    );
     const peersById = new Map(peers.map((peer) => [peer.id, peer]));
 
     return records.map((conversation) => {
@@ -176,7 +180,18 @@ const createConversationService = ({
       }
       const peerId = peerIdByConversation.get(conversation.id);
       const peer = peerId ? peersById.get(peerId) : undefined;
-      if (peer) summary.peer = toMemberUser(peer);
+      if (conversation.type === ConversationType.DIRECT) {
+        summary.peerReadReceipt = state?.peerReadReceipt
+          ? {
+              id: state.peerReadReceipt.id,
+              conversationId: state.peerReadReceipt.conversationId,
+              userId: state.peerReadReceipt.userId,
+              lastReadMessageId: state.peerReadReceipt.lastReadMessageId,
+              lastReadAt: state.peerReadReceipt.lastReadAt,
+            }
+          : null;
+        if (peer) summary.peer = toMemberUser(peer);
+      }
       return summary;
     });
   };

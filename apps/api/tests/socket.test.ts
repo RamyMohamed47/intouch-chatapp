@@ -212,6 +212,54 @@ describe("authenticated conversation sockets", () => {
     assert.equal(secondClientReceived, false);
   });
 
+  test("delivers conversation activity only to targeted user rooms", async () => {
+    const targeted = await connect();
+    const outside = await connect("second-token");
+    let outsideReceived = false;
+    outside.on("conversation:activity", () => {
+      outsideReceived = true;
+    });
+    const received = new Promise<unknown>((resolve) => {
+      targeted.once("conversation:activity", resolve);
+    });
+    gateway.conversationActivity([firstUserId], {
+      organizationId,
+      conversationId: firstConversationId,
+      conversationType: ConversationType.DIRECT,
+      actorUserId: secondUserId,
+      activityId: "3d46f75a-83c4-4ac6-a3cb-24aa830c77e8",
+      kind: "MESSAGE_CREATED",
+    });
+    assert.deepEqual(await received, {
+      organizationId,
+      conversationId: firstConversationId,
+      conversationType: "DIRECT",
+      actorUserId: secondUserId,
+      activityId: "3d46f75a-83c4-4ac6-a3cb-24aa830c77e8",
+      kind: "MESSAGE_CREATED",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(outsideReceived, false);
+  });
+
+  test("broadcasts anonymous channel receipt invalidations except to the reader", async () => {
+    const reader = await connect();
+    const sender = await connect("second-token");
+    await join(reader, firstConversationId);
+    await join(sender, firstConversationId);
+    let readerReceived = false;
+    reader.on("channel-read-receipts:changed", () => {
+      readerReceived = true;
+    });
+    const received = new Promise<unknown>((resolve) => {
+      sender.once("channel-read-receipts:changed", resolve);
+    });
+    gateway.channelReadReceiptsChanged(firstConversationId, firstUserId);
+    assert.deepEqual(await received, { conversationId: firstConversationId });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(readerReceived, false);
+  });
+
   test("returns a standard acknowledgement for inaccessible rooms", async () => {
     const client = await connect();
     const result = await join(client, "507f1f77bcf86cd799439088");

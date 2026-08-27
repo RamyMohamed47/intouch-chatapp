@@ -6,6 +6,7 @@ import {
 
 import ConflictError from "../../errors/ConflictError.js";
 import ValidationError from "../../errors/ValidationError.js";
+import type { ConversationActivityService } from "../conversation-activity/index.js";
 import { ParticipantPersistenceConflictError } from "../conversations/conversation-participant.repository.js";
 import type { ConversationRepository } from "../conversations/conversation.repository.js";
 import { ConversationPersistenceConflictError } from "../conversations/conversation.repository.js";
@@ -24,6 +25,7 @@ interface DirectMessageCursor {
 }
 
 export interface DirectMessageServiceDependencies {
+  activity: Pick<ConversationActivityService, "conversationCreated">;
   conversations: ConversationRepository;
   memberships: MembershipService;
   organizations: OrganizationRepository;
@@ -85,6 +87,7 @@ const decodeCursor = (cursor: string): DirectMessageCursor => {
 };
 
 const createDirectMessageService = ({
+  activity,
   conversations,
   memberships,
   organizations,
@@ -154,6 +157,9 @@ const createDirectMessageService = ({
       ]);
       if (!directMessage)
         throw new Error("Direct message summary was not created");
+      if (result.created) {
+        await activity.conversationCreated(result.conversation, userId);
+      }
       return { created: result.created, directMessage };
     } catch (error) {
       if (

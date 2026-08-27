@@ -81,7 +81,9 @@ the next heartbeat within approximately three seconds.
 - `conversation:access-revoked` carries `{ conversationId }` before the socket is removed from that room.
 - `presence:updated` carries `{ userId, status, lastSeenAt }` to subscribed organization rooms. Online updates always use `lastSeenAt: null`; confirmed offline updates carry the persisted final-disconnect timestamp.
 - `typing:updated` carries `{ conversationId, userId, isTyping }` to other users in the conversation room.
-- `read-receipt:updated` carries the durable read-state DTO and is emitted only for direct messages.
+- `read-receipt:updated` carries the durable read-state DTO and is emitted only when a direct-message high-water mark advances. Events are idempotent; clients ignore stale, duplicate, and self updates and merge newer peer state into their server-state cache.
+- `conversation:activity` carries `{ organizationId, conversationId, conversationType, actorUserId, activityId, kind }` to authorized `user:<userId>` rooms. Kinds are `CONVERSATION_CREATED`, `MESSAGE_CREATED`, `MESSAGE_UPDATED`, and `MESSAGE_DELETED`. The payload intentionally contains no message content.
+- `channel-read-receipts:changed` carries only `{ conversationId }` to the active channel room when a channel high-water mark advances. It is an anonymous cache-invalidation signal and excludes every socket belonging to the reader.
 
 Messages are written through REST. Socket.IO only manages authorized room
 subscriptions and scoped server events; no event is broadcast globally.
@@ -91,9 +93,12 @@ invalidate that exact organization roster after every successful
 `organization:subscribe`, including reconnects, and then apply
 `presence:updated` events incrementally.
 
-Every authenticated socket also joins `user:<userId>`. That room is used to
-exclude all sockets belonging to the typing user, not only the socket that sent
-the event.
+Every authenticated socket also joins `user:<userId>`. That room is used for
+authorized inactive-conversation activity delivery and to exclude all sockets
+belonging to an acting or typing user, not only the socket that emitted an
+event. Public-channel activity targets current organization members. Private
+channel and direct-message activity additionally requires a current participant
+record.
 
 Web clients keep a seven-second fallback expiry as a defensive guard against a
 missed server stop event. They clear typing immediately on `isTyping: false`,
@@ -108,3 +113,10 @@ runtime presence and typing; clients reconnect and rebuild subscriptions.
 Authenticated abuse counters and active-socket accounting are also
 process-local and require Redis-backed implementations before horizontal API
 scaling.
+
+Direct-conversation REST responses include `peerReadReceipt`, so read status
+survives reloads and missed socket events. Clients reconcile direct-message
+queries after reconnecting. Clients also reconcile cached channel and direct
+conversation summaries after reconnecting or rotating an access token. Channel
+reader identities never appear in socket events; only the sender may request a
+bounded reader summary through REST.

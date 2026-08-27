@@ -1,5 +1,6 @@
 import {
   messageListResponseSchema,
+  messageReadReceiptSummaryResponseSchema,
   messageResponseSchema,
   readReceiptResponseSchema,
   type CreateMessageInput,
@@ -51,5 +52,13 @@ export const messagesApi = {
         { method: "PUT", body: JSON.stringify(input) },
       )
     ).readReceipt;
+  },
+  async listReaders(conversationId: string, messageId: string) {
+    return (
+      await apiRequest(
+        `/api/v1/conversations/${conversationId}/messages/${messageId}/readers`,
+        messageReadReceiptSummaryResponseSchema,
+      )
+    ).readReceiptSummary;
   },
 };

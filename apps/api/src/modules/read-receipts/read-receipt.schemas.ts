@@ -9,6 +9,13 @@ export const readReceiptParamsSchema = z
   })
   .strict();
 
+export const messageReadersParamsSchema = readReceiptParamsSchema.extend({
+  messageId: z
+    .string()
+    .regex(/^[a-f\d]{24}$/i, "Message ID must be a valid MongoDB ID"),
+});
+
 export { updateReadReceiptSchema };
 
 export type ReadReceiptParams = z.infer<typeof readReceiptParamsSchema>;
+export type MessageReadersParams = z.infer<typeof messageReadersParamsSchema>;

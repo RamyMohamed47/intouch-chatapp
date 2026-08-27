@@ -84,3 +84,14 @@ export const useMessages = (conversationId: string) =>
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(conversationId),
   });
+
+export const useMessageReaders = (
+  conversationId: string,
+  messageId: string,
+  enabled = true,
+) =>
+  useQuery({
+    queryKey: queryKeys.conversations.messageReaders(conversationId, messageId),
+    queryFn: () => messagesApi.listReaders(conversationId, messageId),
+    enabled: enabled && Boolean(conversationId) && Boolean(messageId),
+  });

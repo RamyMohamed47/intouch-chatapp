@@ -35,6 +35,7 @@ export const directConversationDtoSchema = z.object({
   type: z.literal(ConversationType.DIRECT),
   peer: publicUserSummaryDtoSchema,
   ...conversationSummaryShape,
+  peerReadReceipt: readReceiptDtoSchema.nullable(),
   createdAt: dateTimeDtoSchema,
   updatedAt: dateTimeDtoSchema,
 });

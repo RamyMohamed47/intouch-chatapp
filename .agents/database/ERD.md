@@ -206,7 +206,13 @@ Participant records are removed when a channel becomes public.
 `ConversationReadState` is the durable high-water mark for a user's reads in a
 conversation. It is unique by `(conversationId, userId)`. Unread counts exclude
 the reader's own and deleted messages after `lastReadMessageId`. Organization
-and conversation deletion remove read states in the same transaction.
+and conversation deletion remove read states in the same transaction. Direct
+conversation DTOs expose both the caller's state and the peer's state; channel
+reader state remains private and is used for that reader's unread count. The
+`(conversationId, lastReadMessageId, lastReadAt)` index supports sender-only
+channel reader summaries. Those summaries are derived by joining current
+organization memberships and, for private channels, current participants; no
+separate receipt-detail collection is stored.
 
 Online presence and typing are runtime-only state. `User.lastSeenAt` is the only
 persisted presence field and is updated after the user's final socket has been

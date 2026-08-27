@@ -33,6 +33,10 @@ conversationReadStateSchema.index(
   { organizationId: 1, conversationId: 1 },
   { name: "read_receipts_by_organization_conversation" },
 );
+conversationReadStateSchema.index(
+  { conversationId: 1, lastReadMessageId: 1, lastReadAt: -1 },
+  { name: "read_receipts_by_conversation_high_water_mark" },
+);
 
 const ConversationReadStateModel = model<ConversationReadState>(
   "ConversationReadState",

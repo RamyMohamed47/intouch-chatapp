@@ -3,6 +3,7 @@ import { z } from "zod";
 import { errorDtoSchema } from "../common/index.js";
 import { PresenceStatus } from "../memberships/index.js";
 import { messageDtoSchema, readReceiptDtoSchema } from "../messages/index.js";
+import { ConversationType } from "../conversations/index.js";
 import {
   conversationSocketSchema,
   organizationSocketSchema,
@@ -59,6 +60,28 @@ export const conversationAccessRevokedEventSchema = conversationSocketSchema;
 export const messageEventSchema = messageDtoSchema;
 export const readReceiptEventSchema = readReceiptDtoSchema;
 
+export const ConversationActivityKind = {
+  CONVERSATION_CREATED: "CONVERSATION_CREATED",
+  MESSAGE_CREATED: "MESSAGE_CREATED",
+  MESSAGE_UPDATED: "MESSAGE_UPDATED",
+  MESSAGE_DELETED: "MESSAGE_DELETED",
+} as const;
+
+export const conversationActivityKindSchema = z.enum(ConversationActivityKind);
+
+export const conversationActivityEventSchema = z
+  .object({
+    organizationId: socketIdentifierSchema,
+    conversationId: socketIdentifierSchema,
+    conversationType: z.enum(ConversationType),
+    actorUserId: socketIdentifierSchema,
+    activityId: z.string().uuid(),
+    kind: conversationActivityKindSchema,
+  })
+  .strict();
+
+export const channelReadReceiptsChangedEventSchema = conversationSocketSchema;
+
 export type SocketHandshakeAuth = z.infer<typeof socketHandshakeAuthSchema>;
 export type SocketAcknowledgementResult = z.infer<
   typeof socketAcknowledgementSchema
@@ -72,3 +95,12 @@ export type ConversationAccessRevokedEvent = z.infer<
 >;
 export type MessageEvent = z.infer<typeof messageEventSchema>;
 export type ReadReceiptEvent = z.infer<typeof readReceiptEventSchema>;
+export type ConversationActivityKindValue = z.infer<
+  typeof conversationActivityKindSchema
+>;
+export type ConversationActivityEvent = z.infer<
+  typeof conversationActivityEventSchema
+>;
+export type ChannelReadReceiptsChangedEvent = z.infer<
+  typeof channelReadReceiptsChangedEventSchema
+>;

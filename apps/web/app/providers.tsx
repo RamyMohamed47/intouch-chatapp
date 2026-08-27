@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import { ApiError } from "@/lib/api/client";
 import { AuthProvider } from "@/lib/auth/provider";
 import { RealtimeProvider } from "@/lib/realtime/provider";
+import { NotificationProvider } from "@/components/ui/toast";
 
 const shouldRetry = (failureCount: number, error: Error) =>
   failureCount < 1 && (!(error instanceof ApiError) || error.status >= 500);
@@ -28,7 +29,9 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <RealtimeProvider>{children}</RealtimeProvider>
+        <NotificationProvider>
+          <RealtimeProvider>{children}</RealtimeProvider>
+        </NotificationProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

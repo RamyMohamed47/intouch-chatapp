@@ -1,7 +1,14 @@
 "use client";
 
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import type {
+  ConversationDto,
+  DirectMessageListResponse,
+} from "@intouch/shared/conversations";
 import {
+  channelReadReceiptsChangedEventSchema,
+  conversationActivityEventSchema,
+  ConversationActivityKind,
   messageEventSchema,
   membershipJoinedEventSchema,
   presenceEventSchema,
@@ -10,7 +17,6 @@ import {
   socketConnectionErrorSchema,
   typingEventSchema,
   type MessageEvent,
-  type ReadReceiptEvent,
   type SocketAcknowledgementResult,
 } from "@intouch/shared/realtime";
 import type { OrganizationMemberDto } from "@intouch/shared/memberships";
@@ -20,6 +26,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -36,12 +43,17 @@ import {
   type InTouchSocket,
 } from "@/lib/realtime/client";
 import { useTypingState } from "@/lib/realtime/use-typing-state";
+import { useNotification } from "@/components/ui/toast";
+import {
+  mergePeerReadReceipt,
+  mergePeerReceiptIntoDirectMessagePage,
+  mergePeerReceiptIntoInfiniteDirectMessages,
+} from "@/lib/realtime/read-receipt-cache";
 
 interface RealtimeContextValue {
   connected: boolean;
   revokedConversationId: string | null;
   typingUserIds: (conversationId: string) => string[];
-  readReceipt: (conversationId: string) => ReadReceiptEvent | null;
   subscribeOrganization: (
     organizationId: string,
   ) => Promise<SocketAcknowledgementResult>;
@@ -129,16 +141,15 @@ export function RealtimeProvider({
   socketFactory?: () => InTouchSocket;
 }) {
   const { status, user } = useAuth();
+  const { notify } = useNotification();
   const queryClient = useQueryClient();
   const [socket, setSocket] = useState<InTouchSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [accessToken, setCurrentAccessToken] = useState(getAccessToken);
-  const [readReceipts, setReadReceipts] = useState<
-    Record<string, ReadReceiptEvent>
-  >({});
   const [revokedConversationId, setRevokedConversationId] = useState<
     string | null
   >(null);
+  const joinedConversationIdsRef = useRef(new Set<string>());
   const {
     applyTypingUpdate,
     clearAllTyping,
@@ -150,6 +161,7 @@ export function RealtimeProvider({
 
   useEffect(() => {
     if (status !== "authenticated" || !accessToken) {
+      joinedConversationIdsRef.current.clear();
       clearAllTyping();
       setSocket((current) => {
         current?.disconnect();
@@ -162,16 +174,33 @@ export function RealtimeProvider({
     const nextSocket = socketFactory();
     let refreshing = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    const receiptInvalidationTimers = new Map<
+      string,
+      ReturnType<typeof setTimeout>
+    >();
+    const seenActivityIds = new Set<string>();
+    const seenActivityQueue: string[] = [];
     nextSocket.on("connect", () => {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = undefined;
       refreshing = false;
       clearAllTyping();
+      joinedConversationIdsRef.current.clear();
       setConnected(true);
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          (query.queryKey[0] === "organizations" &&
+            ["channels", "direct-messages", "direct-message-preview"].includes(
+              String(query.queryKey[2]),
+            )) ||
+          (query.queryKey[0] === "conversations" &&
+            query.queryKey.length === 2),
+      });
     });
     nextSocket.on("disconnect", (reason) => {
       setConnected(false);
       clearAllTyping();
+      joinedConversationIdsRef.current.clear();
       if (reason === "io server disconnect" && !refreshing) {
         refreshing = true;
         void refreshAccessToken();
@@ -222,6 +251,85 @@ export function RealtimeProvider({
     nextSocket.on("message:deleted", (message) =>
       handleMessage(message, false),
     );
+    nextSocket.on("conversation:activity", (raw) => {
+      const parsed = conversationActivityEventSchema.safeParse(raw);
+      if (!parsed.success || parsed.data.actorUserId === user?.id) return;
+      if (seenActivityIds.has(parsed.data.activityId)) return;
+      seenActivityIds.add(parsed.data.activityId);
+      seenActivityQueue.push(parsed.data.activityId);
+      if (seenActivityQueue.length > 200) {
+        const oldest = seenActivityQueue.shift();
+        if (oldest) seenActivityIds.delete(oldest);
+      }
+
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "organizations" &&
+          query.queryKey[1] === parsed.data.organizationId &&
+          (parsed.data.conversationType === "CHANNEL"
+            ? query.queryKey[2] === "channels"
+            : ["direct-messages", "direct-message-preview"].includes(
+                String(query.queryKey[2]),
+              )),
+      });
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.conversations.detail(parsed.data.conversationId),
+      });
+      if (!joinedConversationIdsRef.current.has(parsed.data.conversationId)) {
+        void queryClient.invalidateQueries({
+          exact: true,
+          queryKey: queryKeys.conversations.messages(
+            parsed.data.conversationId,
+          ),
+        });
+      }
+
+      if (
+        parsed.data.kind !== ConversationActivityKind.MESSAGE_CREATED ||
+        joinedConversationIdsRef.current.has(parsed.data.conversationId)
+      ) {
+        return;
+      }
+      const sender = queryClient
+        .getQueryData<OrganizationMemberDto[]>(
+          queryKeys.members.list(parsed.data.organizationId),
+        )
+        ?.find((member) => member.user.id === parsed.data.actorUserId)?.user;
+      const senderName = sender?.displayName ?? "A member";
+      const direct = parsed.data.conversationType === "DIRECT";
+      notify({
+        id: parsed.data.activityId,
+        title: direct
+          ? `${senderName} sent you a direct message`
+          : `${senderName} posted in a channel`,
+        description: "Open the conversation to read the new message.",
+        href: `/app/${parsed.data.organizationId}/${
+          direct ? "direct-messages" : "channels"
+        }/${parsed.data.conversationId}`,
+      });
+    });
+    nextSocket.on("channel-read-receipts:changed", (raw) => {
+      const parsed = channelReadReceiptsChangedEventSchema.safeParse(raw);
+      if (!parsed.success) return;
+      const existing = receiptInvalidationTimers.get(
+        parsed.data.conversationId,
+      );
+      if (existing) clearTimeout(existing);
+      receiptInvalidationTimers.set(
+        parsed.data.conversationId,
+        setTimeout(() => {
+          receiptInvalidationTimers.delete(parsed.data.conversationId);
+          void queryClient.invalidateQueries({
+            queryKey: [
+              "conversations",
+              parsed.data.conversationId,
+              "message-readers",
+            ],
+          });
+        }, 150),
+      );
+    });
     nextSocket.on("membership:joined", (raw) => {
       const parsed = membershipJoinedEventSchema.safeParse(raw);
       if (!parsed.success) return;
@@ -254,21 +362,37 @@ export function RealtimeProvider({
     nextSocket.on("read-receipt:updated", (raw) => {
       const parsed = readReceiptEventSchema.safeParse(raw);
       if (!parsed.success) return;
-      if (parsed.data.userId !== user?.id) {
-        setReadReceipts((current) => ({
-          ...current,
-          [parsed.data.conversationId]: parsed.data,
-        }));
-      }
-      void queryClient.invalidateQueries({
-        predicate: (query) =>
-          query.queryKey[0] === "organizations" &&
-          ["direct-messages", "direct-message-preview"].includes(
-            String(query.queryKey[2]),
+      if (!user || parsed.data.userId === user.id) return;
+      queryClient.setQueryData<ConversationDto>(
+        queryKeys.conversations.detail(parsed.data.conversationId),
+        (conversation) =>
+          mergePeerReadReceipt(conversation, parsed.data, user.id),
+      );
+      queryClient.setQueriesData<InfiniteData<DirectMessageListResponse>>(
+        {
+          predicate: (query) =>
+            query.queryKey[0] === "organizations" &&
+            query.queryKey[2] === "direct-messages",
+        },
+        (data) =>
+          mergePeerReceiptIntoInfiniteDirectMessages(
+            data,
+            parsed.data,
+            user.id,
           ),
-      });
+      );
+      queryClient.setQueriesData<DirectMessageListResponse>(
+        {
+          predicate: (query) =>
+            query.queryKey[0] === "organizations" &&
+            query.queryKey[2] === "direct-message-preview",
+        },
+        (data) =>
+          mergePeerReceiptIntoDirectMessagePage(data, parsed.data, user.id),
+      );
     });
     nextSocket.on("conversation:access-revoked", ({ conversationId }) => {
+      joinedConversationIdsRef.current.delete(conversationId);
       clearTypingConversation(conversationId);
       setRevokedConversationId(conversationId);
       queryClient.removeQueries({
@@ -283,6 +407,10 @@ export function RealtimeProvider({
     nextSocket.connect();
     return () => {
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      for (const timer of receiptInvalidationTimers.values()) {
+        clearTimeout(timer);
+      }
+      joinedConversationIdsRef.current.clear();
       clearAllTyping();
       nextSocket.disconnect();
       setConnected(false);
@@ -292,6 +420,7 @@ export function RealtimeProvider({
     applyTypingUpdate,
     clearAllTyping,
     clearTypingConversation,
+    notify,
     queryClient,
     socketFactory,
     status,
@@ -328,6 +457,7 @@ export function RealtimeProvider({
         conversationId,
       );
       if (result.success) {
+        joinedConversationIdsRef.current.add(conversationId);
         setRevokedConversationId((current) =>
           current === conversationId ? null : current,
         );
@@ -338,6 +468,7 @@ export function RealtimeProvider({
   );
   const leaveConversation = useCallback(
     (conversationId: string) => {
+      joinedConversationIdsRef.current.delete(conversationId);
       clearTypingConversation(conversationId);
       return emitAcknowledged(socket, "conversation:leave", conversationId);
     },
@@ -355,18 +486,12 @@ export function RealtimeProvider({
     },
     [socket],
   );
-  const readReceipt = useCallback(
-    (conversationId: string) => readReceipts[conversationId] ?? null,
-    [readReceipts],
-  );
-
   return (
     <RealtimeContext.Provider
       value={{
         connected,
         revokedConversationId,
         typingUserIds,
-        readReceipt,
         subscribeOrganization,
         unsubscribeOrganization,
         joinConversation,

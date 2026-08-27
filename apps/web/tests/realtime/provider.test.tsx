@@ -9,13 +9,22 @@ import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MessageListResponse } from "@intouch/shared/messages";
 import type { OrganizationMemberDto } from "@intouch/shared/memberships";
+import type {
+  DirectConversationDto,
+  DirectMessageListResponse,
+} from "@intouch/shared/conversations";
 
 import { AuthProvider } from "@/lib/auth/provider";
 import { setAccessToken } from "@/lib/auth/access-token";
 import { queryKeys } from "@/lib/query/keys";
 import { useRealtime, RealtimeProvider } from "@/lib/realtime/provider";
+import { NotificationProvider } from "@/components/ui/toast";
 import type { InTouchSocket } from "@/lib/realtime/client";
 import { server } from "../mocks/server";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 type Listener = (...args: unknown[]) => void;
 
@@ -64,6 +73,7 @@ const user = {
 };
 const organizationId = "64c000000000000000000001";
 const conversationId = "64d000000000000000000001";
+const inactiveConversationId = "64d000000000000000000002";
 
 function Probe() {
   const realtime = useRealtime();
@@ -119,7 +129,22 @@ describe("RealtimeProvider", () => {
         lastSeenAt: null,
       },
     };
-    queryClient.setQueryData(queryKeys.members.list(organizationId), [member]);
+    const peerMember: OrganizationMemberDto = {
+      membershipId: "64e000000000000000000002",
+      role: "MEMBER",
+      joinedAt: "2026-08-05T10:00:00.000Z",
+      user: {
+        id: "64b000000000000000000002",
+        username: "lina",
+        displayName: "Lina Hassan",
+        status: "ONLINE",
+        lastSeenAt: null,
+      },
+    };
+    queryClient.setQueryData(queryKeys.members.list(organizationId), [
+      member,
+      peerMember,
+    ]);
     queryClient.setQueryData<InfiniteData<MessageListResponse>>(
       queryKeys.conversations.messages(conversationId),
       {
@@ -127,15 +152,48 @@ describe("RealtimeProvider", () => {
         pageParams: [undefined],
       },
     );
+    const directConversation: DirectConversationDto = {
+      id: conversationId,
+      organizationId,
+      type: "DIRECT",
+      peer: {
+        id: "64b000000000000000000002",
+        username: "lina",
+        displayName: "Lina Hassan",
+      },
+      lastMessage: null,
+      unreadCount: 0,
+      readReceipt: null,
+      peerReadReceipt: null,
+      createdAt: "2026-08-05T10:00:00.000Z",
+      updatedAt: "2026-08-05T10:00:00.000Z",
+    };
+    queryClient.setQueryData(
+      queryKeys.conversations.detail(conversationId),
+      directConversation,
+    );
+    queryClient.setQueryData<DirectMessageListResponse>(
+      queryKeys.conversations.directMessagePreview(organizationId),
+      { directMessages: [directConversation], nextCursor: null },
+    );
+    queryClient.setQueryData<InfiniteData<DirectMessageListResponse>>(
+      queryKeys.conversations.directMessages(organizationId),
+      {
+        pages: [{ directMessages: [directConversation], nextCursor: null }],
+        pageParams: [undefined],
+      },
+    );
 
     render(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <RealtimeProvider
-            socketFactory={() => fakeSocket as unknown as InTouchSocket}
-          >
-            <Probe />
-          </RealtimeProvider>
+          <NotificationProvider>
+            <RealtimeProvider
+              socketFactory={() => fakeSocket as unknown as InTouchSocket}
+            >
+              <Probe />
+            </RealtimeProvider>
+          </NotificationProvider>
         </AuthProvider>
       </QueryClientProvider>,
     );
@@ -146,6 +204,41 @@ describe("RealtimeProvider", () => {
       event: "conversation:join",
       input: { conversationId },
     });
+
+    act(() => {
+      fakeSocket.trigger("conversation:activity", {
+        organizationId,
+        conversationId,
+        conversationType: "DIRECT",
+        actorUserId: peerMember.user.id,
+        activityId: "3d46f75a-83c4-4ac6-a3cb-24aa830c77e8",
+        kind: "MESSAGE_CREATED",
+      });
+    });
+    expect(
+      screen.queryByText("Lina Hassan sent you a direct message"),
+    ).not.toBeInTheDocument();
+
+    invalidateQueries.mockClear();
+    act(() => {
+      const activity = {
+        organizationId,
+        conversationId: inactiveConversationId,
+        conversationType: "DIRECT",
+        actorUserId: peerMember.user.id,
+        activityId: "5dfeea7d-8d4f-455e-b383-e432adc95a6e",
+        kind: "MESSAGE_CREATED",
+      };
+      fakeSocket.trigger("conversation:activity", activity);
+      fakeSocket.trigger("conversation:activity", activity);
+    });
+    expect(
+      await screen.findByText("Lina Hassan sent you a direct message"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Lina Hassan sent you a direct message"),
+    ).toHaveLength(1);
+    expect(invalidateQueries).toHaveBeenCalled();
 
     invalidateQueries.mockClear();
     await userEvent.click(screen.getByRole("button", { name: "Subscribe" }));
@@ -194,6 +287,14 @@ describe("RealtimeProvider", () => {
         createdAt: "2026-08-05T10:05:00.000Z",
         updatedAt: "2026-08-05T10:05:00.000Z",
       });
+      fakeSocket.trigger("read-receipt:updated", {
+        id: "650000000000000000000001",
+        conversationId,
+        userId: directConversation.peer.id,
+        lastReadMessageId: "64f000000000000000000001",
+        lastReadAt: "2026-08-05T10:06:00.000Z",
+      });
+      fakeSocket.trigger("channel-read-receipts:changed", { conversationId });
     });
 
     expect(screen.getByText("64b000000000000000000002")).toBeInTheDocument();
@@ -216,7 +317,22 @@ describe("RealtimeProvider", () => {
           queryKeys.conversations.messages(conversationId),
         )?.pages[0]?.messages[0]?.content,
       ).toBe("Realtime message");
+      expect(
+        queryClient.getQueryData<DirectConversationDto>(
+          queryKeys.conversations.detail(conversationId),
+        )?.peerReadReceipt?.userId,
+      ).toBe(directConversation.peer.id);
+      expect(
+        queryClient.getQueryData<DirectMessageListResponse>(
+          queryKeys.conversations.directMessagePreview(organizationId),
+        )?.directMessages[0]?.peerReadReceipt?.lastReadMessageId,
+      ).toBe("64f000000000000000000001");
     });
+    await waitFor(() =>
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["conversations", conversationId, "message-readers"],
+      }),
+    );
 
     act(() => {
       fakeSocket.trigger("conversation:access-revoked", { conversationId });
@@ -243,11 +359,13 @@ describe("RealtimeProvider", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <RealtimeProvider
-            socketFactory={() => fakeSocket as unknown as InTouchSocket}
-          >
-            <Probe />
-          </RealtimeProvider>
+          <NotificationProvider>
+            <RealtimeProvider
+              socketFactory={() => fakeSocket as unknown as InTouchSocket}
+            >
+              <Probe />
+            </RealtimeProvider>
+          </NotificationProvider>
         </AuthProvider>
       </QueryClientProvider>,
     );

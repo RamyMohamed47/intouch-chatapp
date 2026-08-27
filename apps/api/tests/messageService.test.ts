@@ -71,8 +71,27 @@ const createBroadcaster = (): MessageBroadcaster & {
 const createService = (
   repository: MessageRepository,
   broadcaster: MessageBroadcaster,
+  activity: {
+    messageCreated: (
+      conversation: ConversationRecord,
+      userId: string,
+    ) => Promise<void>;
+    messageDeleted: (
+      conversation: ConversationRecord,
+      userId: string,
+    ) => Promise<void>;
+    messageUpdated: (
+      conversation: ConversationRecord,
+      userId: string,
+    ) => Promise<void>;
+  } = {
+    messageCreated: async () => undefined,
+    messageDeleted: async () => undefined,
+    messageUpdated: async () => undefined,
+  },
 ) =>
   createMessageService({
+    activity,
     broadcaster,
     conversationPolicy: createConversationPolicy(),
     conversations: {
@@ -120,12 +139,44 @@ describe("messageService", () => {
 
   test("creates and broadcasts a scoped message", async () => {
     const broadcaster = createBroadcaster();
-    const service = createService(createRepository(), broadcaster);
+    const activityCalls: string[] = [];
+    const service = createService(createRepository(), broadcaster, {
+      messageCreated: async (_conversation, actorUserId) => {
+        activityCalls.push(actorUserId);
+      },
+      messageDeleted: async () => undefined,
+      messageUpdated: async () => undefined,
+    });
     const result = await service.create(userId, conversationId, {
       content: "Hello",
     });
     assert.equal(result, message);
     assert.deepEqual(broadcaster.created, [message]);
+    assert.deepEqual(activityCalls, [userId]);
+  });
+
+  test("does not emit activity when message persistence fails", async () => {
+    let activityCalls = 0;
+    const service = createService(
+      createRepository({
+        create: async () => {
+          throw new Error("forced persistence failure");
+        },
+      }),
+      createBroadcaster(),
+      {
+        messageCreated: async () => {
+          activityCalls += 1;
+        },
+        messageDeleted: async () => undefined,
+        messageUpdated: async () => undefined,
+      },
+    );
+    await assert.rejects(
+      service.create(userId, conversationId, { content: "Hello" }),
+      /forced persistence failure/,
+    );
+    assert.equal(activityCalls, 0);
   });
 
   test("does not redact an already deleted message again", async () => {

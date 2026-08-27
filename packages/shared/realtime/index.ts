@@ -9,6 +9,10 @@ export type {
 } from "./realtime.schema.js";
 export {
   conversationAccessRevokedEventSchema,
+  channelReadReceiptsChangedEventSchema,
+  ConversationActivityKind,
+  conversationActivityEventSchema,
+  conversationActivityKindSchema,
   membershipJoinedEventSchema,
   messageEventSchema,
   presenceEventSchema,
@@ -20,6 +24,9 @@ export {
 } from "./realtime.dto.js";
 export type {
   ConversationAccessRevokedEvent,
+  ChannelReadReceiptsChangedEvent,
+  ConversationActivityEvent,
+  ConversationActivityKindValue,
   MembershipJoinedEvent,
   MessageEvent,
   PresenceEvent,

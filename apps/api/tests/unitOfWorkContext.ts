@@ -68,6 +68,11 @@ const conversationReadStates: ConversationReadStateRepository = {
   advance: async () => unused(),
   find: async () => null,
   findForUserByConversations: async () => [],
+  summarizeMessageReaders: async (input) => ({
+    messageId: input.messageId,
+    readByCount: 0,
+    readers: [],
+  }),
   deleteByConversationId: async () => 0,
   deleteByOrganizationId: async () => 0,
 };

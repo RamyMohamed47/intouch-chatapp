@@ -1,5 +1,7 @@
 import type { MessageBroadcaster } from "./messageBroadcaster.js";
 import {
+  channelReadReceiptsChangedEventSchema,
+  conversationActivityEventSchema,
   conversationAccessRevokedEventSchema,
   membershipJoinedEventSchema,
   messageEventSchema,
@@ -9,6 +11,7 @@ import {
 } from "@intouch/shared/realtime";
 import type { InTouchSocketServer } from "../contracts/socket.js";
 import type { ConversationRealtime } from "../modules/conversations/conversation.realtime.js";
+import type { ConversationActivityRealtime } from "../modules/conversation-activity/conversation-activity.realtime.js";
 import type { MembershipRealtime } from "../modules/memberships/membership.realtime.js";
 import type { PresenceRealtime } from "../modules/presence/presence.realtime.js";
 import type { ReadReceiptRealtime } from "../modules/read-receipts/read-receipt.realtime.js";
@@ -23,6 +26,7 @@ const userRoomName = (userId: string) => `user:${userId}`;
 export interface SocketRealtimeGateway
   extends
     MessageBroadcaster,
+    ConversationActivityRealtime,
     ConversationRealtime,
     MembershipRealtime,
     PresenceRealtime,
@@ -73,6 +77,15 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       );
     },
 
+    conversationActivity(recipientUserIds, event) {
+      const rooms = recipientUserIds.map(userRoomName);
+      if (rooms.length === 0) return;
+      io?.to(rooms).emit(
+        "conversation:activity",
+        conversationActivityEventSchema.parse(event),
+      );
+    },
+
     membershipJoined(event) {
       io?.to(organizationRoomName(event.organizationId)).emit(
         "membership:joined",
@@ -101,6 +114,15 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
         "read-receipt:updated",
         readReceiptEventSchema.parse(receipt),
       );
+    },
+
+    channelReadReceiptsChanged(conversationId, excludedUserId) {
+      io?.to(roomName(conversationId))
+        .except(userRoomName(excludedUserId))
+        .emit(
+          "channel-read-receipts:changed",
+          channelReadReceiptsChangedEventSchema.parse({ conversationId }),
+        );
     },
 
     async evictUser(conversationId, userId) {

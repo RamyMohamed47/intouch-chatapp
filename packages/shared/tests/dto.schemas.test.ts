@@ -188,12 +188,23 @@ describe("shared DTO schemas", () => {
         lastMessage: message,
         unreadCount: 1,
         readReceipt: receipt,
+        peerReadReceipt: null,
         createdAt: now,
         updatedAt: now,
         directParticipantKey: "private",
       },
     });
     assert.ok(!("directParticipantKey" in direct.directMessage));
+    assert.equal(direct.directMessage.peerReadReceipt, null);
+    assert.equal(
+      directMessageResponseSchema.safeParse({
+        directMessage: {
+          ...direct.directMessage,
+          peerReadReceipt: undefined,
+        },
+      }).success,
+      false,
+    );
   });
 
   test("derives and validates REST error and Socket.IO DTOs", () => {

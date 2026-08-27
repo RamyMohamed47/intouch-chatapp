@@ -141,6 +141,7 @@ export interface ConversationSummary extends ConversationRecord {
   lastMessage: MessageRecord | null;
   unreadCount: number;
   readReceipt: ReadReceiptView | null;
+  peerReadReceipt?: ReadReceiptView | null;
   peer?: Pick<PublicUser, "id" | "username" | "displayName" | "avatarUrl">;
 }
 

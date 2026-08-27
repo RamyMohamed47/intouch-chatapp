@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  channelReadReceiptsChangedEventSchema,
+  conversationActivityEventSchema,
   conversationSocketSchema,
   membershipJoinedEventSchema,
   organizationSocketSchema,
@@ -102,6 +104,37 @@ describe("shared realtime schemas", () => {
         status: "ONLINE",
         lastSeenAt: null,
         organizationId: "507f1f77bcf86cd799439012",
+      }).success,
+      false,
+    );
+  });
+
+  test("validates strict conversation activity and anonymous receipt invalidations", () => {
+    const organizationId = "507f1f77bcf86cd799439011";
+    const conversationId = "507f1f77bcf86cd799439012";
+    const actorUserId = "507f1f77bcf86cd799439013";
+    const activity = {
+      organizationId,
+      conversationId,
+      conversationType: "DIRECT" as const,
+      actorUserId,
+      activityId: "3d46f75a-83c4-4ac6-a3cb-24aa830c77e8",
+      kind: "MESSAGE_CREATED" as const,
+    };
+    assert.deepEqual(conversationActivityEventSchema.parse(activity), activity);
+    assert.equal(
+      conversationActivityEventSchema.safeParse({ ...activity, content: "no" })
+        .success,
+      false,
+    );
+    assert.deepEqual(
+      channelReadReceiptsChangedEventSchema.parse({ conversationId }),
+      { conversationId },
+    );
+    assert.equal(
+      channelReadReceiptsChangedEventSchema.safeParse({
+        conversationId,
+        userId: actorUserId,
       }).success,
       false,
     );

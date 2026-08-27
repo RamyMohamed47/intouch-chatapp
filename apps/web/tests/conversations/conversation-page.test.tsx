@@ -24,9 +24,31 @@ const mocks = vi.hoisted(() => {
   const state: {
     conversationType: "CHANNEL" | "DIRECT";
     currentUserRole: "MEMBER" | "OWNER";
+    messages: (typeof createdMessage)[];
+    peerReadReceipt: {
+      id: string;
+      conversationId: string;
+      userId: string;
+      lastReadMessageId: string;
+      lastReadAt: string;
+    } | null;
+    channelReaderSummary:
+      | {
+          messageId: string;
+          readByCount: number;
+          readers: Array<{
+            id: string;
+            username: string;
+            displayName: string;
+          }>;
+        }
+      | undefined;
   } = {
     conversationType: "CHANNEL",
     currentUserRole: "OWNER",
+    messages: [],
+    peerReadReceipt: null,
+    channelReaderSummary: undefined,
   };
 
   return {
@@ -76,7 +98,6 @@ vi.mock("@/lib/realtime/provider", () => ({
     startTyping: mocks.startTyping,
     stopTyping: mocks.stopTyping,
     typingUserIds: () => [],
-    readReceipt: () => null,
   }),
 }));
 
@@ -120,6 +141,7 @@ vi.mock("@/lib/query/hooks", () => ({
             lastMessage: null,
             unreadCount: 0,
             readReceipt: null,
+            peerReadReceipt: mocks.state.peerReadReceipt,
             createdAt: "2026-08-01T10:00:00.000Z",
             updatedAt: "2026-08-01T10:00:00.000Z",
           },
@@ -127,7 +149,9 @@ vi.mock("@/lib/query/hooks", () => ({
     isError: false,
   }),
   useMessages: () => ({
-    data: { pages: [{ messages: [], nextCursor: null }] },
+    data: {
+      pages: [{ messages: mocks.state.messages, nextCursor: null }],
+    },
     isPending: false,
     isError: false,
     hasNextPage: false,
@@ -153,6 +177,11 @@ vi.mock("@/lib/query/hooks", () => ({
     isPending: false,
     isError: false,
   }),
+  useMessageReaders: () => ({
+    data: mocks.state.channelReaderSummary,
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 vi.mock("@/lib/api/messages", () => ({
@@ -161,6 +190,7 @@ vi.mock("@/lib/api/messages", () => ({
     update: vi.fn(),
     remove: vi.fn(),
     updateReadReceipt: mocks.updateReadReceipt,
+    listReaders: vi.fn(),
   },
 }));
 
@@ -185,6 +215,9 @@ describe("ConversationPage interactions", () => {
   beforeEach(() => {
     mocks.state.conversationType = "CHANNEL";
     mocks.state.currentUserRole = "OWNER";
+    mocks.state.messages = [];
+    mocks.state.peerReadReceipt = null;
+    mocks.state.channelReaderSummary = undefined;
     mocks.createMessage.mockClear();
   });
 
@@ -217,6 +250,107 @@ describe("ConversationPage interactions", () => {
     expect(
       screen.getByRole("status", { name: "Lina Hassan is online" }),
     ).toHaveTextContent("Online");
+  });
+
+  it("shows Read under the latest outgoing DM even when a newer reply follows", () => {
+    mocks.state.conversationType = "DIRECT";
+    const incoming = {
+      ...mocks.createdMessage,
+      id: "64f000000000000000000002",
+      senderId: "64b000000000000000000002",
+      content: "Reply",
+      createdAt: "2026-08-08T10:01:00.000Z",
+      updatedAt: "2026-08-08T10:01:00.000Z",
+    };
+    mocks.state.messages = [mocks.createdMessage, incoming];
+    mocks.state.peerReadReceipt = {
+      id: "650000000000000000000002",
+      conversationId: "64d000000000000000000001",
+      userId: "64b000000000000000000002",
+      lastReadMessageId: incoming.id,
+      lastReadAt: "2026-08-08T10:02:00.000Z",
+    };
+
+    renderConversation();
+
+    expect(
+      screen.getByRole("status", { name: "Message read" }),
+    ).toHaveTextContent("Read");
+  });
+
+  it("shows Sent for unread direct and channel messages", () => {
+    mocks.state.conversationType = "DIRECT";
+    mocks.state.messages = [mocks.createdMessage];
+    const directView = renderConversation();
+    expect(
+      screen.getByRole("status", { name: "Message sent" }),
+    ).toHaveTextContent("Sent");
+
+    directView.unmount();
+    mocks.state.conversationType = "CHANNEL";
+    renderConversation();
+    expect(
+      screen.getByRole("status", { name: "Message sent" }),
+    ).toHaveTextContent("Sent");
+  });
+
+  it("shows a sender-only channel reader preview", async () => {
+    mocks.state.messages = [mocks.createdMessage];
+    mocks.state.channelReaderSummary = {
+      messageId: mocks.createdMessage.id,
+      readByCount: 4,
+      readers: [
+        {
+          id: "64b000000000000000000002",
+          username: "lina",
+          displayName: "Lina Hassan",
+        },
+      ],
+    };
+    renderConversation();
+
+    const trigger = screen.getByRole("button", { name: "Read by 4 members" });
+    expect(trigger).toHaveTextContent("Read by 4");
+    await userEvent.click(trigger);
+    expect(screen.getByText("Lina Hassan")).toBeInTheDocument();
+    expect(screen.getByText("And 3 others")).toBeInTheDocument();
+  });
+
+  it("does not advance while inactive or reading history", async () => {
+    mocks.state.conversationType = "DIRECT";
+    mocks.state.messages = [
+      {
+        ...mocks.createdMessage,
+        senderId: "64b000000000000000000002",
+      },
+    ];
+    const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const view = renderConversation();
+    const viewport = view.container.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    expect(viewport).not.toBeNull();
+    Object.defineProperties(viewport!, {
+      clientHeight: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 1_000 },
+      scrollTop: { configurable: true, value: 200, writable: true },
+    });
+    fireEvent.scroll(viewport!);
+
+    hasFocus.mockReturnValue(true);
+    fireEvent.focus(window);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mocks.updateReadReceipt).not.toHaveBeenCalled();
+
+    viewport!.scrollTop = 500;
+    fireEvent.scroll(viewport!);
+    await waitFor(() =>
+      expect(mocks.updateReadReceipt).toHaveBeenCalledWith(
+        "64d000000000000000000001",
+        { messageId: mocks.createdMessage.id },
+      ),
+    );
   });
 
   it("submits with Enter and keeps Shift+Enter and composing Enter available", async () => {

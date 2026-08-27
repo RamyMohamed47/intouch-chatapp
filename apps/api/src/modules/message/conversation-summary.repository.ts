@@ -32,12 +32,19 @@ export interface ConversationSummaryState {
   lastMessage: MessageRecord | null;
   unreadCount: number;
   readReceipt: ConversationReadStateRecord | null;
+  peerReadReceipt: ConversationReadStateRecord | null;
+}
+
+export interface PeerReadStateTarget {
+  conversationId: string;
+  userId: string;
 }
 
 export interface ConversationSummaryRepository {
   getStates(
     conversationIds: readonly string[],
     userId: string,
+    peerReadStateTargets?: readonly PeerReadStateTarget[],
   ): Promise<ConversationSummaryState[]>;
 }
 
@@ -67,7 +74,7 @@ const toReadStateRecord = (
 const createMongooseConversationSummaryRepository = (
   session?: ClientSession,
 ): ConversationSummaryRepository => ({
-  async getStates(conversationIds, userId) {
+  async getStates(conversationIds, userId, peerReadStateTargets = []) {
     if (conversationIds.length === 0) return [];
     const objectIds = conversationIds.map((id) => new Types.ObjectId(id));
     const receiptQuery = ConversationReadStateModel.find({
@@ -82,6 +89,26 @@ const createMongooseConversationSummaryRepository = (
         toReadStateRecord(state),
       ]),
     );
+
+    const peerReadStateByConversation = new Map<
+      string,
+      ConversationReadStateRecord
+    >();
+    if (peerReadStateTargets.length > 0) {
+      const peerReceiptQuery = ConversationReadStateModel.find({
+        $or: peerReadStateTargets.map((target) => ({
+          conversationId: target.conversationId,
+          userId: target.userId,
+        })),
+      }).lean<ReadStateDocument[]>();
+      if (session) peerReceiptQuery.session(session);
+      for (const state of await peerReceiptQuery.exec()) {
+        peerReadStateByConversation.set(
+          state.conversationId.toString(),
+          toReadStateRecord(state),
+        );
+      }
+    }
 
     const latestPipeline: PipelineStage[] = [
       { $match: { conversationId: { $in: objectIds } } },
@@ -133,6 +160,7 @@ const createMongooseConversationSummaryRepository = (
       lastMessage: latestByConversation.get(conversationId) ?? null,
       unreadCount: unreadCounts.get(conversationId) ?? 0,
       readReceipt: readStateByConversation.get(conversationId) ?? null,
+      peerReadReceipt: peerReadStateByConversation.get(conversationId) ?? null,
     }));
   },
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Check,
   CheckCheck,
   Hash,
   Lock,
@@ -27,6 +28,7 @@ import {
   updateMessageSchema,
   type MessageDto,
   type MessageListResponse,
+  type MessageReadReceiptSummaryDto,
 } from "@intouch/shared/messages";
 
 import { PageHeader } from "@/components/workspace/page-header";
@@ -45,6 +47,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth/provider";
@@ -52,11 +62,13 @@ import { messagesApi } from "@/lib/api/messages";
 import {
   useConversation,
   useMembers,
+  useMessageReaders,
   useMessages,
   useOrganization,
 } from "@/lib/query/hooks";
 import { queryKeys } from "@/lib/query/keys";
 import { useRealtime } from "@/lib/realtime/provider";
+import { hasReadMessage } from "@/lib/realtime/read-receipt-cache";
 
 const formatTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, {
@@ -82,6 +94,69 @@ const upsertCachedMessage = (
     pages[0] = { ...pages[0], messages: [message, ...pages[0].messages] };
   return { ...data, pages };
 };
+
+function ChannelReadReceiptStatus({
+  summary,
+}: {
+  summary: MessageReadReceiptSummaryDto | undefined;
+}) {
+  if (!summary || summary.readByCount === 0) {
+    return (
+      <p
+        className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground"
+        role="status"
+        aria-live="polite"
+        aria-label="Message sent"
+      >
+        <Check className="size-3" aria-hidden />
+        Sent
+      </p>
+    );
+  }
+
+  const remainingReaders = Math.max(
+    0,
+    summary.readByCount - summary.readers.length,
+  );
+  return (
+    <Popover>
+      <PopoverTrigger
+        className="mt-2 inline-flex items-center gap-1 rounded-md text-[10px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`Read by ${summary.readByCount} members`}
+      >
+        <CheckCheck className="size-3" aria-hidden />
+        Read by {summary.readByCount}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64">
+        <PopoverHeader>
+          <PopoverTitle>Read by</PopoverTitle>
+          <PopoverDescription>
+            Members who reached this message.
+          </PopoverDescription>
+        </PopoverHeader>
+        <div className="grid gap-2">
+          {summary.readers.map((reader) => (
+            <div key={reader.id} className="flex items-center gap-2">
+              <Avatar className="size-7">
+                <AvatarFallback className="text-[10px]">
+                  {initials(reader.displayName)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 truncate text-sm">
+                {reader.displayName}
+              </span>
+            </div>
+          ))}
+          {remainingReaders > 0 && (
+            <p className="text-xs text-muted-foreground">
+              And {remainingReaders} other{remainingReaders === 1 ? "" : "s"}
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function ConversationPage({
   organizationId,
@@ -114,15 +189,19 @@ export function ConversationPage({
   const messageEndRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
+  const failedReceiptMessageIdRef = useRef<string | null>(null);
+  const pendingReceiptMessageIdRef = useRef<string | null>(null);
   const forceBottomScrollRef = useRef(false);
   const scrollStateRef = useRef<{
     conversationId: string;
     initialized: boolean;
     newestMessageId: string | null;
   }>({ conversationId, initialized: false, newestMessageId: null });
+  const [newestMessageVisible, setNewestMessageVisible] = useState(true);
   const [documentActive, setDocumentActive] = useState(
     () =>
-      typeof document === "undefined" || document.visibilityState === "visible",
+      typeof document === "undefined" ||
+      (document.visibilityState === "visible" && document.hasFocus()),
   );
   const refreshSummaries = () =>
     Promise.all([
@@ -174,6 +253,16 @@ export function ConversationPage({
     )
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   const newestMessage = allMessages.at(-1);
+  const latestOutgoingMessage = allMessages.findLast(
+    (message) => message.senderId === user?.id && !message.deletedAt,
+  );
+  const channelReaderMessageId =
+    conversation.data?.type === "CHANNEL" ? latestOutgoingMessage?.id : "";
+  const channelReaders = useMessageReaders(
+    conversationId,
+    channelReaderMessageId ?? "",
+    Boolean(channelReaderMessageId),
+  );
 
   useLayoutEffect(() => {
     if (scrollStateRef.current.conversationId !== conversationId) {
@@ -183,6 +272,9 @@ export function ConversationPage({
         newestMessageId: null,
       };
       isNearBottomRef.current = true;
+      failedReceiptMessageIdRef.current = null;
+      pendingReceiptMessageIdRef.current = null;
+      setNewestMessageVisible(true);
       forceBottomScrollRef.current = false;
     }
 
@@ -197,6 +289,7 @@ export function ConversationPage({
       scrollStateRef.current.initialized = true;
       scrollStateRef.current.newestMessageId = newestMessageId;
       isNearBottomRef.current = true;
+      setNewestMessageVisible(true);
       return;
     }
 
@@ -228,26 +321,55 @@ export function ConversationPage({
 
   useEffect(() => {
     const updateVisibility = () =>
-      setDocumentActive(document.visibilityState === "visible");
+      setDocumentActive(
+        document.visibilityState === "visible" && document.hasFocus(),
+      );
     document.addEventListener("visibilitychange", updateVisibility);
-    return () =>
+    window.addEventListener("focus", updateVisibility);
+    window.addEventListener("blur", updateVisibility);
+    return () => {
       document.removeEventListener("visibilitychange", updateVisibility);
+      window.removeEventListener("focus", updateVisibility);
+      window.removeEventListener("blur", updateVisibility);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!documentActive || !newestMessageVisible) {
+      failedReceiptMessageIdRef.current = null;
+    }
+  }, [documentActive, newestMessageVisible]);
 
   useEffect(() => {
     if (
       !newestMessage ||
       !documentActive ||
-      conversation.data?.readReceipt?.lastReadMessageId === newestMessage.id ||
-      receipt.isPending
+      !newestMessageVisible ||
+      hasReadMessage(conversation.data?.readReceipt, newestMessage.id) ||
+      failedReceiptMessageIdRef.current === newestMessage.id ||
+      pendingReceiptMessageIdRef.current === newestMessage.id
     ) {
       return;
     }
-    receipt.mutate(newestMessage.id);
+    pendingReceiptMessageIdRef.current = newestMessage.id;
+    receipt.mutate(newestMessage.id, {
+      onError: () => {
+        failedReceiptMessageIdRef.current = newestMessage.id;
+      },
+      onSuccess: () => {
+        failedReceiptMessageIdRef.current = null;
+      },
+      onSettled: () => {
+        if (pendingReceiptMessageIdRef.current === newestMessage.id) {
+          pendingReceiptMessageIdRef.current = null;
+        }
+      },
+    });
   }, [
     conversation.data?.readReceipt?.lastReadMessageId,
     documentActive,
     newestMessage,
+    newestMessageVisible,
     receipt,
   ]);
 
@@ -377,6 +499,14 @@ export function ConversationPage({
         members.data?.find((member) => member.user.id === userId)?.user
           .displayName,
     );
+  const latestOutgoingRead = latestOutgoingMessage
+    ? hasReadMessage(
+        conversation.data.type === "DIRECT"
+          ? conversation.data.peerReadReceipt
+          : null,
+        latestOutgoingMessage.id,
+      )
+    : false;
 
   return (
     <>
@@ -429,7 +559,9 @@ export function ConversationPage({
           viewportRef={messageViewportRef}
           onViewportScroll={(event) => {
             const viewport = event.currentTarget;
-            isNearBottomRef.current = isNearConversationBottom(viewport);
+            const nearBottom = isNearConversationBottom(viewport);
+            isNearBottomRef.current = nearBottom;
+            setNewestMessageVisible(isNearConversationBottom(viewport, 1));
           }}
         >
           <div className="mx-auto max-w-4xl p-5 md:p-8">
@@ -566,14 +698,31 @@ export function ConversationPage({
                       )}
                       {own &&
                         conversation.data.type === "DIRECT" &&
-                        message.id === newestMessage?.id && (
-                          <p className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <CheckCheck className="size-3" />{" "}
-                            {realtime.readReceipt(conversationId)
-                              ?.lastReadMessageId === message.id
-                              ? "Read"
-                              : "Sent"}
+                        message.id === latestOutgoingMessage?.id && (
+                          <p
+                            className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground"
+                            role="status"
+                            aria-live="polite"
+                            aria-label={
+                              latestOutgoingRead
+                                ? "Message read"
+                                : "Message sent"
+                            }
+                          >
+                            {latestOutgoingRead ? (
+                              <CheckCheck className="size-3" aria-hidden />
+                            ) : (
+                              <Check className="size-3" aria-hidden />
+                            )}
+                            {latestOutgoingRead ? "Read" : "Sent"}
                           </p>
+                        )}
+                      {own &&
+                        conversation.data.type === "CHANNEL" &&
+                        message.id === latestOutgoingMessage?.id && (
+                          <ChannelReadReceiptStatus
+                            summary={channelReaders.data}
+                          />
                         )}
                     </div>
                   </article>

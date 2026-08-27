@@ -5,6 +5,7 @@ import type {
 } from "@intouch/shared/messages";
 
 import type { MessageBroadcaster } from "../../broadcasting/messageBroadcaster.js";
+import type { ConversationActivityService } from "../conversation-activity/index.js";
 import type { ConversationService } from "../conversations/conversation.service.js";
 import { ConversationNotFoundError } from "../conversations/conversation.errors.js";
 import type { ConversationPolicy } from "../conversations/conversation.policy.js";
@@ -15,6 +16,10 @@ import type { MessageRepository } from "./message.repository.js";
 import { MessageType, type MessagePage } from "./message.types.js";
 
 export interface MessageServiceDependencies {
+  activity: Pick<
+    ConversationActivityService,
+    "messageCreated" | "messageDeleted" | "messageUpdated"
+  >;
   broadcaster: MessageBroadcaster;
   conversationPolicy: Pick<
     ConversationPolicy,
@@ -30,6 +35,7 @@ export interface MessageServiceDependencies {
 }
 
 const createMessageService = ({
+  activity,
   broadcaster,
   conversationPolicy,
   conversations,
@@ -61,7 +67,7 @@ const createMessageService = ({
     conversationId: string,
     input: CreateMessageInput,
   ) {
-    const message = await unitOfWork.run(async (context) => {
+    const result = await unitOfWork.run(async (context) => {
       const conversation = await conversations.getAccessibleInContext(
         userId,
         conversationId,
@@ -88,16 +94,20 @@ const createMessageService = ({
       ) {
         throw new ConversationNotFoundError();
       }
-      return created;
+      return { conversation, message: created };
     });
-    broadcaster.messageCreated(message);
-    return message;
+    broadcaster.messageCreated(result.message);
+    await activity.messageCreated(result.conversation, userId);
+    return result.message;
   },
 
   async update(userId: string, messageId: string, input: UpdateMessageInput) {
     const existing = await messages.findById(messageId);
     if (!existing) throw new MessageNotFoundError();
-    await conversations.getAccessible(userId, existing.conversationId);
+    const conversation = await conversations.getAccessible(
+      userId,
+      existing.conversationId,
+    );
     conversationPolicy.assertMessageEditable(existing, userId);
     const message = await messages.updateContent(
       messageId,
@@ -106,6 +116,7 @@ const createMessageService = ({
     );
     if (!message) throw new MessageNotFoundError();
     broadcaster.messageUpdated(message);
+    await activity.messageUpdated(conversation, userId);
     return message;
   },
 
@@ -130,6 +141,7 @@ const createMessageService = ({
     const message = await messages.redact(messageId, new Date());
     if (!message) throw new MessageNotFoundError();
     broadcaster.messageDeleted(message);
+    await activity.messageDeleted(conversation, userId);
   },
 });
 

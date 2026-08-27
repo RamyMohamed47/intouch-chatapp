@@ -9,6 +9,7 @@ import mongoose from "mongoose";
 import CategoryModel from "../src/modules/categories/category.model.js";
 import createMongooseCategoryRepository from "../src/modules/categories/category.repository.js";
 import createCategoryService from "../src/modules/categories/category.service.js";
+import createMongooseConversationActivityAudienceRepository from "../src/modules/conversation-activity/conversation-activity.repository.js";
 import ConversationParticipantModel from "../src/modules/conversations/conversation-participant.model.js";
 import createMongooseConversationParticipantRepository from "../src/modules/conversations/conversation-participant.repository.js";
 import ConversationModel from "../src/modules/conversations/conversation.model.js";
@@ -34,6 +35,7 @@ import createMongooseOrganizationUnitOfWork, {
   type OrganizationUnitOfWork,
 } from "../src/modules/organizations/organization.unit-of-work.js";
 import createMongooseUserRepository from "../src/modules/user/user.repository.js";
+import { UserModel } from "../src/modules/user/user.model.js";
 import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
 import createMongooseConversationReadStateRepository from "../src/modules/read-receipts/read-receipt.repository.js";
 
@@ -52,6 +54,7 @@ before(async () => {
     ConversationParticipantModel.syncIndexes(),
     MessageModel.syncIndexes(),
     ConversationReadStateModel.syncIndexes(),
+    UserModel.syncIndexes(),
   ]);
 });
 
@@ -64,6 +67,7 @@ beforeEach(async () => {
     ConversationParticipantModel.deleteMany({}).exec(),
     MessageModel.deleteMany({}).exec(),
     ConversationReadStateModel.deleteMany({}).exec(),
+    UserModel.deleteMany({}).exec(),
   ]);
 });
 
@@ -72,7 +76,13 @@ after(async () => {
   await replicaSet.stop();
 });
 
-const createHarness = (unitOfWork = createMongooseOrganizationUnitOfWork()) => {
+const createHarness = (
+  unitOfWork = createMongooseOrganizationUnitOfWork(),
+  conversationCreated: (
+    conversation: { id: string },
+    actorUserId: string,
+  ) => Promise<void> = async () => undefined,
+) => {
   const organizations = createMongooseOrganizationRepository();
   const memberships = createMembershipService(
     createMongooseMembershipRepository(),
@@ -95,6 +105,11 @@ const createHarness = (unitOfWork = createMongooseOrganizationUnitOfWork()) => {
     users: createMongooseUserRepository(),
   });
   const messageService = createMessageService({
+    activity: {
+      messageCreated: async () => undefined,
+      messageDeleted: async () => undefined,
+      messageUpdated: async () => undefined,
+    },
     broadcaster: {
       messageCreated() {},
       messageDeleted() {},
@@ -122,6 +137,7 @@ const createHarness = (unitOfWork = createMongooseOrganizationUnitOfWork()) => {
     }),
     conversationService,
     directMessageService: createDirectMessageService({
+      activity: { conversationCreated },
       conversations,
       memberships,
       organizations,
@@ -185,8 +201,19 @@ describe("category and conversation transactions", () => {
   });
 
   test("creates one idempotent direct conversation with exactly two participants", async () => {
-    const { directMessageService, memberships, organization } =
-      await createOrganizationAndCategory();
+    const activities: Array<{ conversationId: string; actorUserId: string }> =
+      [];
+    const harness = createHarness(
+      createMongooseOrganizationUnitOfWork(),
+      async (conversation, actorUserId) => {
+        activities.push({ conversationId: conversation.id, actorUserId });
+      },
+    );
+    const organization = await harness.organizationService.create(ownerId, {
+      name: "Direct Team",
+      visibility: OrganizationVisibility.PRIVATE,
+    });
+    const { directMessageService, memberships } = harness;
     await memberships.createMember(memberId, organization.id);
 
     const first = await directMessageService.create(ownerId, organization.id, {
@@ -201,6 +228,9 @@ describe("category and conversation transactions", () => {
     assert.equal(first.directMessage.id, second.directMessage.id);
     assert.equal(await ConversationModel.countDocuments({ type: "DIRECT" }), 1);
     assert.equal(await ConversationParticipantModel.countDocuments(), 2);
+    assert.deepEqual(activities, [
+      { conversationId: first.directMessage.id, actorUserId: ownerId },
+    ]);
   });
 
   test("rejects self direct messages and recipients outside the organization", async () => {
@@ -249,6 +279,11 @@ describe("category and conversation transactions", () => {
       organization,
     } = await createOrganizationAndCategory();
     await memberships.createMember(memberId, organization.id);
+    const audiences = createMongooseConversationActivityAudienceRepository();
+    assert.deepEqual(
+      await audiences.listOrganizationMemberUserIds(organization.id, ownerId),
+      [memberId],
+    );
     const result = await directMessageService.create(ownerId, organization.id, {
       recipientUserId: memberId,
     });
@@ -282,13 +317,26 @@ describe("category and conversation transactions", () => {
     assert.equal(unread?.unreadCount, 1);
 
     const readStateRepository = createMongooseConversationReadStateRepository();
-    await readStateRepository.advance({
-      organizationId: organization.id,
-      conversationId: result.directMessage.id,
-      userId: ownerId,
-      lastReadMessageId: incoming.id,
-      lastReadAt: new Date(),
-    });
+    const concurrentAdvances = await Promise.all([
+      readStateRepository.advance({
+        organizationId: organization.id,
+        conversationId: result.directMessage.id,
+        userId: ownerId,
+        lastReadMessageId: incoming.id,
+        lastReadAt: new Date(),
+      }),
+      readStateRepository.advance({
+        organizationId: organization.id,
+        conversationId: result.directMessage.id,
+        userId: ownerId,
+        lastReadMessageId: incoming.id,
+        lastReadAt: new Date(),
+      }),
+    ]);
+    assert.equal(
+      concurrentAdvances.filter(({ advanced }) => advanced).length,
+      1,
+    );
     const stale = await readStateRepository.advance({
       organizationId: organization.id,
       conversationId: result.directMessage.id,
@@ -296,7 +344,16 @@ describe("category and conversation transactions", () => {
       lastReadMessageId: ownMessage.id,
       lastReadAt: new Date(),
     });
-    assert.equal(stale.lastReadMessageId, incoming.id);
+    assert.equal(stale.readState.lastReadMessageId, incoming.id);
+    assert.equal(stale.advanced, false);
+    const peerAdvance = await readStateRepository.advance({
+      organizationId: organization.id,
+      conversationId: result.directMessage.id,
+      userId: memberId,
+      lastReadMessageId: incoming.id,
+      lastReadAt: new Date(),
+    });
+    assert.equal(peerAdvance.advanced, true);
     const record = await createMongooseConversationRepository().findById(
       result.directMessage.id,
     );
@@ -304,6 +361,8 @@ describe("category and conversation transactions", () => {
     const [read] = await conversationService.summarize(ownerId, [record]);
     assert.equal(read?.unreadCount, 0);
     assert.equal(read?.readReceipt?.lastReadMessageId, incoming.id);
+    assert.equal(read?.peerReadReceipt?.userId, memberId);
+    assert.equal(read?.peerReadReceipt?.lastReadMessageId, incoming.id);
   });
 
   test("creates a private channel and owner participant atomically", async () => {
@@ -321,6 +380,104 @@ describe("category and conversation transactions", () => {
     assert.equal(conversation.position, 0);
     assert.equal(await ConversationModel.countDocuments(), 1);
     assert.equal(await ConversationParticipantModel.countDocuments(), 1);
+  });
+
+  test("summarizes only current eligible channel readers", async () => {
+    const { category, conversationService, memberships, organization } =
+      await createOrganizationAndCategory();
+    await memberships.createMember(memberId, organization.id);
+    const readerAudiences =
+      createMongooseConversationActivityAudienceRepository();
+    await UserModel.create({
+      _id: memberId,
+      username: "member-reader",
+      displayName: "Member Reader",
+      email: "member-reader@example.com",
+      loginProviders: [],
+    });
+    const conversation = await conversationService.create(
+      ownerId,
+      organization.id,
+      {
+        categoryId: category.id,
+        name: "Reader Test",
+        visibility: ConversationVisibility.PUBLIC,
+      },
+    );
+    const message = await createMongooseMessageRepository().create({
+      conversationId: conversation.id,
+      senderId: ownerId,
+      content: "read me",
+      messageType: MessageType.TEXT,
+    });
+    const readStates = createMongooseConversationReadStateRepository();
+    await readStates.advance({
+      organizationId: organization.id,
+      conversationId: conversation.id,
+      userId: memberId,
+      lastReadMessageId: message.id,
+      lastReadAt: new Date(),
+    });
+    const input = {
+      organizationId: organization.id,
+      conversationId: conversation.id,
+      messageId: message.id,
+      senderId: ownerId,
+      requireParticipant: false,
+    };
+    const publicSummary = await readStates.summarizeMessageReaders(input);
+    assert.equal(publicSummary.readByCount, 1);
+    assert.equal(publicSummary.readers[0]?.displayName, "Member Reader");
+
+    assert.equal(
+      (
+        await readStates.summarizeMessageReaders({
+          ...input,
+          requireParticipant: true,
+        })
+      ).readByCount,
+      0,
+    );
+    await createMongooseConversationParticipantRepository().create({
+      organizationId: organization.id,
+      conversationId: conversation.id,
+      userId: memberId,
+      addedByUserId: ownerId,
+    });
+    assert.deepEqual(
+      await readerAudiences.listParticipantMemberUserIds(
+        organization.id,
+        conversation.id,
+        ownerId,
+      ),
+      [memberId],
+    );
+    assert.equal(
+      (
+        await readStates.summarizeMessageReaders({
+          ...input,
+          requireParticipant: true,
+        })
+      ).readByCount,
+      1,
+    );
+
+    await MembershipModel.deleteOne({
+      organizationId: organization.id,
+      userId: memberId,
+    }).exec();
+    assert.equal(
+      (await readStates.summarizeMessageReaders(input)).readByCount,
+      0,
+    );
+    assert.deepEqual(
+      await readerAudiences.listParticipantMemberUserIds(
+        organization.id,
+        conversation.id,
+        ownerId,
+      ),
+      [],
+    );
   });
 
   test("rolls back a private channel when owner participation fails", async () => {

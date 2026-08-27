@@ -241,9 +241,10 @@ Record each case as `Pass`, `Fail`, `Blocked`, or `Not Run`.
 | RT-09 | Late typing observer    | Begin typing, then have another account join the same conversation while typing continues.                                            | The late joiner sees the indicator after the next heartbeat, within approximately 3 seconds.                                                      |
 | RT-10 | Typing cleanup          | While the indicator is visible, disconnect, leave, lose access, or log out.                                                           | Typing state clears without waiting for fallback expiry and does not reappear without a new authorized heartbeat.                                 |
 | RT-11 | Joined-member identity  | Keep an existing member in an organization conversation, then accept an invitation or join publicly as another user and begin typing. | The existing member's roster refreshes immediately and the typing indicator resolves the new member's display name without a long-lived fallback. |
-| RT-12 | DM read receipt         | Send a DM, open it as recipient, and keep the document visible.                                                                       | Sender changes from Sent to Read after the recipient's durable receipt advances.                                                                  |
+| RT-12 | DM read receipt         | Send a DM, open it as recipient, keep the newest message visible, then reload the sender's page.                                      | Sender changes from Sent to Read after the durable receipt advances, and Read remains after reload.                                               |
 | RT-13 | Channel receipt privacy | Read a channel from another account.                                                                                                  | Unread state clears for that reader, but no public per-reader channel receipt appears.                                                            |
-| RT-14 | Inactive document       | Receive messages while the recipient tab/document is hidden.                                                                          | History fetch alone does not falsely mark messages read until the document is active.                                                             |
+| RT-14 | Inactive document       | Receive messages while the recipient tab/document is hidden or unfocused.                                                             | History fetch alone does not mark messages read; the receipt advances after the active tab shows the newest message.                              |
+| RT-15 | Reading older history   | Scroll away from the newest message, receive another message, then return to the bottom.                                              | The incoming message remains unread while browsing history and becomes read only after the newest message is visible.                             |
 
 ## 6. Security and Abuse Test Cases
 
@@ -322,6 +323,27 @@ deployment. Never reuse another real user's credentials.
   defaults to 30 with a maximum of 100.
 - A stale read-receipt update should return the current high-water receipt and
   must never move it backwards.
+- Direct-message status appears only below the latest loaded, non-deleted
+  outgoing message. It remains `Sent` until the peer's durable high-water mark
+  reaches that message, then changes to `Read`.
+- Create a DM from account A while account B is online. Account B's DM list
+  should update without a page refresh, but no toast should appear until a
+  message is sent.
+- Send a message to a channel or DM that account B is not currently viewing.
+  Its list preview and unread badge should update, and an accessible notification
+  should offer to open the conversation. No toast should appear while that
+  conversation is already active.
+- In a channel, inspect the latest loaded, non-deleted message sent by the
+  current user. It should show `Sent` until another eligible member reads it,
+  then `Read by N`. Opening the control shows at most three safe reader names
+  plus any additional count.
+- Channel reader details are sender-only. Requesting another sender's message
+  readers returns `403`; inaccessible conversations or mismatched message IDs
+  return `404`. Former members and stale private-channel participants do not
+  contribute to reader counts.
+- Briefly disconnect and reconnect Socket.IO after activity in another
+  conversation. Cached channel and DM summaries should reconcile without a
+  full page reload.
 
 ## 9. Defect Reporting Template
 

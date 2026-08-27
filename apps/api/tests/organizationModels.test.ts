@@ -108,5 +108,13 @@ describe("organization persistence indexes", () => {
         ([, options]) => options.name === "unique_conversation_read_receipt",
       );
     assert.equal(readState?.[1].unique, true);
+    assert.ok(
+      ConversationReadStateModel.schema
+        .indexes()
+        .some(
+          ([, options]) =>
+            options.name === "read_receipts_by_conversation_high_water_mark",
+        ),
+    );
   });
 });

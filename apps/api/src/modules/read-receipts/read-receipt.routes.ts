@@ -6,6 +6,7 @@ import {
 } from "../../middleware/validateRequest.js";
 import type { ReadReceiptController } from "./read-receipt.controller.js";
 import {
+  messageReadersParamsSchema,
   readReceiptParamsSchema,
   updateReadReceiptSchema,
 } from "./read-receipt.schemas.js";
@@ -23,6 +24,11 @@ const createReadReceiptRouter = (
     validateParams(readReceiptParamsSchema),
     validateBody(updateReadReceiptSchema),
     controller.advance,
+  );
+  router.get(
+    "/:conversationId/messages/:messageId/readers",
+    validateParams(messageReadersParamsSchema),
+    controller.summarizeMessageReaders,
   );
   return router;
 };

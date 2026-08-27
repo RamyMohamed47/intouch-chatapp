@@ -16,6 +16,8 @@ export {
   messageListResponseSchema,
   messageResponseSchema,
   messageTypeSchema,
+  messageReadReceiptSummaryDtoSchema,
+  messageReadReceiptSummaryResponseSchema,
   readReceiptDtoSchema,
   readReceiptResponseSchema,
 } from "./message.dto.js";
@@ -23,6 +25,8 @@ export type {
   MessageDto,
   MessageListResponse,
   MessageResponse,
+  MessageReadReceiptSummaryDto,
+  MessageReadReceiptSummaryResponse,
   MessageTypeValue,
   ReadReceiptDto,
   ReadReceiptResponse,

@@ -174,9 +174,11 @@ const auth = createAuthModule({
   },
 });
 const organizations = createOrganizationModule({
+  conversationActivityRealtime: realtimeGateway,
   conversationRealtime: realtimeGateway,
   membershipRealtime: realtimeGateway,
   messageBroadcaster: realtimeGateway,
+  logger,
   presenceRealtime: realtimeGateway,
   rateLimits: abuseProtection.rateLimits,
   readReceiptRealtime: realtimeGateway,

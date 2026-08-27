@@ -2,6 +2,8 @@ import type { Server } from "socket.io";
 
 import type {
   ConversationAccessRevokedEvent,
+  ChannelReadReceiptsChangedEvent,
+  ConversationActivityEvent,
   ConversationSocketInput,
   MembershipJoinedEvent,
   MessageEvent,
@@ -46,6 +48,10 @@ export interface ClientToServerEvents {
 }
 
 export interface ServerToClientEvents {
+  "channel-read-receipts:changed": (
+    event: ChannelReadReceiptsChangedEvent,
+  ) => void;
+  "conversation:activity": (event: ConversationActivityEvent) => void;
   "conversation:access-revoked": (
     input: ConversationAccessRevokedEvent,
   ) => void;

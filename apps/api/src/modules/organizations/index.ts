@@ -1,7 +1,13 @@
 import type { RequestHandler } from "express";
+import type { Logger } from "pino";
 
 import type { MessageBroadcaster } from "../../broadcasting/messageBroadcaster.js";
 import createAuthenticatedRateLimit from "../../middleware/authenticatedRateLimit.js";
+import {
+  createConversationActivityService,
+  createMongooseConversationActivityAudienceRepository,
+  type ConversationActivityRealtime,
+} from "../conversation-activity/index.js";
 import {
   RateLimitAction,
   type AuthenticatedRateLimiter,
@@ -70,9 +76,11 @@ import createOrganizationService from "./organization.service.js";
 import createMongooseOrganizationUnitOfWork from "./organization.unit-of-work.js";
 
 export interface OrganizationModuleDependencies {
+  conversationActivityRealtime: ConversationActivityRealtime;
   conversationRealtime: ConversationRealtime;
   membershipRealtime: MembershipRealtime;
   messageBroadcaster: MessageBroadcaster;
+  logger: Logger;
   presenceRealtime: PresenceRealtime;
   readReceiptRealtime: ReadReceiptRealtime;
   rateLimits: AuthenticatedRateLimiter;
@@ -80,9 +88,11 @@ export interface OrganizationModuleDependencies {
 }
 
 const createOrganizationModule = ({
+  conversationActivityRealtime,
   conversationRealtime,
   membershipRealtime,
   messageBroadcaster,
+  logger,
   presenceRealtime,
   rateLimits,
   readReceiptRealtime,
@@ -116,6 +126,11 @@ const createOrganizationModule = ({
   const conversationReadStates =
     createMongooseConversationReadStateRepository();
   const conversationSummaries = createMongooseConversationSummaryRepository();
+  const conversationActivity = createConversationActivityService({
+    audiences: createMongooseConversationActivityAudienceRepository(),
+    logger,
+    realtime: conversationActivityRealtime,
+  });
   const organizations = createMongooseOrganizationRepository();
   const invitations = createMongooseInvitationRepository();
   const memberships = createMembershipService(
@@ -166,6 +181,7 @@ const createOrganizationModule = ({
     users,
   });
   const messageService = createMessageService({
+    activity: conversationActivity,
     broadcaster: messageBroadcaster,
     conversationPolicy,
     conversations: conversationService,
@@ -174,6 +190,7 @@ const createOrganizationModule = ({
     unitOfWork,
   });
   const directMessageService = createDirectMessageService({
+    activity: conversationActivity,
     conversations,
     memberships,
     organizations,

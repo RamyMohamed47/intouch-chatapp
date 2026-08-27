@@ -8,8 +8,13 @@ export interface ReadReceiptEvent {
 
 export interface ReadReceiptRealtime {
   readReceiptUpdated(receipt: ReadReceiptEvent): void;
+  channelReadReceiptsChanged(
+    conversationId: string,
+    excludedUserId: string,
+  ): void;
 }
 
 export const createNoopReadReceiptRealtime = (): ReadReceiptRealtime => ({
   readReceiptUpdated() {},
+  channelReadReceiptsChanged() {},
 });

@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   createMessageSchema,
+  messageReadReceiptSummaryResponseSchema,
   messageHistoryQuerySchema,
   updateReadReceiptSchema,
 } from "../messages/index.js";
@@ -44,6 +45,37 @@ describe("shared message schemas", () => {
     );
     assert.equal(
       updateReadReceiptSchema.safeParse({ messageId: "invalid" }).success,
+      false,
+    );
+  });
+
+  test("limits channel reader previews while preserving the total", () => {
+    const messageId = "507f1f77bcf86cd799439011";
+    const readers = [
+      {
+        id: "507f1f77bcf86cd799439012",
+        username: "lina",
+        displayName: "Lina Hassan",
+      },
+    ];
+    assert.deepEqual(
+      messageReadReceiptSummaryResponseSchema.parse({
+        readReceiptSummary: { messageId, readByCount: 4, readers },
+      }),
+      { readReceiptSummary: { messageId, readByCount: 4, readers } },
+    );
+    assert.equal(
+      messageReadReceiptSummaryResponseSchema.safeParse({
+        readReceiptSummary: {
+          messageId,
+          readByCount: 4,
+          readers: Array.from({ length: 4 }, (_, index) => ({
+            id: `507f1f77bcf86cd79943901${index + 2}`,
+            username: `user-${index}`,
+            displayName: `User ${index}`,
+          })),
+        },
+      }).success,
       false,
     );
   });
