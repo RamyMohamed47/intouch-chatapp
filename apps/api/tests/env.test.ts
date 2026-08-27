@@ -41,6 +41,7 @@ describe("auth environment configuration", () => {
     assert.equal(config.loginAttemptLimit, 10);
     assert.equal(config.loginAttemptWindowMs, 900_000);
     assert.equal(config.loginAttemptCooldownMs, 900_000);
+    assert.equal(config.trustProxy, "loopback");
   });
 
   test("accepts bounded login-attempt configuration", () => {

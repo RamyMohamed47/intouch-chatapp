@@ -23,11 +23,12 @@ describe("frontend content security policy", () => {
     expect(directive(policy, "script-src")).toBe(
       "script-src 'self' 'nonce-test-nonce' 'strict-dynamic'",
     );
+    expect(directive(policy, "script-src")).not.toContain("'unsafe-inline'");
     expect(directive(policy, "connect-src")).toBe(
       "connect-src 'self' https://api.intouch.example wss://api.intouch.example",
     );
     expect(directive(policy, "style-src-elem")).toBe(
-      "style-src-elem 'self' 'nonce-test-nonce'",
+      "style-src-elem 'self' 'unsafe-inline'",
     );
     expect(directive(policy, "style-src-attr")).toBe(
       "style-src-attr 'unsafe-inline'",

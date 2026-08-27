@@ -19,7 +19,7 @@ export interface AppConfig {
   loginAttemptWindowMs: number;
   loginThrottleSecret: string;
   port: number;
-  trustProxy: boolean | number;
+  trustProxy: boolean | number | string;
 }
 
 const requireEnv = (
@@ -200,6 +200,6 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       "LOGIN_THROTTLE_SECRET",
     ),
     port: parsePort(env.PORT),
-    trustProxy: isProduction ? 1 : false,
+    trustProxy: isProduction ? 1 : "loopback",
   };
 };

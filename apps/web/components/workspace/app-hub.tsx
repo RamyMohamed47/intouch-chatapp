@@ -92,7 +92,10 @@ export function AppHub() {
           <section className="relative overflow-hidden rounded-[1.75rem] border border-brand-blue/20 bg-background/30 px-6 py-5 sm:px-8">
             <div className="absolute -top-16 -left-12 size-44 rounded-full bg-brand-blue/12 blur-3xl" />
             <div className="absolute -right-10 -bottom-20 size-48 rounded-full bg-brand-orange/10 blur-3xl" />
-            <BrandLockup className="relative mx-auto h-36 w-full max-w-sm" />
+            <BrandLockup
+              className="relative mx-auto h-36 w-full max-w-sm"
+              preload
+            />
           </section>
 
           {organizations.isPending ? (

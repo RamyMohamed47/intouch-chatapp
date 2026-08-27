@@ -25,7 +25,7 @@ export interface AppDependencies {
   organizationConversationRouter?: Router;
   organizationRouter?: Router;
   readReceiptRouter?: Router;
-  trustProxy?: boolean | number;
+  trustProxy?: boolean | number | string;
 }
 
 const createApp = ({
