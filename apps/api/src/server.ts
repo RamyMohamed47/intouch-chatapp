@@ -175,6 +175,7 @@ const auth = createAuthModule({
 });
 const organizations = createOrganizationModule({
   conversationRealtime: realtimeGateway,
+  membershipRealtime: realtimeGateway,
   messageBroadcaster: realtimeGateway,
   presenceRealtime: realtimeGateway,
   rateLimits: abuseProtection.rateLimits,

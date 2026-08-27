@@ -62,6 +62,7 @@ const createHarness = ({
   targetIsMember = false,
 }: HarnessOptions = {}) => {
   const records = existingInvitation ? [existingInvitation] : [];
+  const membershipEvents: { organizationId: string; userId: string }[] = [];
   let targetMembership: MembershipRecord | null = targetIsMember
     ? {
         id: "507f1f77bcf86cd799439015",
@@ -209,12 +210,17 @@ const createHarness = ({
     invitations,
     organizations,
     policy: createOrganizationPolicy(),
+    realtime: {
+      membershipJoined(event) {
+        membershipEvents.push(event);
+      },
+    },
     unitOfWork,
     users,
     now: () => now,
   });
 
-  return { records, service };
+  return { membershipEvents, records, service };
 };
 
 describe("invitation service", () => {
@@ -306,7 +312,7 @@ describe("invitation service", () => {
   });
 
   test("accepts and consumes an invitation", async () => {
-    const { records, service } = createHarness({
+    const { membershipEvents, records, service } = createHarness({
       existingInvitation: {
         id: invitationId,
         organizationId,
@@ -321,6 +327,9 @@ describe("invitation service", () => {
 
     assert.equal(result.role, MembershipRole.MEMBER);
     assert.equal(records.length, 0);
+    assert.deepEqual(membershipEvents, [
+      { organizationId, userId: invitedUserId },
+    ]);
   });
 
   test("rejects expired or mismatched invitation access", async () => {

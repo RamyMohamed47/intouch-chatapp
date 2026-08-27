@@ -35,6 +35,7 @@ const createService = (
     updatedAt: now,
   };
   let invitationDeleted = false;
+  const membershipEvents: { organizationId: string; userId: string }[] = [];
   const organizations: OrganizationRepository = {
     create: async () => organization,
     findById: async () => organization,
@@ -87,8 +88,14 @@ const createService = (
   return {
     service: createMembershipAccessService({
       policy: createOrganizationPolicy(),
+      realtime: {
+        membershipJoined(event) {
+          membershipEvents.push(event);
+        },
+      },
       unitOfWork,
     }),
+    membershipEvents,
     wasInvitationDeleted: () => invitationDeleted,
   };
 };
@@ -100,6 +107,7 @@ describe("membership access service", () => {
 
     assert.equal(membership.role, MembershipRole.MEMBER);
     assert.equal(harness.wasInvitationDeleted(), true);
+    assert.deepEqual(harness.membershipEvents, [{ organizationId, userId }]);
   });
 
   test("conceals private organizations from public joining", async () => {

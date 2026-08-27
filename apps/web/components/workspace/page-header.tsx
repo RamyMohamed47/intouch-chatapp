@@ -12,7 +12,7 @@ export function PageHeader({
 }: {
   eyebrow?: string;
   title: string;
-  description?: string;
+  description?: ReactNode;
   actions?: ReactNode;
   className?: string;
 }) {
@@ -33,9 +33,9 @@ export function PageHeader({
           {title}
         </h1>
         {description && (
-          <p className="mt-1 hidden truncate text-xs text-muted-foreground sm:block">
+          <div className="mt-1 hidden truncate text-xs text-muted-foreground sm:block">
             {description}
-          </p>
+          </div>
         )}
       </div>
       <div className="flex items-center gap-2">

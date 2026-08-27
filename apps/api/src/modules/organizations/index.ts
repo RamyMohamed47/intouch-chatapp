@@ -40,6 +40,7 @@ import {
   createMembershipService,
   createMongooseMembershipRepository,
   createOrganizationAccessRouter,
+  type MembershipRealtime,
 } from "../memberships/index.js";
 import {
   createConversationMessageRouter,
@@ -70,6 +71,7 @@ import createMongooseOrganizationUnitOfWork from "./organization.unit-of-work.js
 
 export interface OrganizationModuleDependencies {
   conversationRealtime: ConversationRealtime;
+  membershipRealtime: MembershipRealtime;
   messageBroadcaster: MessageBroadcaster;
   presenceRealtime: PresenceRealtime;
   readReceiptRealtime: ReadReceiptRealtime;
@@ -79,6 +81,7 @@ export interface OrganizationModuleDependencies {
 
 const createOrganizationModule = ({
   conversationRealtime,
+  membershipRealtime,
   messageBroadcaster,
   presenceRealtime,
   rateLimits,
@@ -193,6 +196,7 @@ const createOrganizationModule = ({
   const readReceiptController = createReadReceiptController(readReceiptService);
   const invitationService = createInvitationService({
     invitations,
+    realtime: membershipRealtime,
     organizations,
     policy,
     unitOfWork,
@@ -200,6 +204,7 @@ const createOrganizationModule = ({
   });
   const membershipAccessService = createMembershipAccessService({
     policy,
+    realtime: membershipRealtime,
     unitOfWork,
   });
   const invitationController = createInvitationController(invitationService);

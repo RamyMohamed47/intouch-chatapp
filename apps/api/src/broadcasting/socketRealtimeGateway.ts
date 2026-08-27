@@ -1,6 +1,7 @@
 import type { MessageBroadcaster } from "./messageBroadcaster.js";
 import {
   conversationAccessRevokedEventSchema,
+  membershipJoinedEventSchema,
   messageEventSchema,
   presenceEventSchema,
   readReceiptEventSchema,
@@ -8,6 +9,7 @@ import {
 } from "@intouch/shared/realtime";
 import type { InTouchSocketServer } from "../contracts/socket.js";
 import type { ConversationRealtime } from "../modules/conversations/conversation.realtime.js";
+import type { MembershipRealtime } from "../modules/memberships/membership.realtime.js";
 import type { PresenceRealtime } from "../modules/presence/presence.realtime.js";
 import type { ReadReceiptRealtime } from "../modules/read-receipts/read-receipt.realtime.js";
 import type { TypingRealtime } from "../modules/typing/typing.realtime.js";
@@ -22,6 +24,7 @@ export interface SocketRealtimeGateway
   extends
     MessageBroadcaster,
     ConversationRealtime,
+    MembershipRealtime,
     PresenceRealtime,
     ReadReceiptRealtime,
     TypingRealtime {
@@ -67,6 +70,13 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       io?.to(roomName(message.conversationId)).emit(
         "message:deleted",
         messageEventSchema.parse(message),
+      );
+    },
+
+    membershipJoined(event) {
+      io?.to(organizationRoomName(event.organizationId)).emit(
+        "membership:joined",
+        membershipJoinedEventSchema.parse(event),
       );
     },
 

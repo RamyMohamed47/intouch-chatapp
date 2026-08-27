@@ -83,13 +83,14 @@ const createPresenceService = ({
         stored.map(({ userId, lastSeenAt }) => [userId, lastSeenAt]),
       );
       return Promise.all(
-        userIds.map(async (userId) => ({
-          userId,
-          status: (await store.isOnline(userId))
-            ? PresenceStatus.ONLINE
-            : PresenceStatus.OFFLINE,
-          lastSeenAt: lastSeenByUser.get(userId) ?? null,
-        })),
+        userIds.map(async (userId) => {
+          const online = await store.isOnline(userId);
+          return {
+            userId,
+            status: online ? PresenceStatus.ONLINE : PresenceStatus.OFFLINE,
+            lastSeenAt: online ? null : (lastSeenByUser.get(userId) ?? null),
+          };
+        }),
       );
     },
   };

@@ -243,7 +243,7 @@ describe("authenticated conversation sockets", () => {
     assert.equal(received, false);
   });
 
-  test("scopes presence subscriptions to organization rooms", async () => {
+  test("scopes organization lifecycle events to organization rooms", async () => {
     const subscribed = await connect();
     const outside = await connect("second-token");
     const subscription = await new Promise<{ success: boolean }>((resolve) => {
@@ -251,8 +251,12 @@ describe("authenticated conversation sockets", () => {
     });
     assert.equal(subscription.success, true);
     let outsideReceived = false;
+    let outsideMembershipReceived = false;
     outside.on("presence:updated", () => {
       outsideReceived = true;
+    });
+    outside.on("membership:joined", () => {
+      outsideMembershipReceived = true;
     });
     const received = new Promise<unknown>((resolve) => {
       subscribed.once("presence:updated", resolve);
@@ -263,19 +267,40 @@ describe("authenticated conversation sockets", () => {
       lastSeenAt: null,
     });
     await received;
+    const membershipReceived = new Promise<unknown>((resolve) => {
+      subscribed.once("membership:joined", resolve);
+    });
+    gateway.membershipJoined({ organizationId, userId: secondUserId });
+    assert.deepEqual(await membershipReceived, {
+      organizationId,
+      userId: secondUserId,
+    });
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(outsideReceived, false);
+    assert.equal(outsideMembershipReceived, false);
   });
 
-  test("broadcasts typing only to other users in the joined conversation", async () => {
+  test("broadcasts typing heartbeats to late joiners but not the sender", async () => {
     const author = await connect();
     const peer = await connect("second-token");
     await join(author, firstConversationId);
-    await join(peer, firstConversationId);
     let authorReceived = false;
     author.on("typing:updated", () => {
       authorReceived = true;
     });
+
+    const initialAcknowledgement = await new Promise<{ success: boolean }>(
+      (resolve) => {
+        author.emit(
+          "typing:start",
+          { conversationId: firstConversationId },
+          resolve,
+        );
+      },
+    );
+    assert.equal(initialAcknowledgement.success, true);
+
+    await join(peer, firstConversationId);
     const received = new Promise<{
       conversationId: string;
       userId: string;
@@ -296,6 +321,7 @@ describe("authenticated conversation sockets", () => {
       userId: firstUserId,
       isTyping: true,
     });
+    await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(authorReceived, false);
   });
 

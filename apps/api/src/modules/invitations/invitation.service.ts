@@ -2,6 +2,10 @@ import type { InviteMemberInput } from "@intouch/shared/memberships";
 
 import type { UserRepository } from "../user/index.js";
 import { MembershipConflictError } from "../memberships/membership.errors.js";
+import {
+  createNoopMembershipRealtime,
+  type MembershipRealtime,
+} from "../memberships/membership.realtime.js";
 import { MembershipPersistenceConflictError } from "../memberships/membership.repository.js";
 import type { OrganizationPolicy } from "../organizations/organization.policy.js";
 import { OrganizationNotFoundError } from "../organizations/organization.errors.js";
@@ -25,6 +29,7 @@ export interface InvitationServiceDependencies {
   invitations: InvitationRepository;
   organizations: OrganizationRepository;
   policy: OrganizationPolicy;
+  realtime?: MembershipRealtime;
   unitOfWork: OrganizationUnitOfWork;
   users: UserRepository;
   now?: () => Date;
@@ -55,6 +60,7 @@ const createInvitationService = ({
   invitations,
   organizations,
   policy,
+  realtime = createNoopMembershipRealtime(),
   unitOfWork,
   users,
   now = () => new Date(),
@@ -155,7 +161,7 @@ const createInvitationService = ({
     const currentTime = now();
 
     try {
-      return await unitOfWork.run(async (context) => {
+      const createdMembership = await unitOfWork.run(async (context) => {
         const invitation = policy.assertInvitationRecipient(
           await context.invitations.findById(invitationId),
           userId,
@@ -197,6 +203,11 @@ const createInvitationService = ({
 
         return createdMembership;
       });
+      realtime.membershipJoined({
+        organizationId: createdMembership.organizationId,
+        userId: createdMembership.userId,
+      });
+      return createdMembership;
     } catch (error) {
       if (error instanceof MembershipPersistenceConflictError) {
         throw new MembershipConflictError();

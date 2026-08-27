@@ -29,10 +29,11 @@ import {
 import { updateOrganizationSchema } from "@intouch/shared/organizations";
 
 import { InviteMemberForm } from "@/components/memberships/invite-member-form";
+import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
 import { initials } from "@/components/workspace/app-shell";
-import { Avatar, AvatarBadge, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/form-error";
@@ -400,6 +401,12 @@ function PrivateParticipants({
               )}
               {member.user.displayName}
               {owner ? " (owner)" : ""}
+              <PresenceIndicator
+                className="text-[10px]"
+                displayName={member.user.displayName}
+                status={member.user.status}
+                lastSeenAt={member.user.lastSeenAt}
+              />
             </button>
           );
         })}
@@ -613,21 +620,21 @@ function MemberSettings({ organizationId }: { organizationId: string }) {
                 <AvatarFallback>
                   {initials(member.user.displayName)}
                 </AvatarFallback>
-                <AvatarBadge
-                  className={
-                    member.user.status === "ONLINE"
-                      ? "bg-status"
-                      : "bg-muted-foreground"
-                  }
-                />
               </Avatar>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {member.user.displayName}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  @{member.user.username} - {member.user.status.toLowerCase()}
-                </p>
+                <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                  <span className="truncate">@{member.user.username}</span>
+                  <span aria-hidden="true">-</span>
+                  <PresenceIndicator
+                    className="shrink-0"
+                    displayName={member.user.displayName}
+                    status={member.user.status}
+                    lastSeenAt={member.user.lastSeenAt}
+                  />
+                </div>
               </div>
               <Badge variant="outline">{member.role}</Badge>
             </div>

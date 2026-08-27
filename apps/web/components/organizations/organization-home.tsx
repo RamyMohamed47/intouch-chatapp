@@ -13,9 +13,10 @@ import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/workspace/page-header";
+import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { ResourceState } from "@/components/workspace/resource-state";
 import { initials } from "@/components/workspace/app-shell";
-import { Avatar, AvatarBadge, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
@@ -208,12 +209,11 @@ export function OrganizationHome({
                     <AvatarFallback>
                       {initials(member.user.displayName)}
                     </AvatarFallback>
-                    <AvatarBadge
-                      className={
-                        member.user.status === "ONLINE"
-                          ? "bg-status"
-                          : "bg-muted-foreground"
-                      }
+                    <PresenceIndicator
+                      displayName={member.user.displayName}
+                      status={member.user.status}
+                      lastSeenAt={member.user.lastSeenAt}
+                      variant="compact"
                     />
                   </Avatar>
                   <span className="min-w-0 flex-1">

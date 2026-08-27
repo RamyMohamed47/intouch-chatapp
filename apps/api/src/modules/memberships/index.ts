@@ -8,6 +8,8 @@ export { default as createMembershipAccessService } from "./membership.access.se
 export { default as createMembershipDirectoryService } from "./membership-directory.service.js";
 export type { MembershipAccessService } from "./membership.access.service.js";
 export type { MembershipDirectoryService } from "./membership-directory.service.js";
+export { createNoopMembershipRealtime } from "./membership.realtime.js";
+export type { MembershipRealtime } from "./membership.realtime.js";
 export { default as createMembershipController } from "./membership.controller.js";
 export type { MembershipController } from "./membership.controller.js";
 export { default as createOrganizationAccessRouter } from "./membership.routes.js";

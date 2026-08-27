@@ -38,11 +38,9 @@ const createTypingService = ({
   return {
     start(conversationId: string, userId: string, socketId: string) {
       const identity = { conversationId, userId };
-      const becameActive = store.markTyping(identity, socketId);
+      store.markTyping(identity, socketId);
       scheduleExpiration(identity);
-      if (becameActive) {
-        realtime.typingUpdated({ ...identity, isTyping: true });
-      }
+      realtime.typingUpdated({ ...identity, isTyping: true });
     },
 
     stop(conversationId: string, userId: string, socketId: string) {

@@ -196,6 +196,7 @@ describe("organization transactions", () => {
   });
 
   test("rolls back accepted membership when invitation consumption fails", async () => {
+    const membershipEvents: unknown[] = [];
     const created = await createService(
       createMongooseOrganizationUnitOfWork(),
     ).create(userId, {
@@ -232,6 +233,11 @@ describe("organization transactions", () => {
       invitations: createMongooseInvitationRepository(),
       organizations: createMongooseOrganizationRepository(),
       policy: createOrganizationPolicy(),
+      realtime: {
+        membershipJoined(event) {
+          membershipEvents.push(event);
+        },
+      },
       unitOfWork: failingUnitOfWork,
       users,
       now: () => now,
@@ -243,9 +249,11 @@ describe("organization transactions", () => {
     );
     assert.equal(await MembershipModel.countDocuments(), 1);
     assert.equal(await InvitationModel.countDocuments(), 1);
+    assert.equal(membershipEvents.length, 0);
   });
 
   test("rolls back public membership when invitation cleanup fails", async () => {
+    const membershipEvents: unknown[] = [];
     const created = await createService(
       createMongooseOrganizationUnitOfWork(),
     ).create(userId, {
@@ -274,6 +282,11 @@ describe("organization transactions", () => {
     };
     const service = createMembershipAccessService({
       policy: createOrganizationPolicy(),
+      realtime: {
+        membershipJoined(event) {
+          membershipEvents.push(event);
+        },
+      },
       unitOfWork: failingUnitOfWork,
     });
 
@@ -282,6 +295,7 @@ describe("organization transactions", () => {
       /forced invitation cleanup failure/,
     );
     assert.equal(await MembershipModel.countDocuments(), 1);
+    assert.equal(membershipEvents.length, 0);
   });
 
   test("allows only one concurrent public join", async () => {

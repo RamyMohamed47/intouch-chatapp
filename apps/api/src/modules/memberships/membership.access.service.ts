@@ -2,20 +2,26 @@ import type { OrganizationPolicy } from "../organizations/organization.policy.js
 import { OrganizationNotFoundError } from "../organizations/organization.errors.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
 import { MembershipConflictError } from "./membership.errors.js";
+import {
+  createNoopMembershipRealtime,
+  type MembershipRealtime,
+} from "./membership.realtime.js";
 import { MembershipPersistenceConflictError } from "./membership.repository.js";
 
 export interface MembershipAccessServiceDependencies {
   policy: OrganizationPolicy;
+  realtime?: MembershipRealtime;
   unitOfWork: OrganizationUnitOfWork;
 }
 
 const createMembershipAccessService = ({
   policy,
+  realtime = createNoopMembershipRealtime(),
   unitOfWork,
 }: MembershipAccessServiceDependencies) => ({
   async joinPublic(userId: string, organizationId: string) {
     try {
-      return await unitOfWork.run(async (context) => {
+      const createdMembership = await unitOfWork.run(async (context) => {
         const organization =
           await context.organizations.findById(organizationId);
         const membership = await context.memberships.findForUser(
@@ -38,6 +44,8 @@ const createMembershipAccessService = ({
 
         return createdMembership;
       });
+      realtime.membershipJoined({ organizationId, userId });
+      return createdMembership;
     } catch (error) {
       if (error instanceof MembershipPersistenceConflictError) {
         throw new MembershipConflictError();
