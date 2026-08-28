@@ -8,9 +8,9 @@ import type {
 import {
   channelReadReceiptsChangedEventSchema,
   conversationActivityEventSchema,
-  ConversationActivityKind,
   messageEventSchema,
   messageReactionsChangedEventSchema,
+  notificationChangedEventSchema,
   membershipJoinedEventSchema,
   presenceEventSchema,
   readReceiptEventSchema,
@@ -20,6 +20,10 @@ import {
   type MessageEvent,
   type SocketAcknowledgementResult,
 } from "@intouch/shared/realtime";
+import {
+  NotificationChangeKind,
+  NotificationType,
+} from "@intouch/shared/notifications";
 import type { OrganizationMemberDto } from "@intouch/shared/memberships";
 import type { MessageListResponse } from "@intouch/shared/messages";
 import {
@@ -191,6 +195,8 @@ export function RealtimeProvider({
     const seenActivityQueue: string[] = [];
     const seenReactionActivityIds = new Set<string>();
     const seenReactionActivityQueue: string[] = [];
+    const seenNotificationChanges = new Set<string>();
+    const seenNotificationChangeQueue: string[] = [];
     const reactionTimers = new Map<
       string,
       { conversationId: string; timer: ReturnType<typeof setTimeout> }
@@ -210,6 +216,9 @@ export function RealtimeProvider({
             )) ||
           (query.queryKey[0] === "conversations" &&
             query.queryKey.length === 2),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all,
       });
     });
     nextSocket.on("disconnect", (reason) => {
@@ -333,30 +342,67 @@ export function RealtimeProvider({
           ),
         });
       }
-
+    });
+    nextSocket.on("notification:changed", (raw) => {
+      const parsed = notificationChangedEventSchema.safeParse(raw);
+      if (!parsed.success) return;
+      const changeKey =
+        parsed.data.kind === NotificationChangeKind.UPSERTED
+          ? `UPSERTED:${parsed.data.notification.id}:${parsed.data.notification.lastActivityAt}:${parsed.data.notification.readAt ?? "unread"}`
+          : parsed.data.kind === NotificationChangeKind.DELETED
+            ? `DELETED:${parsed.data.notificationId}`
+            : "READ_ALL";
+      if (seenNotificationChanges.has(changeKey)) return;
+      seenNotificationChanges.add(changeKey);
+      seenNotificationChangeQueue.push(changeKey);
+      if (seenNotificationChangeQueue.length > 200) {
+        const oldest = seenNotificationChangeQueue.shift();
+        if (oldest) seenNotificationChanges.delete(oldest);
+      }
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all,
+      });
+      if (parsed.data.kind !== NotificationChangeKind.UPSERTED) return;
+      const notification = parsed.data.notification;
+      if (notification.actor.id === user?.id || notification.readAt) return;
       if (
-        parsed.data.kind !== ConversationActivityKind.MESSAGE_CREATED ||
-        joinedConversationIdsRef.current.has(parsed.data.conversationId)
+        notification.type === NotificationType.MESSAGE_REACTION_RECEIVED ||
+        (notification.type === NotificationType.DIRECT_MESSAGE_RECEIVED &&
+          joinedConversationIdsRef.current.has(notification.conversationId))
       ) {
         return;
       }
-      const sender = queryClient
-        .getQueryData<OrganizationMemberDto[]>(
-          queryKeys.members.list(parsed.data.organizationId),
-        )
-        ?.find((member) => member.user.id === parsed.data.actorUserId)?.user;
-      const senderName = sender?.displayName ?? "A member";
-      const direct = parsed.data.conversationType === "DIRECT";
-      notify({
-        id: parsed.data.activityId,
-        title: direct
-          ? `${senderName} sent you a direct message`
-          : `${senderName} posted in a channel`,
-        description: "Open the conversation to read the new message.",
-        href: `/app/${parsed.data.organizationId}/${
-          direct ? "direct-messages" : "channels"
-        }/${parsed.data.conversationId}`,
-      });
+
+      if (notification.type === NotificationType.DIRECT_MESSAGE_RECEIVED) {
+        notify({
+          id: `${notification.id}:${notification.latestMessageId}`,
+          title: `${notification.actor.displayName} sent you a direct message`,
+          description: `Open the conversation in ${notification.organization.name}.`,
+          href: `/app/${notification.organization.id}/direct-messages/${notification.conversationId}`,
+        });
+        return;
+      }
+      if (
+        notification.type === NotificationType.ORGANIZATION_INVITATION_RECEIVED
+      ) {
+        notify({
+          id: notification.id,
+          title: `${notification.actor.displayName} invited you`,
+          description: `Join ${notification.organization.name} as a member.`,
+          href: "/app/invitations",
+        });
+        return;
+      }
+      if (
+        notification.type === NotificationType.ORGANIZATION_INVITATION_ACCEPTED
+      ) {
+        notify({
+          id: notification.id,
+          title: `${notification.actor.displayName} accepted your invitation`,
+          description: `They joined ${notification.organization.name}.`,
+          href: `/app/${notification.organization.id}`,
+        });
+      }
     });
     nextSocket.on("channel-read-receipts:changed", (raw) => {
       const parsed = channelReadReceiptsChangedEventSchema.safeParse(raw);

@@ -27,6 +27,7 @@ tags:
   - name: Categories
   - name: Conversations
   - name: Messages
+  - name: Notifications
   - name: Search
 
 security:
@@ -1030,6 +1031,67 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List the caller's notifications
+      description: Returns durable in-app notifications ordered by latest activity.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ALL, UNREAD]
+            default: ALL
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          $ref: "#/components/responses/NotificationListResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /notifications/read-all:
+    put:
+      tags: [Notifications]
+      summary: Mark every caller notification as read
+      responses:
+        "204":
+          description: All notifications marked read
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /notifications/{notificationId}/read:
+    put:
+      tags: [Notifications]
+      summary: Mark one caller notification as read
+      parameters:
+        - $ref: "#/components/parameters/NotificationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/NotificationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
 components:
 
   securitySchemes:
@@ -1116,6 +1178,14 @@ components:
 
     MessageId:
       name: messageId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-fA-F0-9]{24}$"
+
+    NotificationId:
+      name: notificationId
       in: path
       required: true
       schema:
@@ -1392,6 +1462,35 @@ components:
                 type: array
                 items:
                   $ref: "#/components/schemas/Invitation"
+
+    NotificationResponse:
+      description: Notification returned successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [notification]
+            properties:
+              notification:
+                $ref: "#/components/schemas/Notification"
+
+    NotificationListResponse:
+      description: Paginated notification history and unread total.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [notifications, nextCursor, unreadCount]
+            properties:
+              notifications:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+              nextCursor:
+                type: [string, "null"]
+              unreadCount:
+                type: integer
+                minimum: 0
 
     CategoryResponse:
       description: Category returned successfully.
@@ -2301,6 +2400,106 @@ components:
         organization:
           $ref: "#/components/schemas/InvitationOrganizationSummary"
 
+    NotificationOrganizationSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+          format: uri
+
+    NotificationBase:
+      type: object
+      required: [id, actor, organization, readAt, createdAt, lastActivityAt]
+      properties:
+        id:
+          type: string
+        actor:
+          $ref: "#/components/schemas/PublicUserSummary"
+        organization:
+          $ref: "#/components/schemas/NotificationOrganizationSummary"
+        readAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        lastActivityAt:
+          type: string
+          format: date-time
+
+    Notification:
+      oneOf:
+        - $ref: "#/components/schemas/InvitationReceivedNotification"
+        - $ref: "#/components/schemas/InvitationAcceptedNotification"
+        - $ref: "#/components/schemas/DirectMessageNotification"
+        - $ref: "#/components/schemas/MessageReactionNotification"
+      discriminator:
+        propertyName: type
+
+    InvitationReceivedNotification:
+      allOf:
+        - $ref: "#/components/schemas/NotificationBase"
+        - type: object
+          required: [type, invitationId]
+          properties:
+            type:
+              type: string
+              const: ORGANIZATION_INVITATION_RECEIVED
+            invitationId:
+              type: string
+
+    InvitationAcceptedNotification:
+      allOf:
+        - $ref: "#/components/schemas/NotificationBase"
+        - type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              const: ORGANIZATION_INVITATION_ACCEPTED
+
+    DirectMessageNotification:
+      allOf:
+        - $ref: "#/components/schemas/NotificationBase"
+        - type: object
+          required: [type, conversationId, latestMessageId, messageCount]
+          properties:
+            type:
+              type: string
+              const: DIRECT_MESSAGE_RECEIVED
+            conversationId:
+              type: string
+            latestMessageId:
+              type: string
+            messageCount:
+              type: integer
+              minimum: 1
+
+    MessageReactionNotification:
+      allOf:
+        - $ref: "#/components/schemas/NotificationBase"
+        - type: object
+          required: [type, conversationId, conversationType, messageId, emoji]
+          properties:
+            type:
+              type: string
+              const: MESSAGE_REACTION_RECEIVED
+            conversationId:
+              type: string
+            conversationType:
+              type: string
+              enum: [CHANNEL, DIRECT]
+            messageId:
+              type: string
+            emoji:
+              type: string
+
     CreateOrganizationInput:
       type: object
       additionalProperties: false
@@ -2442,6 +2641,21 @@ components:
           minLength: 8
           maxLength: 72
           writeOnly: true
+
+    PublicUserSummary:
+      type: object
+      additionalProperties: false
+      required: [id, username, displayName]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
 
     PublicUser:
       type: object

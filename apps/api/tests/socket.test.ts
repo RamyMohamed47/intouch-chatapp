@@ -242,6 +242,41 @@ describe("authenticated conversation sockets", () => {
     assert.equal(outsideReceived, false);
   });
 
+  test("delivers notification changes only to the recipient user room", async () => {
+    const targeted = await connect();
+    const outside = await connect("second-token");
+    let outsideReceived = false;
+    outside.on("notification:changed", () => {
+      outsideReceived = true;
+    });
+    const received = new Promise<unknown>((resolve) => {
+      targeted.once("notification:changed", resolve);
+    });
+    gateway.notificationChanged(firstUserId, {
+      kind: "UPSERTED",
+      notification: {
+        id: "507f1f77bcf86cd799439071",
+        type: "DIRECT_MESSAGE_RECEIVED",
+        actor: {
+          id: secondUserId,
+          username: "lina",
+          displayName: "Lina Hassan",
+        },
+        organization: { id: organizationId, name: "Northstar" },
+        conversationId: firstConversationId,
+        latestMessageId: "507f1f77bcf86cd799439072",
+        messageCount: 1,
+        readAt: null,
+        createdAt: now.toISOString(),
+        lastActivityAt: now.toISOString(),
+      },
+    });
+    const event = await received;
+    assert.equal((event as { kind?: unknown }).kind, "UPSERTED");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(outsideReceived, false);
+  });
+
   test("isolates anonymous reaction invalidations to the conversation room", async () => {
     const firstClient = await connect();
     const secondClient = await connect();

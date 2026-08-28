@@ -164,10 +164,24 @@ erDiagram
 
     Notification {
         ObjectId id
-        ObjectId userId
+        ObjectId recipientUserId
+        ObjectId actorUserId
+        ObjectId organizationId
         enum type
-        boolean isRead
+        ObjectId invitationId
+        ObjectId conversationId
+        enum conversationType
+        ObjectId messageId
+        ObjectId latestMessageId
+        string emoji
+        int messageCount
+        string dedupeKey
+        string activeGroupKey
+        datetime readAt
+        datetime lastActivityAt
+        datetime expiresAt
         datetime createdAt
+        datetime updatedAt
     }
 
     User ||--o{ Membership : joins
@@ -206,6 +220,16 @@ erDiagram
     Message ||--o{ Attachment : has
 
     User ||--o{ Notification : receives
+
+    User ||--o{ Notification : acts
+
+    Organization ||--o{ Notification : scopes
+
+    Invitation ||--o| Notification : references
+
+    Conversation ||--o{ Notification : references
+
+    Message ||--o{ Notification : references
 ```
 
 `LoginProvider.providerAccountId` stores the Google `sub` for Google identities.
@@ -296,6 +320,20 @@ channels and direct messages, current participant records. Message redaction,
 conversation deletion, organization deletion, private-participant removal, and
 public-to-private visibility transitions delete reactions that no longer have a
 valid lifecycle or authorized owner.
+
+`Notification` stores durable, recipient-specific in-app activity for pending
+organization invitations, accepted invitations, incoming direct messages, and
+reactions to the recipient's messages. Invitation and reaction notifications
+use deterministic deduplication keys. Consecutive unread direct messages from
+the same conversation share an `activeGroupKey`, increment `messageCount`, and
+advance `latestMessageId`; advancing the recipient's DM read state closes that
+group. Notifications expire through `expiresAt` after 30 days, except pending
+invitation notifications, which expire with their seven-day invitation. The
+recipient/activity, unread-recipient, unique deduplication, active-group,
+lifecycle-cleanup, and TTL indexes support inbox pagination, unread counts,
+idempotency, and transactional deletion. Notification creation and cleanup
+participate in the source domain transaction; Socket.IO publication occurs only
+after commit and carries safe hydrated DTOs to the recipient's user room.
 
 Search does not introduce a persistence entity. Native development search uses
 text indexes on `Message.content`, `Conversation.name`, and the weighted

@@ -11,6 +11,7 @@ import { MessageNotFoundError } from "../message/message.errors.js";
 import type { MessageRepository } from "../message/message.repository.js";
 import type { MessageRecord } from "../message/message.types.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
+import type { NotificationService } from "../notifications/index.js";
 import type { UserRepository } from "../user/user.repository.js";
 import { MessageReactionConflictError } from "./message-reaction.errors.js";
 import type { MessageReactionRealtime } from "./message-reaction.realtime.js";
@@ -39,7 +40,14 @@ export interface MessageReactionServiceDependencies {
   realtime: MessageReactionRealtime;
   unitOfWork: OrganizationUnitOfWork;
   users: Pick<UserRepository, "findPublicByIds">;
+  notificationDelivery?: Pick<
+    NotificationService,
+    "publishDeleted" | "publishUpsert"
+  >;
+  now?: () => Date;
 }
+
+const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const createMessageReactionService = ({
   conversations,
@@ -51,6 +59,11 @@ const createMessageReactionService = ({
   realtime,
   unitOfWork,
   users,
+  notificationDelivery = {
+    publishDeleted: () => undefined,
+    publishUpsert: () => Promise.resolve(),
+  },
+  now = () => new Date(),
 }: MessageReactionServiceDependencies) => {
   const eligibleUserIds = async (
     conversation: ConversationRecord,
@@ -193,6 +206,23 @@ const createMessageReactionService = ({
             emoji: input.emoji,
           });
         }
+        const notificationTime = now();
+        const notification =
+          changed && message.senderId !== userId
+            ? await context.notifications.upsertReaction({
+                recipientUserId: message.senderId,
+                actorUserId: userId,
+                organizationId: conversation.organizationId,
+                conversationId: conversation.id,
+                conversationType: conversation.type,
+                messageId,
+                emoji: input.emoji,
+                lastActivityAt: notificationTime,
+                expiresAt: new Date(
+                  notificationTime.getTime() + NOTIFICATION_RETENTION_MS,
+                ),
+              })
+            : null;
         const [state] = await summarize(
           userId,
           conversation,
@@ -209,9 +239,13 @@ const createMessageReactionService = ({
             reactions: [],
             currentUserReaction: null,
           },
+          notification,
         };
       });
       if (result.changed) notify(result.conversationId, messageId);
+      if (result.notification) {
+        await notificationDelivery.publishUpsert(result.notification);
+      }
       return result.state;
     },
 
@@ -235,6 +269,9 @@ const createMessageReactionService = ({
           messageId,
           userId,
         );
+        const deletedNotification = changed
+          ? await context.notifications.deleteReaction(messageId, userId)
+          : null;
         const [state] = await summarize(
           userId,
           conversation,
@@ -251,9 +288,13 @@ const createMessageReactionService = ({
             reactions: [],
             currentUserReaction: null,
           },
+          deletedNotification,
         };
       });
       if (result.changed) notify(result.conversationId, messageId);
+      if (result.deletedNotification) {
+        notificationDelivery.publishDeleted(result.deletedNotification);
+      }
       return result.state;
     },
 

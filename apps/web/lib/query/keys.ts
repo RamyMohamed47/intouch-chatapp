@@ -7,6 +7,10 @@ export const queryKeys = {
   invitations: {
     all: ["invitations"] as const,
   },
+  notifications: {
+    all: ["notifications"] as const,
+    list: (status: string) => ["notifications", status] as const,
+  },
   categories: {
     list: (organizationId: string) =>
       ["organizations", organizationId, "categories"] as const,

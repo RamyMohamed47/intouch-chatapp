@@ -62,6 +62,17 @@
 
 Single Database + organizationId
 
+## Notifications
+
+- MongoDB stores durable, recipient-specific in-app notifications.
+- Supported activity is invitation received, invitation accepted, incoming
+  direct message, and reaction to the recipient's message.
+- Notification writes and lifecycle cleanup share the source domain
+  transaction; recipient-only Socket.IO events publish after commit.
+- Unread DMs group per conversation until the recipient's read state advances.
+- Notification records expire after 30 days. Email and push preferences remain
+  out of scope.
+
 ## Coding Standards
 
 - Naming

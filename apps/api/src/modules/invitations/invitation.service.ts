@@ -1,6 +1,7 @@
 import type { InviteMemberInput } from "@intouch/shared/memberships";
 
 import type { AuthUserRepository } from "../user/index.js";
+import { NotificationType } from "@intouch/shared/notifications";
 import type { MailOutboxJobFactory } from "../mail/index.js";
 import { MembershipConflictError } from "../memberships/membership.errors.js";
 import {
@@ -13,6 +14,7 @@ import { OrganizationNotFoundError } from "../organizations/organization.errors.
 import type { OrganizationRepository } from "../organizations/organization.repository.js";
 import type { OrganizationRecord } from "../organizations/organization.types.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
+import type { NotificationService } from "../notifications/index.js";
 import {
   InvitationConflictError,
   InvitationNotFoundError,
@@ -25,6 +27,7 @@ import {
 import type { InvitationRecord, PublicInvitation } from "./invitation.types.js";
 
 const INVITATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface InvitationServiceDependencies {
   invitations: InvitationRepository;
@@ -34,6 +37,10 @@ export interface InvitationServiceDependencies {
   unitOfWork: OrganizationUnitOfWork;
   users: AuthUserRepository;
   mail: MailOutboxJobFactory;
+  notificationDelivery?: Pick<
+    NotificationService,
+    "publishDeleted" | "publishUpsert"
+  >;
   now?: () => Date;
 }
 
@@ -66,6 +73,10 @@ const createInvitationService = ({
   unitOfWork,
   users,
   mail,
+  notificationDelivery = {
+    publishDeleted: () => undefined,
+    publishUpsert: () => Promise.resolve(),
+  },
   now = () => new Date(),
 }: InvitationServiceDependencies) => ({
   async create(
@@ -84,7 +95,7 @@ const createInvitationService = ({
     const inviter = await users.findPublicById(inviterUserId);
 
     try {
-      return await unitOfWork.run(async (context) => {
+      const result = await unitOfWork.run(async (context) => {
         const organization =
           await context.organizations.findById(organizationId);
         const inviterMembership = await context.memberships.findForUser(
@@ -140,8 +151,24 @@ const createInvitationService = ({
           }),
         );
 
-        return toPublicInvitation(invitation, authorizedOrganization);
+        const notification = await context.notifications.create({
+          recipientUserId: invitedUser.id,
+          actorUserId: inviterUserId,
+          organizationId,
+          type: NotificationType.ORGANIZATION_INVITATION_RECEIVED,
+          dedupeKey: `invitation-received:${invitation.id}`,
+          invitationId: invitation.id,
+          lastActivityAt: currentTime,
+          expiresAt,
+        });
+
+        return {
+          invitation: toPublicInvitation(invitation, authorizedOrganization),
+          notification,
+        };
       });
+      await notificationDelivery.publishUpsert(result.notification);
+      return result.invitation;
     } catch (error) {
       if (error instanceof InvitationPersistenceConflictError) {
         throw new InvitationConflictError();
@@ -176,7 +203,7 @@ const createInvitationService = ({
     const currentTime = now();
 
     try {
-      const createdMembership = await unitOfWork.run(async (context) => {
+      const result = await unitOfWork.run(async (context) => {
         const invitation = policy.assertInvitationRecipient(
           await context.invitations.findById(invitationId),
           userId,
@@ -219,13 +246,35 @@ const createInvitationService = ({
           `organization:${invitation.organizationId}:invitation:${invitation.id}`,
         );
 
-        return createdMembership;
+        const removedNotifications =
+          await context.notifications.deleteByInvitationId(invitation.id);
+        const acceptedNotification = await context.notifications.create({
+          recipientUserId: invitation.invitedByUserId,
+          actorUserId: userId,
+          organizationId: invitation.organizationId,
+          type: NotificationType.ORGANIZATION_INVITATION_ACCEPTED,
+          dedupeKey: `invitation-accepted:${invitation.id}`,
+          lastActivityAt: currentTime,
+          expiresAt: new Date(
+            currentTime.getTime() + NOTIFICATION_RETENTION_MS,
+          ),
+        });
+
+        return {
+          membership: createdMembership,
+          removedNotifications,
+          acceptedNotification,
+        };
       });
+      for (const notification of result.removedNotifications) {
+        notificationDelivery.publishDeleted(notification);
+      }
+      await notificationDelivery.publishUpsert(result.acceptedNotification);
       realtime.membershipJoined({
-        organizationId: createdMembership.organizationId,
-        userId: createdMembership.userId,
+        organizationId: result.membership.organizationId,
+        userId: result.membership.userId,
       });
-      return createdMembership;
+      return result.membership;
     } catch (error) {
       if (error instanceof MembershipPersistenceConflictError) {
         throw new MembershipConflictError();
@@ -236,7 +285,7 @@ const createInvitationService = ({
   },
 
   async decline(userId: string, invitationId: string) {
-    await unitOfWork.run(async (context) => {
+    const removedNotifications = await unitOfWork.run(async (context) => {
       const invitation = policy.assertInvitationRecipient(
         await context.invitations.findById(invitationId),
         userId,
@@ -248,7 +297,11 @@ const createInvitationService = ({
       await context.mailOutbox.cancel(
         `organization:${invitation.organizationId}:invitation:${invitation.id}`,
       );
+      return context.notifications.deleteByInvitationId(invitation.id);
     });
+    for (const notification of removedNotifications) {
+      notificationDelivery.publishDeleted(notification);
+    }
   },
 });
 

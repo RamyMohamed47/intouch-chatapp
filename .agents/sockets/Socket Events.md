@@ -85,6 +85,7 @@ the next heartbeat within approximately three seconds.
 - `conversation:activity` carries `{ organizationId, conversationId, conversationType, actorUserId, activityId, kind }` to authorized `user:<userId>` rooms. Kinds are `CONVERSATION_CREATED`, `MESSAGE_CREATED`, `MESSAGE_UPDATED`, and `MESSAGE_DELETED`. The payload intentionally contains no message content.
 - `channel-read-receipts:changed` carries only `{ conversationId }` to the active channel room when a channel high-water mark advances. It is an anonymous cache-invalidation signal and excludes every socket belonging to the reader.
 - `message-reactions:changed` carries `{ activityId, conversationId, messageId }` after a reaction transaction commits. It contains no reactor identity and is scoped to the authorized conversation room. Clients handle duplicate activity IDs idempotently and fetch `GET /api/v1/messages/:messageId/reactions` before merging authoritative personalized summaries.
+- `notification:changed` is delivered only to the affected `user:<userId>` room. It is a strict union of `UPSERTED` with a safe hydrated notification DTO, `DELETED` with a notification ID, and `READ_ALL`. Clients handle events idempotently, invalidate the notification query family, and use MongoDB-backed REST state to reconcile after reconnecting.
 
 Messages are written through REST. Socket.IO only manages authorized room
 subscriptions and scoped server events; no event is broadcast globally.
@@ -129,5 +130,15 @@ bounded reader summary through REST.
 Reaction mutations also remain REST-only. Socket.IO delivers anonymous
 post-commit invalidation rather than personalized reaction data, so every client
 reconciles against MongoDB and stale or unauthorized reactor identities cannot
-leak through room events. Reaction changes do not create notifications, unread
-counts, last-message activity, or typing/read-receipt changes.
+leak through room events. Reactions to another user's message create a durable,
+recipient-only notification, but they do not change conversation unread counts,
+last-message activity, typing state, or read receipts.
+
+Notification mutations originate from REST-backed domain transactions rather
+than client socket events. Invitation notifications are created and removed with
+the invitation lifecycle, accepted-invitation notifications target the inviter,
+incoming DMs are grouped until the recipient advances their read state, and
+reaction notifications target the message sender. Selected incoming DMs and
+invitation events may produce frontend toasts; reaction notifications remain
+silent. Reconnects invalidate the notification query family so missed socket
+events never become the durable source of truth.

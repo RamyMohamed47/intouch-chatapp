@@ -282,6 +282,22 @@ Advance a conversation's durable high-water read state with
 include the last message, unread count, and caller read state. DM read updates
 are broadcast; channel read activity remains private.
 
+## In-App Notifications
+
+Authenticated users receive a durable notification inbox at
+`GET /api/v1/notifications`, with unread filtering, cursor pagination, unread
+counts, individual read updates, and mark-all-read support. The inbox covers
+organization invitations, accepted invitations, incoming direct messages, and
+reactions to the caller's messages. Ordinary channel messages continue to use
+conversation unread badges rather than creating notifications.
+
+Unread direct messages from the same conversation are grouped until the
+recipient advances that conversation's read receipt. Notification records are
+created or cleaned up inside the source domain transaction, expire after 30
+days, and are synchronized to the recipient's authenticated user room through
+`notification:changed`. MongoDB remains authoritative after reconnects; email
+and push notification preferences are not part of this iteration.
+
 Socket.IO clients authenticate with `auth: { accessToken }`, then emit
 `conversation:join` before receiving scoped message events. Organization
 subscriptions provide presence; joined conversation rooms support expiring

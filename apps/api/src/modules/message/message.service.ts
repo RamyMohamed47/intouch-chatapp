@@ -3,6 +3,7 @@ import type {
   MessageHistoryQuery,
   UpdateMessageInput,
 } from "@intouch/shared/messages";
+import { ConversationType } from "@intouch/shared/conversations";
 
 import type { MessageBroadcaster } from "../../broadcasting/messageBroadcaster.js";
 import type { ConversationActivityService } from "../conversation-activity/index.js";
@@ -10,6 +11,7 @@ import type { ConversationService } from "../conversations/conversation.service.
 import { ConversationNotFoundError } from "../conversations/conversation.errors.js";
 import type { ConversationPolicy } from "../conversations/conversation.policy.js";
 import type { MessageReactionService } from "../message-reactions/index.js";
+import type { NotificationService } from "../notifications/index.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
 import { MessageNotFoundError } from "./message.errors.js";
 import type { MessageRepository } from "./message.repository.js";
@@ -32,7 +34,13 @@ export interface MessageServiceDependencies {
   messages: MessageRepository;
   reactions: Pick<MessageReactionService, "decorate">;
   unitOfWork: OrganizationUnitOfWork;
+  notificationDelivery?: Pick<
+    NotificationService,
+    "publishDeleted" | "publishUpsert"
+  >;
 }
+
+const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const createMessageService = ({
   activity,
@@ -42,6 +50,10 @@ const createMessageService = ({
   messages,
   reactions,
   unitOfWork,
+  notificationDelivery = {
+    publishDeleted: () => undefined,
+    publishUpsert: () => Promise.resolve(),
+  },
 }: MessageServiceDependencies) => ({
   async list(
     userId: string,
@@ -97,10 +109,42 @@ const createMessageService = ({
       ) {
         throw new ConversationNotFoundError();
       }
-      return { conversation, message: created };
+      let notification = null;
+      if (conversation.type === ConversationType.DIRECT) {
+        const participants =
+          await context.conversationParticipants.listByConversation(
+            conversation.id,
+          );
+        const recipient = participants.find(
+          ({ userId: participantUserId }) => participantUserId !== userId,
+        );
+        const recipientMembership = recipient
+          ? await context.memberships.findForUser(
+              recipient.userId,
+              conversation.organizationId,
+            )
+          : null;
+        if (recipient && recipientMembership) {
+          notification = await context.notifications.upsertDirectMessage({
+            recipientUserId: recipient.userId,
+            actorUserId: userId,
+            organizationId: conversation.organizationId,
+            conversationId: conversation.id,
+            latestMessageId: created.id,
+            lastActivityAt: created.createdAt,
+            expiresAt: new Date(
+              created.createdAt.getTime() + NOTIFICATION_RETENTION_MS,
+            ),
+          });
+        }
+      }
+      return { conversation, message: created, notification };
     });
     broadcaster.messageCreated(result.message);
     await activity.messageCreated(result.conversation, userId);
+    if (result.notification) {
+      await notificationDelivery.publishUpsert(result.notification);
+    }
     return {
       ...result.message,
       reactions: [],
@@ -182,11 +226,16 @@ const createMessageService = ({
       const message = await context.messages.redact(messageId, new Date());
       if (!message) throw new MessageNotFoundError();
       await context.messageReactions.deleteByMessageId(messageId);
-      return { conversation, message };
+      const removedNotifications =
+        await context.notifications.deleteByMessageId(messageId);
+      return { conversation, message, removedNotifications };
     });
     if (!result) return;
     broadcaster.messageDeleted(result.message);
     await activity.messageDeleted(result.conversation, userId);
+    for (const notification of result.removedNotifications) {
+      notificationDelivery.publishDeleted(notification);
+    }
   },
 });
 

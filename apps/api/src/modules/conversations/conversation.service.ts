@@ -18,6 +18,7 @@ import type {
   OrganizationWorkContext,
 } from "../organizations/organization.unit-of-work.js";
 import type { UserRepository } from "../user/user.repository.js";
+import type { NotificationService } from "../notifications/index.js";
 import type { PublicUser } from "../user/user.types.js";
 import type { ConversationSummaryRepository } from "../message/conversation-summary.repository.js";
 import normalizeNameKey from "../../utils/normalizeNameKey.js";
@@ -56,6 +57,7 @@ export interface ConversationServiceDependencies {
   realtime: ConversationRealtime;
   unitOfWork: OrganizationUnitOfWork;
   users: UserRepository;
+  notificationDelivery?: Pick<NotificationService, "publishDeleted">;
 }
 
 const mapPersistenceConflict = (error: unknown): never => {
@@ -87,6 +89,7 @@ const createConversationService = ({
   realtime,
   unitOfWork,
   users,
+  notificationDelivery = { publishDeleted: () => undefined },
 }: ConversationServiceDependencies) => {
   const getAccessFrom = async (
     userId: string,
@@ -313,7 +316,7 @@ const createConversationService = ({
     ) {
       let previousVisibility: string | undefined;
       try {
-        const updated = await unitOfWork.run(async (context) => {
+        const transactionResult = await unitOfWork.run(async (context) => {
           const conversation =
             await context.conversations.findById(conversationId);
           if (!conversation) throw new ConversationNotFoundError();
@@ -414,6 +417,14 @@ const createConversationService = ({
             }
           }
 
+          const removedNotifications =
+            channel.visibility === ConversationVisibility.PUBLIC &&
+            input.visibility === ConversationVisibility.PRIVATE
+              ? await context.notifications.deleteByConversationId(
+                  conversationId,
+                )
+              : [];
+
           const result = await context.conversations.updateById(
             conversationId,
             {
@@ -430,23 +441,28 @@ const createConversationService = ({
             },
           );
           if (!result) throw new ConversationNotFoundError();
-          return result;
+          return { updated: result, removedNotifications };
         });
+
+        for (const notification of transactionResult.removedNotifications) {
+          notificationDelivery.publishDeleted(notification);
+        }
 
         if (
           previousVisibility === ConversationVisibility.PUBLIC &&
-          updated.visibility === ConversationVisibility.PRIVATE
+          transactionResult.updated.visibility ===
+            ConversationVisibility.PRIVATE
         ) {
           await realtime.retainOnlyUser(conversationId, userId);
         }
-        return updated;
+        return transactionResult.updated;
       } catch (error) {
         return mapPersistenceConflict(error);
       }
     },
 
     async delete(userId: string, conversationId: string) {
-      await unitOfWork.run(async (context) => {
+      const removedNotifications = await unitOfWork.run(async (context) => {
         const conversation =
           await context.conversations.findById(conversationId);
         if (!conversation) throw new ConversationNotFoundError();
@@ -479,6 +495,8 @@ const createConversationService = ({
         await context.conversationParticipants.deleteByConversationId(
           conversationId,
         );
+        const notifications =
+          await context.notifications.deleteByConversationId(conversationId);
         if (!(await context.conversations.deleteById(conversationId))) {
           throw new ConversationNotFoundError();
         }
@@ -488,7 +506,11 @@ const createConversationService = ({
           count - 1,
           -1,
         );
+        return notifications;
       });
+      for (const notification of removedNotifications) {
+        notificationDelivery.publishDeleted(notification);
+      }
       await realtime.closeConversation(conversationId);
     },
 
@@ -564,7 +586,7 @@ const createConversationService = ({
       conversationId: string,
       participantUserId: string,
     ) {
-      await unitOfWork.run(async (context) => {
+      const removedNotifications = await unitOfWork.run(async (context) => {
         const conversation =
           await context.conversations.findById(conversationId);
         if (!conversation) throw new ConversationNotFoundError();
@@ -608,7 +630,21 @@ const createConversationService = ({
           conversationId,
           participantUserId,
         );
+        const [received, authored] = await Promise.all([
+          context.notifications.deleteByConversationAndRecipient(
+            conversationId,
+            participantUserId,
+          ),
+          context.notifications.deleteByConversationAndActor(
+            conversationId,
+            participantUserId,
+          ),
+        ]);
+        return [...received, ...authored];
       });
+      for (const notification of removedNotifications) {
+        notificationDelivery.publishDeleted(notification);
+      }
       await realtime.evictUser(conversationId, participantUserId);
     },
   };

@@ -3,6 +3,7 @@ export const RateLimitAction = {
   MESSAGE_CREATE: "message:create",
   MESSAGE_MUTATE: "message:mutate",
   MESSAGE_REACTION: "message:reaction",
+  NOTIFICATION_MUTATE: "notification:mutate",
   INVITATION_CREATE: "invitation:create",
   READ_RECEIPT_UPDATE: "read-receipt:update",
   SEARCH: "search:query",

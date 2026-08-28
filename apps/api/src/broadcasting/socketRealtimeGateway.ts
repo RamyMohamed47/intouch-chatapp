@@ -6,6 +6,7 @@ import {
   membershipJoinedEventSchema,
   messageEventSchema,
   messageReactionsChangedEventSchema,
+  notificationChangedEventSchema,
   presenceEventSchema,
   readReceiptEventSchema,
   typingEventSchema,
@@ -17,6 +18,7 @@ import type { MembershipRealtime } from "../modules/memberships/membership.realt
 import type { PresenceRealtime } from "../modules/presence/presence.realtime.js";
 import type { ReadReceiptRealtime } from "../modules/read-receipts/read-receipt.realtime.js";
 import type { MessageReactionRealtime } from "../modules/message-reactions/message-reaction.realtime.js";
+import type { NotificationRealtime } from "../modules/notifications/notification.realtime.js";
 import type { TypingRealtime } from "../modules/typing/typing.realtime.js";
 import type { TypingService } from "../modules/typing/typing.service.js";
 
@@ -29,6 +31,7 @@ export interface SocketRealtimeGateway
   extends
     MessageBroadcaster,
     MessageReactionRealtime,
+    NotificationRealtime,
     ConversationActivityRealtime,
     ConversationRealtime,
     MembershipRealtime,
@@ -84,6 +87,13 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       io?.to(roomName(event.conversationId)).emit(
         "message-reactions:changed",
         messageReactionsChangedEventSchema.parse(event),
+      );
+    },
+
+    notificationChanged(recipientUserId, event) {
+      io?.to(userRoomName(recipientUserId)).emit(
+        "notification:changed",
+        notificationChangedEventSchema.parse(event),
       );
     },
 

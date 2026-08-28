@@ -11,6 +11,7 @@ import {
   type MembershipService,
 } from "../memberships/index.js";
 import type { ConversationRealtime } from "../conversations/conversation.realtime.js";
+import type { NotificationService } from "../notifications/index.js";
 import {
   OrganizationConflictError,
   OrganizationNotFoundError,
@@ -37,6 +38,7 @@ export interface OrganizationServiceDependencies {
   createSlugSuffix?: () => string;
   maxSlugAttempts?: number;
   realtime?: ConversationRealtime;
+  notificationDelivery?: Pick<NotificationService, "publishDeleted">;
 }
 
 const normalizeSlug = (name: string) => {
@@ -83,6 +85,7 @@ const createOrganizationService = ({
   createSlugSuffix = defaultCreateSlugSuffix,
   maxSlugAttempts = DEFAULT_MAX_SLUG_ATTEMPTS,
   realtime,
+  notificationDelivery = { publishDeleted: () => undefined },
 }: OrganizationServiceDependencies) => ({
   async create(userId: string, input: CreateOrganizationInput) {
     const baseSlug = normalizeSlug(input.name);
@@ -187,7 +190,7 @@ const createOrganizationService = ({
 
   async delete(userId: string, organizationId: string) {
     let deletedConversationIds: string[] = [];
-    await unitOfWork.run(async (context) => {
+    const removedNotifications = await unitOfWork.run(async (context) => {
       const organization = await context.organizations.findById(organizationId);
       const membership = await context.memberships.findForUser(
         userId,
@@ -216,12 +219,18 @@ const createOrganizationService = ({
       await context.mailOutbox.cancelByPrefix(
         `organization:${organizationId}:invitation:`,
       );
+      const notifications =
+        await context.notifications.deleteByOrganizationId(organizationId);
       const deleted = await context.organizations.deleteById(organizationId);
 
       if (!deleted) {
         throw new OrganizationNotFoundError();
       }
+      return notifications;
     });
+    for (const notification of removedNotifications) {
+      notificationDelivery.publishDeleted(notification);
+    }
     if (realtime) {
       await Promise.all(
         deletedConversationIds.map((conversationId) =>

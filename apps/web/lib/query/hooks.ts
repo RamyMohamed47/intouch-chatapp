@@ -2,12 +2,14 @@
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { OrganizationSearchQuery } from "@intouch/shared/search";
+import type { NotificationStatusValue } from "@intouch/shared/notifications";
 
 import { categoriesApi } from "@/lib/api/categories";
 import { conversationsApi } from "@/lib/api/conversations";
 import { membershipsApi } from "@/lib/api/memberships";
 import { messagesApi } from "@/lib/api/messages";
 import { organizationsApi } from "@/lib/api/organizations";
+import { notificationsApi } from "@/lib/api/notifications";
 import { searchApi } from "@/lib/api/search";
 import { queryKeys } from "@/lib/query/keys";
 
@@ -28,6 +30,19 @@ export const useInvitations = () =>
   useQuery({
     queryKey: queryKeys.invitations.all,
     queryFn: () => membershipsApi.listInvitations(),
+  });
+
+export const useNotifications = (status: NotificationStatusValue, limit = 20) =>
+  useInfiniteQuery({
+    queryKey: queryKeys.notifications.list(status),
+    queryFn: ({ pageParam }) =>
+      notificationsApi.list({
+        status,
+        limit,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
 
 export const useCategories = (organizationId: string, enabled = true) =>

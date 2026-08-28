@@ -64,6 +64,13 @@ import {
   type MessageReactionRealtime,
 } from "../message-reactions/index.js";
 import {
+  createMongooseNotificationRepository,
+  createNotificationController,
+  createNotificationRouter,
+  createNotificationService,
+  type NotificationRealtime,
+} from "../notifications/index.js";
+import {
   createMongooseConversationReadStateRepository,
   createReadReceiptController,
   createReadReceiptRouter,
@@ -96,6 +103,7 @@ export interface OrganizationModuleDependencies {
   membershipRealtime: MembershipRealtime;
   messageBroadcaster: MessageBroadcaster;
   messageReactionRealtime: MessageReactionRealtime;
+  notificationRealtime: NotificationRealtime;
   logger: Logger;
   presenceRealtime: PresenceRealtime;
   readReceiptRealtime: ReadReceiptRealtime;
@@ -111,6 +119,7 @@ const createOrganizationModule = ({
   membershipRealtime,
   messageBroadcaster,
   messageReactionRealtime,
+  notificationRealtime,
   logger,
   presenceRealtime,
   rateLimits,
@@ -154,6 +163,11 @@ const createOrganizationModule = ({
     RateLimitAction.INVITATION_CREATE,
     "Too many invitation attempts",
   );
+  const mutateNotificationLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.NOTIFICATION_MUTATE,
+    "Too many notification updates",
+  );
   const categories = createMongooseCategoryRepository();
   const conversations = createMongooseConversationRepository();
   const conversationParticipants =
@@ -169,6 +183,7 @@ const createOrganizationModule = ({
     realtime: conversationActivityRealtime,
   });
   const organizations = createMongooseOrganizationRepository();
+  const notifications = createMongooseNotificationRepository();
   const invitations = createMongooseInvitationRepository();
   const memberships = createMembershipService(
     createMongooseMembershipRepository(),
@@ -177,6 +192,13 @@ const createOrganizationModule = ({
   const unitOfWork = createMongooseOrganizationUnitOfWork();
   const policy = createOrganizationPolicy();
   const conversationPolicy = createConversationPolicy();
+  const notificationService = createNotificationService({
+    logger,
+    notifications,
+    organizations,
+    realtime: notificationRealtime,
+    users,
+  });
   const presenceService = createPresenceService({
     memberships,
     realtime: presenceRealtime,
@@ -206,6 +228,7 @@ const createOrganizationModule = ({
     unitOfWork,
     policy,
     realtime: conversationRealtime,
+    notificationDelivery: notificationService,
   });
   const controller = createOrganizationController(service);
   const categoryService = createCategoryService({
@@ -227,6 +250,7 @@ const createOrganizationModule = ({
     realtime: conversationRealtime,
     unitOfWork,
     users,
+    notificationDelivery: notificationService,
   });
   const messageReactionService = createMessageReactionService({
     conversations: conversationService,
@@ -236,6 +260,7 @@ const createOrganizationModule = ({
     participants: conversationParticipants,
     reactions: messageReactions,
     realtime: messageReactionRealtime,
+    notificationDelivery: notificationService,
     unitOfWork,
     users,
   });
@@ -245,6 +270,7 @@ const createOrganizationModule = ({
     conversationPolicy,
     conversations: conversationService,
     messages,
+    notificationDelivery: notificationService,
     reactions: messageReactionService,
     unitOfWork,
   });
@@ -261,6 +287,8 @@ const createOrganizationModule = ({
     conversations: conversationService,
     messages,
     readStates: conversationReadStates,
+    notificationDelivery: notificationService,
+    unitOfWork,
     realtime: readReceiptRealtime,
   });
   const categoryController = createCategoryController(categoryService);
@@ -281,8 +309,10 @@ const createOrganizationModule = ({
     unitOfWork,
     users,
     mail,
+    notificationDelivery: notificationService,
   });
   const membershipAccessService = createMembershipAccessService({
+    notificationDelivery: notificationService,
     policy,
     realtime: membershipRealtime,
     unitOfWork,
@@ -293,6 +323,8 @@ const createOrganizationModule = ({
     membershipDirectory,
   );
   const searchController = createSearchController(searchService);
+  const notificationController =
+    createNotificationController(notificationService);
   const router = createOrganizationRouter(controller, requireAccessToken);
   const accessRouter = createOrganizationAccessRouter(
     membershipController,
@@ -346,6 +378,11 @@ const createOrganizationModule = ({
     requireAccessToken,
     searchLimit,
   );
+  const notificationRouter = createNotificationRouter(
+    notificationController,
+    requireAccessToken,
+    mutateNotificationLimit,
+  );
 
   return {
     accessRouter,
@@ -357,6 +394,7 @@ const createOrganizationModule = ({
     invitationRouter,
     messageRouter,
     messageReactionRouter,
+    notificationRouter,
     membershipDirectory,
     organizationConversationRouter,
     presenceService,

@@ -33,6 +33,8 @@ Implemented capabilities include:
 - Unread counts, durable read receipts, and durable emoji reactions.
 - Realtime message delivery, typing indicators, online presence, and access
   revocation.
+- Durable in-app notifications for organization invitations, invitation
+  acceptance, incoming direct messages, and reactions to owned messages.
 - Per-IP, per-account, and authenticated per-user abuse protection.
 - Strict shared Zod contracts, consistent API errors, CSP, CORS, and security
   headers.
@@ -64,8 +66,9 @@ Treat these as known limitations unless behavior differs from the description:
   and adding a password to a Google-only account are not implemented.
 - Public organization discovery is not implemented. Public organizations are
   joinable only through a known organization URL.
-- Group DMs, attachments, custom emoji, threads, mentions, notifications,
-  meetings, and message delivery receipts are not implemented.
+- Group DMs, attachments, custom emoji, threads, mentions, push notifications,
+  notification preferences, meetings, and message delivery receipts are not
+  implemented.
 - Organization deletion is permanent. Deleted messages remain as redacted
   tombstones, but deleted organizations/channels are hard-deleted.
 
@@ -281,6 +284,22 @@ Record each case as `Pass`, `Fail`, `Blocked`, or `Not Run`.
 | RT-14 | Inactive document       | Receive messages while the recipient tab/document is hidden or unfocused.                                                             | History fetch alone does not mark messages read; the receipt advances after the active tab shows the newest message.                              |
 | RT-15 | Reading older history   | Scroll away from the newest message, receive another message, then return to the bottom.                                              | The incoming message remains unread while browsing history and becomes read only after the newest message is visible.                             |
 
+### In-App Notifications
+
+| ID     | Test                      | Steps                                                                                                      | Expected result                                                                                                                      |
+| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| NOT-01 | Invitation received       | As `Owner A`, invite `Member B` while `Member B` is connected.                                             | `Member B` receives an invitation toast and unread bell item without refreshing; the item opens `/app/invitations`.                  |
+| NOT-02 | Invitation accepted       | Accept as `Member B` while `Owner A` is connected.                                                         | The pending recipient notification is removed and `Owner A` receives a durable accepted-invitation notification.                     |
+| NOT-03 | Group incoming DMs        | Send several DMs from `Owner A` while `Member B` is outside that DM.                                       | One unread notification is updated with the latest message and grouped count; selected incoming activity shows a toast.              |
+| NOT-04 | DM read lifecycle         | Open the grouped DM as `Member B` and advance the receipt through the latest message.                      | The grouped notification becomes read, remains available in All, and no longer contributes to the unread bell count.                 |
+| NOT-05 | Reaction notification     | As `Member B`, react to a message sent by `Owner A`, replace the emoji, then remove it.                    | `Owner A` receives one silent durable notification that updates on replacement and disappears on removal; no reaction toast appears. |
+| NOT-06 | Channel-message boundary  | Send an ordinary channel message while another member is viewing another page.                             | Channel preview/unread count updates, but no durable notification or notification toast is created.                                  |
+| NOT-07 | Read controls             | Mark one unread item, then use Mark all as read from the bell or `/app/notifications`.                     | Read state updates without reload, unread count reaches the expected value, and repeated requests remain safe.                       |
+| NOT-08 | Authorization concealment | Request another user's notification ID with the read endpoint.                                             | The API returns `404` and does not reveal whether that notification exists.                                                          |
+| NOT-09 | Reconnect reconciliation  | Disconnect Socket.IO, create activity for the user, reconnect, and open the bell.                          | The notification appears from the REST-backed inbox even though the realtime event was missed.                                       |
+| NOT-10 | Lifecycle and retention   | Decline an invitation or delete its organization/message/conversation; inspect related notifications.      | Related records are removed transactionally; standalone notification records expire automatically according to their configured TTL. |
+| NOT-11 | Responsive/accessibility  | Use the bell popover on desktop, the sheet on mobile, and navigate notification items using only keyboard. | The unread badge, status text, actions, focus order, and announcements are accessible and do not rely only on color.                 |
+
 ## 6. Security and Abuse Test Cases
 
 Use an API client or DevTools request replay only against the authorized test
@@ -326,6 +345,7 @@ deployment. Never reuse another real user's credentials.
 | Create message                       | Burst 10; refill 1 every 2 seconds per user                              |
 | Edit/delete message combined         | Burst 10; refill 1 every 3 seconds per user                              |
 | Read receipt                         | Burst 30; refill 1 every 500 ms per user                                 |
+| Notification read mutations          | Burst 30; refill 1 every 500 ms per user                                 |
 | Create DM                            | Burst 5; refill 1 every 12 seconds per user                              |
 | Set/remove message reaction          | Burst 20; refill 1 per second per user                                   |
 | Active sockets                       | Maximum 5 per user                                                       |
@@ -369,9 +389,9 @@ deployment. Never reuse another real user's credentials.
   should update without a page refresh, but no toast should appear until a
   message is sent.
 - Send a message to a channel or DM that account B is not currently viewing.
-  Its list preview and unread badge should update, and an accessible notification
-  should offer to open the conversation. No toast should appear while that
-  conversation is already active.
+  Both list previews and unread badges should update. Only an incoming DM creates
+  a durable notification and optional toast; ordinary channel messages do not.
+  No DM toast should appear while that conversation is already active.
 - In a channel, inspect the latest loaded, non-deleted message sent by the
   current user. It should show `Sent` until another eligible member reads it,
   then `Read by N`. Opening the control shows at most three safe reader names

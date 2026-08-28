@@ -3,6 +3,9 @@ import type { ConversationParticipantRepository } from "../src/modules/conversat
 import type { ConversationRepository } from "../src/modules/conversations/conversation.repository.js";
 import type { MessageRepository } from "../src/modules/message/message.repository.js";
 import type { MessageReactionRepository } from "../src/modules/message-reactions/message-reaction.repository.js";
+import type { NotificationRepository } from "../src/modules/notifications/notification.repository.js";
+import type { NotificationRecord } from "../src/modules/notifications/notification.types.js";
+import { NotificationType } from "@intouch/shared/notifications";
 import type { ConversationReadStateRepository } from "../src/modules/read-receipts/read-receipt.repository.js";
 import type { InvitationRepository } from "../src/modules/invitations/invitation.repository.js";
 import type { MembershipService } from "../src/modules/memberships/membership.service.js";
@@ -111,6 +114,68 @@ const mailOutbox: MailOutboxRepository = {
   markFailed: async () => undefined,
 };
 
+const notificationBase = (
+  input: Pick<
+    NotificationRecord,
+    | "recipientUserId"
+    | "actorUserId"
+    | "organizationId"
+    | "type"
+    | "lastActivityAt"
+    | "expiresAt"
+  >,
+): NotificationRecord => ({
+  id: "507f1f77bcf86cd799439099",
+  ...input,
+  readAt: null,
+  createdAt: input.lastActivityAt,
+  updatedAt: input.lastActivityAt,
+});
+
+const notifications: NotificationRepository = {
+  create: async (input) => ({
+    ...notificationBase(input),
+    ...(input.invitationId ? { invitationId: input.invitationId } : {}),
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    ...(input.conversationType
+      ? { conversationType: input.conversationType }
+      : {}),
+    ...(input.messageId ? { messageId: input.messageId } : {}),
+    ...(input.emoji ? { emoji: input.emoji } : {}),
+  }),
+  upsertDirectMessage: async (input) => ({
+    ...notificationBase({
+      ...input,
+      type: NotificationType.DIRECT_MESSAGE_RECEIVED,
+    }),
+    conversationId: input.conversationId,
+    latestMessageId: input.latestMessageId,
+    messageCount: 1,
+  }),
+  upsertReaction: async (input) => ({
+    ...notificationBase({
+      ...input,
+      type: NotificationType.MESSAGE_REACTION_RECEIVED,
+    }),
+    conversationId: input.conversationId,
+    conversationType: input.conversationType,
+    messageId: input.messageId,
+    emoji: input.emoji,
+  }),
+  listForUser: async () => [],
+  countUnread: async () => 0,
+  markRead: async () => null,
+  markAllRead: async () => 0,
+  markDirectMessageReadThrough: async () => null,
+  deleteReaction: async () => null,
+  deleteByInvitationId: async () => [],
+  deleteByMessageId: async () => [],
+  deleteByConversationId: async () => [],
+  deleteByConversationAndRecipient: async () => [],
+  deleteByConversationAndActor: async () => [],
+  deleteByOrganizationId: async () => [],
+};
+
 export const testMailFactory: MailOutboxJobFactory = {
   verification: (input) => ({
     aggregateKey: `auth-verification:${input.userId}`,
@@ -149,6 +214,7 @@ export const emptyCommunicationContext = {
   messageReactions,
   messages,
   mailOutbox,
+  notifications,
 };
 
 const organizations: OrganizationRepository = {

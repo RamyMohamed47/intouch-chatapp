@@ -26,6 +26,7 @@ import MessageModel from "../src/modules/message/message.model.js";
 import createMongooseMessageRepository from "../src/modules/message/message.repository.js";
 import MessageReactionModel from "../src/modules/message-reactions/message-reaction.model.js";
 import createMongooseMessageReactionRepository from "../src/modules/message-reactions/message-reaction.repository.js";
+import createMongooseNotificationRepository from "../src/modules/notifications/notification.repository.js";
 import createMongooseConversationSummaryRepository from "../src/modules/message/conversation-summary.repository.js";
 import createMessageService from "../src/modules/message/message.service.js";
 import { MessageType } from "../src/modules/message/message.types.js";
@@ -514,6 +515,7 @@ describe("category and conversation transactions", () => {
             ),
             messages: createMongooseMessageRepository(session),
             messageReactions: createMongooseMessageReactionRepository(session),
+            notifications: createMongooseNotificationRepository(session),
             mailOutbox: createMongooseMailOutboxRepository(session),
             conversationReadStates:
               createMongooseConversationReadStateRepository(session),

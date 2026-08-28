@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Bell,
   ChevronDown,
   ChevronRight,
   Hash,
@@ -23,6 +22,7 @@ import type { ChannelConversationDto } from "@intouch/shared/conversations";
 
 import { BrandMark, BrandSignature } from "@/components/brand/brand";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { OrganizationSearchDialog } from "@/components/search/organization-search-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -68,26 +68,6 @@ export const initials = (name: string) =>
     .join("")
     .slice(0, 2)
     .toUpperCase();
-
-function ComingSoonButton({ label, icon }: { label: string; icon: ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={label}
-          />
-        }
-      >
-        {icon}
-      </TooltipTrigger>
-      <TooltipContent>{label} - coming later</TooltipContent>
-    </Tooltip>
-  );
-}
 
 function NewDirectMessageDialog({
   organizationId,
@@ -461,7 +441,7 @@ function WorkspaceNavigation({
             @{user?.username}
           </p>
         </div>
-        <ComingSoonButton label="Notifications" icon={<Bell />} />
+        <NotificationBell />
         <Button
           type="button"
           variant="ghost"
@@ -547,6 +527,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           </Link>
           <div className="ml-auto flex items-center gap-1">
+            <NotificationBell />
             <ThemeSwitcher />
             <Button
               type="button"

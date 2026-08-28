@@ -23,6 +23,11 @@ export {
   socketHandshakeAuthSchema,
   typingEventSchema,
 } from "./realtime.dto.js";
+export {
+  NotificationChangeKind,
+  notificationChangedEventSchema,
+} from "../notifications/index.js";
+export type { NotificationChangedEvent } from "../notifications/index.js";
 export type {
   ConversationAccessRevokedEvent,
   ChannelReadReceiptsChangedEvent,

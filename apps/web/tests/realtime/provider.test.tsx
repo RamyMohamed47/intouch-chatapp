@@ -206,13 +206,20 @@ describe("RealtimeProvider", () => {
     });
 
     act(() => {
-      fakeSocket.trigger("conversation:activity", {
-        organizationId,
-        conversationId,
-        conversationType: "DIRECT",
-        actorUserId: peerMember.user.id,
-        activityId: "3d46f75a-83c4-4ac6-a3cb-24aa830c77e8",
-        kind: "MESSAGE_CREATED",
+      fakeSocket.trigger("notification:changed", {
+        kind: "UPSERTED",
+        notification: {
+          id: "507f1f77bcf86cd799439061",
+          type: "DIRECT_MESSAGE_RECEIVED",
+          actor: peerMember.user,
+          organization: { id: organizationId, name: "Northstar" },
+          conversationId,
+          latestMessageId: "507f1f77bcf86cd799439062",
+          messageCount: 1,
+          readAt: null,
+          createdAt: "2026-08-29T00:00:00.000Z",
+          lastActivityAt: "2026-08-29T00:00:00.000Z",
+        },
       });
     });
     expect(
@@ -222,15 +229,22 @@ describe("RealtimeProvider", () => {
     invalidateQueries.mockClear();
     act(() => {
       const activity = {
-        organizationId,
-        conversationId: inactiveConversationId,
-        conversationType: "DIRECT",
-        actorUserId: peerMember.user.id,
-        activityId: "5dfeea7d-8d4f-455e-b383-e432adc95a6e",
-        kind: "MESSAGE_CREATED",
+        kind: "UPSERTED" as const,
+        notification: {
+          id: "507f1f77bcf86cd799439063",
+          type: "DIRECT_MESSAGE_RECEIVED" as const,
+          actor: peerMember.user,
+          organization: { id: organizationId, name: "Northstar" },
+          conversationId: inactiveConversationId,
+          latestMessageId: "507f1f77bcf86cd799439064",
+          messageCount: 1,
+          readAt: null,
+          createdAt: "2026-08-29T00:00:00.000Z",
+          lastActivityAt: "2026-08-29T00:00:00.000Z",
+        },
       };
-      fakeSocket.trigger("conversation:activity", activity);
-      fakeSocket.trigger("conversation:activity", activity);
+      fakeSocket.trigger("notification:changed", activity);
+      fakeSocket.trigger("notification:changed", activity);
     });
     expect(
       await screen.findByText("Lina Hassan sent you a direct message"),
