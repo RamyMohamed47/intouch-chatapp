@@ -25,6 +25,7 @@ import {
   createMailPayloadCipher,
   createMailRenderer,
   createMongooseMailOutboxRepository,
+  createBrevoMailTransport,
   createSmtpMailTransport,
 } from "./modules/mail/index.js";
 
@@ -151,21 +152,29 @@ process.once("SIGINT", () => {
 const config = loadConfig();
 const mailCipher = createMailPayloadCipher(config.mailOutboxEncryptionSecret);
 const mailJobs = createMailOutboxJobFactory(mailCipher);
+const mailTransport =
+  config.mailTransport.provider === "brevo"
+    ? createBrevoMailTransport({
+        apiKey: config.mailTransport.apiKey,
+        fromName: config.mailFromName,
+        fromAddress: config.mailFromAddress,
+      })
+    : createSmtpMailTransport({
+        host: config.mailTransport.host,
+        port: config.mailTransport.port,
+        secure: config.mailTransport.secure,
+        requireTls: config.mailTransport.requireTls,
+        user: config.mailTransport.user,
+        password: config.mailTransport.password,
+        fromName: config.mailFromName,
+        fromAddress: config.mailFromAddress,
+      });
 const mailWorker = createMailOutboxWorker({
   cipher: mailCipher,
   logger,
   outbox: createMongooseMailOutboxRepository(),
   render: createMailRenderer(config.webAppUrl),
-  transport: createSmtpMailTransport({
-    host: config.smtpHost,
-    port: config.smtpPort,
-    secure: config.smtpSecure,
-    requireTls: config.smtpRequireTls,
-    user: config.smtpUser,
-    password: config.smtpPassword,
-    fromName: config.mailFromName,
-    fromAddress: config.mailFromAddress,
-  }),
+  transport: mailTransport,
 });
 resources.closeMail = () => mailWorker.close();
 const apiDocsRouter = createApiDocsRouter(loadOpenApiContract());

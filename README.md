@@ -98,9 +98,12 @@ values are:
 - `GOOGLE_OAUTH_CALLBACK_URL`
 - `GOOGLE_OAUTH_FRONTEND_REDIRECT_URL`
 - `WEB_APP_URL`, the exact frontend origin used in email links
-- `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASSWORD`
+- `MAIL_PROVIDER`; use `brevo` for HTTPS delivery or `smtp` for SMTP
 - `MAIL_FROM_NAME` and `MAIL_FROM_ADDRESS`
 - `SEARCH_PROVIDER`; use `atlas` in production and `native` for local MongoDB
+
+`MAIL_PROVIDER=brevo` requires `BREVO_API_KEY`. `MAIL_PROVIDER=smtp` requires
+`SMTP_HOST`, `SMTP_USER`, and `SMTP_PASSWORD`.
 
 `DATABASE` must connect to a MongoDB replica set or sharded cluster because
 organization creation and deletion use transactions. Atlas deployments support
@@ -129,6 +132,7 @@ Optional:
 - `LOGIN_ATTEMPT_LIMIT`, defaults to `10`
 - `LOGIN_ATTEMPT_WINDOW_MS`, defaults to `900000` (15 minutes)
 - `LOGIN_ATTEMPT_COOLDOWN_MS`, defaults to `900000` (15 minutes)
+- `MAIL_PROVIDER`, defaults to `smtp` outside production
 - `SMTP_PORT`, defaults to `587`
 - `SMTP_SECURE`, defaults to `false` for STARTTLS
 - `SMTP_REQUIRE_TLS`, defaults to `true` and cannot be disabled in production
@@ -161,17 +165,29 @@ return the same generic `202` response for every email. Reset links are
 single-use, expire after 15 minutes, confirm the account email, and revoke all
 existing refresh sessions.
 
-Mail delivery uses provider-neutral SMTP through Nodemailer. A free SMTP
-provider can be configured on Railway; local development can use Mailpit on
-`localhost:1025` with `SMTP_REQUIRE_TLS=false`. Production must use TLS. The API
-stores encrypted outbox payloads and retries failed deliveries after the
-database transaction commits, so registration and invitation writes do not
-depend on an SMTP request succeeding synchronously.
+Mail delivery uses a provider-neutral transport behind an encrypted MongoDB
+outbox. Brevo uses its transactional HTTPS API and works on cloud plans that
+block outbound SMTP. Nodemailer SMTP remains available for local development,
+VPS deployments, and hosts that permit SMTP. Local development can use Mailpit
+on `localhost:1025` with `SMTP_REQUIRE_TLS=false`; production SMTP must use TLS.
+The API retries failed delivery after the database transaction commits, so
+registration and invitation writes do not depend on a provider request
+succeeding synchronously.
 
-Example production-style settings:
+Railway Free, Trial, and Hobby deployments should use Brevo HTTPS:
 
 ```dotenv
 WEB_APP_URL=https://your-frontend.example
+MAIL_PROVIDER=brevo
+BREVO_API_KEY=your-brevo-api-key
+MAIL_FROM_NAME=InTouch
+MAIL_FROM_ADDRESS=your-verified-brevo-sender@example.com
+```
+
+SMTP remains available where outbound SMTP is supported:
+
+```dotenv
+MAIL_PROVIDER=smtp
 SMTP_HOST=your-smtp-provider.example
 SMTP_PORT=587
 SMTP_SECURE=false
@@ -181,6 +197,14 @@ SMTP_PASSWORD=provider-password
 MAIL_FROM_NAME=InTouch
 MAIL_FROM_ADDRESS=noreply@your-verified-domain.example
 ```
+
+Production requires an explicit `MAIL_PROVIDER`. Credentials for the
+unselected provider are ignored. Brevo requests use
+`POST https://api.brevo.com/v3/smtp/email` with the configured API key and do
+not require an SMTP connection. Outbox jobs that already exhausted all retries
+remain failed. Trigger a new verification/reset request where supported;
+pending invitations remain available in-app and can be recreated only after
+they are declined or expire.
 
 Generate independent random values for `AUTH_ACTION_TOKEN_SECRET` and
 `MAIL_OUTBOX_ENCRYPTION_SECRET`; do not reuse the JWT or login-throttle secret.
@@ -377,6 +401,10 @@ depends on `packages/shared`. Do not set the service Root Directory to
 API production output is written to `apps/api/dist`. Railway runtime variables
 come from the service environment; `apps/api/config.env` remains local and
 ignored by Git.
+
+Railway plans that block outbound SMTP must configure `MAIL_PROVIDER=brevo`
+with `BREVO_API_KEY` and a Brevo-verified `MAIL_FROM_ADDRESS`. Upgrading to a
+plan that permits SMTP is not required when the HTTPS provider is selected.
 
 Build both applications from the workspace root:
 

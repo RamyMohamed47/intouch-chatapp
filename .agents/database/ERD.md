@@ -222,11 +222,12 @@ atomically. Email-confirmation tokens live for 24 hours; password-reset tokens
 live for 15 minutes. Successful password reset also confirms the email and
 deletes every refresh session for that user in the same transaction.
 
-`MailOutbox` is the transactional boundary between MongoDB changes and SMTP.
+`MailOutbox` is the transactional boundary between MongoDB changes and the
+configured mail provider.
 Sensitive recipient/token payloads are AES-256-GCM encrypted at rest. A unique
 aggregate key supersedes pending verification/reset jobs, while the worker uses
 leases, bounded retries, and TTL cleanup. Delivery happens after the surrounding
-database transaction commits; SMTP failure never leaves an orphaned account or
+database transaction commits; provider failure never leaves an orphaned account or
 invitation mutation.
 
 Organization ownership is represented only by an `OWNER` membership. The

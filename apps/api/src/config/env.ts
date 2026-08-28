@@ -1,6 +1,21 @@
 import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 
+export type MailTransportConfig =
+  | {
+      provider: "brevo";
+      apiKey: string;
+    }
+  | {
+      provider: "smtp";
+      host: string;
+      password: string;
+      port: number;
+      requireTls: boolean;
+      secure: boolean;
+      user: string;
+    };
+
 export interface AppConfig {
   accessTokenAudience: string;
   accessTokenIssuer: string;
@@ -22,12 +37,7 @@ export interface AppConfig {
   mailOutboxEncryptionSecret: string;
   mailFromAddress: string;
   mailFromName: string;
-  smtpHost: string;
-  smtpPassword: string;
-  smtpPort: number;
-  smtpRequireTls: boolean;
-  smtpSecure: boolean;
-  smtpUser: string;
+  mailTransport: MailTransportConfig;
   webAppUrl: string;
   port: number;
   searchProvider: "atlas" | "native";
@@ -47,6 +57,7 @@ const requireEnv = (
     | "GOOGLE_OAUTH_FRONTEND_REDIRECT_URL"
     | "LOGIN_THROTTLE_SECRET"
     | "AUTH_ACTION_TOKEN_SECRET"
+    | "BREVO_API_KEY"
     | "MAIL_OUTBOX_ENCRYPTION_SECRET"
     | "MAIL_FROM_ADDRESS"
     | "MAIL_FROM_NAME"
@@ -173,6 +184,46 @@ const parseSearchProvider = (
   return value;
 };
 
+const parseMailTransport = (
+  env: NodeJS.ProcessEnv,
+  isProduction: boolean,
+): MailTransportConfig => {
+  const provider = env.MAIL_PROVIDER ?? (isProduction ? undefined : "smtp");
+
+  if (provider === undefined) {
+    throw new Error("MAIL_PROVIDER env var is required in production");
+  }
+  if (provider === "brevo") {
+    return {
+      provider,
+      apiKey: requireEnv(env, "BREVO_API_KEY"),
+    };
+  }
+  if (provider !== "smtp") {
+    throw new Error("MAIL_PROVIDER must be brevo or smtp");
+  }
+
+  const requireTls = parseBoolean(
+    env.SMTP_REQUIRE_TLS ?? "true",
+    "SMTP_REQUIRE_TLS",
+  );
+  const secure = parseBoolean(env.SMTP_SECURE ?? "false", "SMTP_SECURE");
+
+  if (isProduction && !requireTls && !secure) {
+    throw new Error("SMTP transport must require TLS in production");
+  }
+
+  return {
+    provider,
+    host: requireEnv(env, "SMTP_HOST"),
+    password: requireEnv(env, "SMTP_PASSWORD"),
+    port: parseBoundedInteger(env.SMTP_PORT, 587, "SMTP_PORT", 65_535),
+    requireTls,
+    secure,
+    user: requireEnv(env, "SMTP_USER"),
+  };
+};
+
 const parseGoogleUrl = (
   value: string,
   name: "GOOGLE_OAUTH_CALLBACK_URL" | "GOOGLE_OAUTH_FRONTEND_REDIRECT_URL",
@@ -229,15 +280,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     clientOrigins,
     isProduction,
   );
-  const smtpRequireTls = parseBoolean(
-    env.SMTP_REQUIRE_TLS ?? "true",
-    "SMTP_REQUIRE_TLS",
-  );
-  const smtpSecure = parseBoolean(env.SMTP_SECURE ?? "false", "SMTP_SECURE");
-
-  if (isProduction && !smtpRequireTls && !smtpSecure) {
-    throw new Error("SMTP transport must require TLS in production");
-  }
+  const mailTransport = parseMailTransport(env, isProduction);
 
   return {
     authActionTokenSecret: validateSecret(
@@ -288,14 +331,9 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     ),
     mailFromAddress: parseEmailAddress(requireEnv(env, "MAIL_FROM_ADDRESS")),
     mailFromName: requireEnv(env, "MAIL_FROM_NAME"),
+    mailTransport,
     port: parsePort(env.PORT),
     searchProvider: parseSearchProvider(env.SEARCH_PROVIDER, isProduction),
-    smtpHost: requireEnv(env, "SMTP_HOST"),
-    smtpPassword: requireEnv(env, "SMTP_PASSWORD"),
-    smtpPort: parseBoundedInteger(env.SMTP_PORT, 587, "SMTP_PORT", 65_535),
-    smtpRequireTls,
-    smtpSecure,
-    smtpUser: requireEnv(env, "SMTP_USER"),
     trustProxy: isProduction ? 1 : "loopback",
     webAppUrl: parseWebAppUrl(
       requireEnv(env, "WEB_APP_URL"),

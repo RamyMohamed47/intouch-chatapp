@@ -49,8 +49,9 @@
   confirmation token; no session is issued until confirmation and login.
 - Password reset uses a single-use action token and revokes every refresh
   session after the password changes.
-- SMTP delivery is decoupled through an encrypted MongoDB outbox with bounded
-  retries. Organization invitations are emailed to verified registered users.
+- Mail delivery is decoupled through an encrypted MongoDB outbox with bounded
+  retries. Brevo HTTPS supports restricted cloud hosts, while SMTP remains a
+  local/VPS option. Organization invitations are emailed to verified users.
 - Google sign-in uses a backend-owned authorization-code redirect flow.
 - Google identities are keyed by the verified ID-token `sub` claim and linked
   to existing users only through verified email addresses.

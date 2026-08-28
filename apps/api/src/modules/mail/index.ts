@@ -1,5 +1,7 @@
 export { createMailPayloadCipher } from "./mail.crypto.js";
 export type { MailPayloadCipher } from "./mail.crypto.js";
+export { createBrevoMailTransport } from "./mail.brevo.js";
+export type { BrevoMailConfig } from "./mail.brevo.js";
 export { default as createMailOutboxJobFactory } from "./mail.job-factory.js";
 export { MailOutboxModel } from "./mail.outbox.model.js";
 export { createMongooseMailOutboxRepository } from "./mail.outbox.repository.js";

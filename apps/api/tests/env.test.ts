@@ -20,6 +20,7 @@ const validEnv: NodeJS.ProcessEnv = {
   MAIL_FROM_NAME: "InTouch",
   MAIL_OUTBOX_ENCRYPTION_SECRET:
     "a-mail-outbox-encryption-secret-over-32-bytes",
+  MAIL_PROVIDER: "smtp",
   SEARCH_PROVIDER: "native",
   SMTP_HOST: "smtp.example.com",
   SMTP_PASSWORD: "smtp-password",
@@ -55,6 +56,7 @@ describe("auth environment configuration", () => {
     assert.equal(config.loginAttemptCooldownMs, 900_000);
     assert.equal(config.searchProvider, "native");
     assert.equal(config.trustProxy, "loopback");
+    assert.equal(config.mailTransport.provider, "smtp");
   });
 
   test("accepts bounded login-attempt configuration", () => {
@@ -173,6 +175,53 @@ describe("auth environment configuration", () => {
           SMTP_SECURE: "false",
         }),
       /SMTP transport must require TLS in production/,
+    );
+  });
+
+  test("configures Brevo without requiring SMTP credentials", () => {
+    const config = loadConfig({
+      ...validEnv,
+      MAIL_PROVIDER: "brevo",
+      BREVO_API_KEY: "brevo-api-key",
+      SMTP_HOST: undefined,
+      SMTP_PASSWORD: undefined,
+      SMTP_USER: undefined,
+    });
+
+    assert.deepEqual(config.mailTransport, {
+      provider: "brevo",
+      apiKey: "brevo-api-key",
+    });
+  });
+
+  test("requires only the selected mail provider credentials", () => {
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          MAIL_PROVIDER: "brevo",
+          BREVO_API_KEY: undefined,
+        }),
+      /BREVO_API_KEY env var is required/,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnv, MAIL_PROVIDER: "unsupported" }),
+      /MAIL_PROVIDER must be brevo or smtp/,
+    );
+  });
+
+  test("requires an explicit mail provider in production", () => {
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          NODE_ENV: "production",
+          MAIL_PROVIDER: undefined,
+          SEARCH_PROVIDER: "atlas",
+          GOOGLE_OAUTH_CALLBACK_URL:
+            "https://app.example.com/api/v1/auth/oauth/google/callback",
+        }),
+      /MAIL_PROVIDER env var is required in production/,
     );
   });
 });

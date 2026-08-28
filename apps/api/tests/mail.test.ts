@@ -4,6 +4,7 @@ import pino from "pino";
 
 import { AuthActionTokenModel } from "../src/modules/auth/auth.action-token.model.js";
 import {
+  createBrevoMailTransport,
   createMailOutboxJobFactory,
   createMailOutboxWorker,
   createMailPayloadCipher,
@@ -20,6 +21,79 @@ const cipher = createMailPayloadCipher(
 );
 
 describe("transactional mail", () => {
+  test("sends rendered mail through the Brevo HTTPS API", async () => {
+    const requests: Array<{
+      input: URL | Request | string;
+      init?: RequestInit;
+    }> = [];
+    const fetchImplementation: typeof fetch = async (input, init) => {
+      requests.push({ input, ...(init ? { init } : {}) });
+      return new Response(JSON.stringify({ messageId: "brevo-message-id" }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const transport = createBrevoMailTransport(
+      {
+        apiKey: "brevo-api-key",
+        fromAddress: "noreply@example.com",
+        fromName: "InTouch",
+      },
+      fetchImplementation,
+    );
+
+    const result = await transport.send({
+      to: "ramy@example.com",
+      subject: "Confirm your email",
+      text: "Confirm your email",
+      html: "<p>Confirm your email</p>",
+    });
+
+    assert.deepEqual(result, { messageId: "brevo-message-id" });
+    assert.equal(requests[0]?.input, "https://api.brevo.com/v3/smtp/email");
+    const headers = new Headers(requests[0]?.init?.headers);
+    assert.equal(headers.get("api-key"), "brevo-api-key");
+    const requestBody = requests[0]?.init?.body;
+    if (typeof requestBody !== "string") {
+      assert.fail("Brevo request body must be serialized JSON");
+    }
+    assert.deepEqual(JSON.parse(requestBody), {
+      sender: { email: "noreply@example.com", name: "InTouch" },
+      to: [{ email: "ramy@example.com" }],
+      subject: "Confirm your email",
+      htmlContent: "<p>Confirm your email</p>",
+    });
+  });
+
+  test("maps Brevo HTTP failures to retry-safe provider codes", async () => {
+    const transport = createBrevoMailTransport(
+      {
+        apiKey: "brevo-api-key",
+        fromAddress: "noreply@example.com",
+        fromName: "InTouch",
+      },
+      async () => new Response("unauthorized", { status: 401 }),
+    );
+
+    await assert.rejects(
+      transport.send({
+        to: "ramy@example.com",
+        subject: "Confirm your email",
+        text: "Confirm your email",
+        html: "<p>Confirm your email</p>",
+      }),
+      (error: unknown) => {
+        assert.equal(
+          typeof error === "object" && error !== null && "code" in error
+            ? error.code
+            : undefined,
+          "BREVO_HTTP_401",
+        );
+        return true;
+      },
+    );
+  });
+
   test("encrypts sensitive payloads and rejects tampering", () => {
     const payload = {
       kind: MailKind.PASSWORD_RESET,
@@ -31,10 +105,11 @@ describe("transactional mail", () => {
 
     assert.deepEqual(cipher.decrypt(encrypted), payload);
     assert.equal(encrypted.ciphertext.includes(payload.token), false);
+    const replacement = encrypted.ciphertext.endsWith("A") ? "B" : "A";
     assert.throws(() =>
       cipher.decrypt({
         ...encrypted,
-        ciphertext: `${encrypted.ciphertext.slice(0, -1)}A`,
+        ciphertext: `${encrypted.ciphertext.slice(0, -1)}${replacement}`,
       }),
     );
   });

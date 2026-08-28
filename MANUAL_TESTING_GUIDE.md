@@ -18,8 +18,8 @@ sessions, and Socket.IO.
 Implemented capabilities include:
 
 - Email/password registration and login.
-- Single-use email confirmation and password recovery backed by transactional
-  SMTP delivery.
+- Single-use email confirmation and password recovery backed by a transactional
+  encrypted outbox and provider-selectable Brevo HTTPS or SMTP delivery.
 - Backend-owned Google OAuth redirect authentication.
 - In-memory access JWTs and rotating refresh tokens in secure `HttpOnly`
   cookies.
@@ -98,6 +98,8 @@ tester controls.
 - Disable browser extensions that alter requests, cookies, or page styles.
 - Test at desktop and mobile viewport sizes.
 - Confirm the Railway API has exactly one running replica.
+- Confirm Railway uses `MAIL_PROVIDER=brevo`; SMTP requires a host that permits
+  outbound SMTP.
 - Record the browser, OS, commit SHA, deployment ID, frontend URL, and API URL.
 
 ### Suggested Fixture
