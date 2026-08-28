@@ -77,5 +77,13 @@ userSchema.index(
     unique: true,
   },
 );
+userSchema.index(
+  { displayName: "text", username: "text" },
+  {
+    name: "user_identity_text",
+    default_language: "none",
+    weights: { displayName: 2, username: 1 },
+  },
+);
 
 export const UserModel = model<User>("User", userSchema);

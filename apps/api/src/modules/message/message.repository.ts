@@ -20,6 +20,15 @@ export interface MessageRepository {
     before: string | undefined,
     limit: number,
   ): Promise<MessageRecord[]>;
+  listContext(
+    conversationId: string,
+    messageId: string,
+    radius: number,
+  ): Promise<{
+    messages: MessageRecord[];
+    hasEarlier: boolean;
+    hasLater: boolean;
+  }>;
   updateContent(
     messageId: string,
     content: string,
@@ -72,6 +81,39 @@ const createMongooseMessageRepository = (
       .lean<MessageDocument[]>();
     if (session) query.session(session);
     return (await query.exec()).map(toMessageRecord);
+  },
+
+  async listContext(conversationId, messageId, radius) {
+    const [anchor, older, newer] = await Promise.all([
+      MessageModel.findOne({ _id: messageId, conversationId })
+        .lean<MessageDocument>()
+        .session(session ?? null)
+        .exec(),
+      MessageModel.find({ conversationId, _id: { $lt: messageId } })
+        .sort({ _id: -1 })
+        .limit(radius + 1)
+        .lean<MessageDocument[]>()
+        .session(session ?? null)
+        .exec(),
+      MessageModel.find({ conversationId, _id: { $gt: messageId } })
+        .sort({ _id: 1 })
+        .limit(radius + 1)
+        .lean<MessageDocument[]>()
+        .session(session ?? null)
+        .exec(),
+    ]);
+    if (!anchor) return { messages: [], hasEarlier: false, hasLater: false };
+    const visibleOlder = older.slice(0, radius);
+    const visibleNewer = newer.slice(0, radius).reverse();
+    return {
+      messages: [
+        ...visibleNewer.map(toMessageRecord),
+        toMessageRecord(anchor),
+        ...visibleOlder.map(toMessageRecord),
+      ],
+      hasEarlier: older.length > radius,
+      hasLater: newer.length > radius,
+    };
   },
 
   async updateContent(messageId, content, editedAt) {

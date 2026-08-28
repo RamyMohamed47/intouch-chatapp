@@ -15,6 +15,7 @@ const validEnv: NodeJS.ProcessEnv = {
   GOOGLE_OAUTH_CLIENT_SECRET: "google-client-secret",
   GOOGLE_OAUTH_FRONTEND_REDIRECT_URL: "https://app.example.com/auth/callback",
   LOGIN_THROTTLE_SECRET: "a-login-throttle-secret-that-is-over-32-bytes",
+  SEARCH_PROVIDER: "native",
 };
 
 describe("auth environment configuration", () => {
@@ -41,6 +42,7 @@ describe("auth environment configuration", () => {
     assert.equal(config.loginAttemptLimit, 10);
     assert.equal(config.loginAttemptWindowMs, 900_000);
     assert.equal(config.loginAttemptCooldownMs, 900_000);
+    assert.equal(config.searchProvider, "native");
     assert.equal(config.trustProxy, "loopback");
   });
 
@@ -61,6 +63,7 @@ describe("auth environment configuration", () => {
     const config = loadConfig({
       ...validEnv,
       NODE_ENV: "production",
+      SEARCH_PROVIDER: "atlas",
       GOOGLE_OAUTH_CALLBACK_URL:
         "https://app.example.com/api/v1/auth/oauth/google/callback",
     });
@@ -118,8 +121,31 @@ describe("auth environment configuration", () => {
 
   test("requires HTTPS Google OAuth URLs in production", () => {
     assert.throws(
-      () => loadConfig({ ...validEnv, NODE_ENV: "production" }),
+      () =>
+        loadConfig({
+          ...validEnv,
+          NODE_ENV: "production",
+          SEARCH_PROVIDER: "atlas",
+        }),
       /must use HTTPS in production/,
+    );
+  });
+
+  test("requires an explicit valid search provider in production", () => {
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          NODE_ENV: "production",
+          SEARCH_PROVIDER: undefined,
+          GOOGLE_OAUTH_CALLBACK_URL:
+            "https://app.example.com/api/v1/auth/oauth/google/callback",
+        }),
+      /SEARCH_PROVIDER env var is required/,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnv, SEARCH_PROVIDER: "invalid" }),
+      /SEARCH_PROVIDER must be atlas or native/,
     );
   });
 });

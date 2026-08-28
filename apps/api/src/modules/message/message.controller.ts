@@ -4,6 +4,7 @@ import type {
   UpdateMessageInput,
 } from "@intouch/shared/messages";
 import {
+  messageContextResponseSchema,
   messageListResponseSchema,
   messageResponseSchema,
 } from "@intouch/shared/messages";
@@ -14,6 +15,7 @@ import catchAsync from "../../utils/catchAsync.js";
 import type { AuthLocals } from "../auth/auth.types.js";
 import type {
   ConversationMessagesParams,
+  MessageContextParams,
   MessageParams,
 } from "./message.schemas.js";
 import type { MessageService } from "./message.service.js";
@@ -25,6 +27,7 @@ const getUserId = (locals: AuthLocals) => {
 
 export interface MessageController {
   list: RequestHandler;
+  context: RequestHandler;
   create: RequestHandler;
   update: RequestHandler;
   delete: RequestHandler;
@@ -33,6 +36,17 @@ export interface MessageController {
 const createMessageController = (
   service: MessageService,
 ): MessageController => ({
+  context: catchAsync(async (req, res) => {
+    const { conversationId, messageId } =
+      req.params as unknown as MessageContextParams;
+    const context = await service.context(
+      getUserId(res.locals as AuthLocals),
+      conversationId,
+      messageId,
+    );
+    res.status(200).json(messageContextResponseSchema.parse(context));
+  }),
+
   list: catchAsync(async (req, res) => {
     const { conversationId } =
       req.params as unknown as ConversationMessagesParams;

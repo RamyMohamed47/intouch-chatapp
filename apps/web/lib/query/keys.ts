@@ -33,9 +33,33 @@ export const queryKeys = {
       ["conversations", conversationId, "participants"] as const,
     messages: (conversationId: string) =>
       ["conversations", conversationId, "messages"] as const,
+    messageContext: (conversationId: string, messageId: string) =>
+      [
+        "conversations",
+        conversationId,
+        "messages",
+        "context",
+        messageId,
+      ] as const,
     messageReaders: (conversationId: string, messageId: string) =>
       ["conversations", conversationId, "message-readers", messageId] as const,
     reactionUsers: (messageId: string, emoji: string) =>
       ["messages", messageId, "reaction-users", emoji] as const,
+  },
+  search: {
+    organization: (
+      organizationId: string,
+      query: string,
+      type: string,
+      conversationId?: string,
+    ) =>
+      [
+        "organizations",
+        organizationId,
+        "search",
+        query,
+        type,
+        conversationId ?? "all-conversations",
+      ] as const,
   },
 };

@@ -11,6 +11,7 @@
     "start": "node --enable-source-maps dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
+    "search:index:sync": "tsx src/migrations/syncSearchIndexes.ts",
     "migrate:remove-user-status": "tsx src/migrations/removeLegacyUserStatus.ts"
   },
   "dependencies": {

@@ -9,6 +9,8 @@ import {
   refreshAccessToken,
 } from "@/lib/api/client";
 import { getAccessToken, setAccessToken } from "@/lib/auth/access-token";
+import { searchApi } from "@/lib/api/search";
+import { messagesApi } from "@/lib/api/messages";
 import { server } from "../mocks/server";
 
 describe("API transport", () => {
@@ -88,5 +90,83 @@ describe("API transport", () => {
     ).resolves.toEqual(["rotated-token", "rotated-token"]);
     expect(refreshes).toBe(1);
     expect(getAccessToken()).toBe("rotated-token");
+  });
+
+  it("parses organization search and preserves its filters", async () => {
+    server.use(
+      http.get(
+        "http://localhost:3000/api/v1/organizations/64c000000000000000000001/search",
+        ({ request }) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("q")).toBe("roadmap");
+          expect(url.searchParams.get("type")).toBe("MESSAGES");
+          expect(url.searchParams.get("conversationId")).toBe(
+            "64d000000000000000000001",
+          );
+          return HttpResponse.json({
+            query: "roadmap",
+            type: "MESSAGES",
+            results: [
+              {
+                kind: "MESSAGE",
+                id: "64f000000000000000000001",
+                conversation: {
+                  id: "64d000000000000000000001",
+                  type: "CHANNEL",
+                  label: "general",
+                },
+                sender: {
+                  id: "64b000000000000000000001",
+                  username: "ramy",
+                  displayName: "Ramy",
+                },
+                snippet: [
+                  { text: "Updated ", matched: false },
+                  { text: "roadmap", matched: true },
+                ],
+                createdAt: "2026-08-28T10:00:00.000Z",
+              },
+            ],
+            nextCursor: null,
+          });
+        },
+      ),
+    );
+
+    await expect(
+      searchApi.search("64c000000000000000000001", {
+        q: "roadmap",
+        type: "MESSAGES",
+        conversationId: "64d000000000000000000001",
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({ results: [{ kind: "MESSAGE" }] });
+  });
+
+  it("parses exact message context responses", async () => {
+    server.use(
+      http.get(
+        "http://localhost:3000/api/v1/conversations/64d000000000000000000001/messages/64f000000000000000000001/context",
+        () =>
+          HttpResponse.json({
+            anchorMessageId: "64f000000000000000000001",
+            messages: [],
+            hasEarlier: true,
+            hasLater: true,
+          }),
+      ),
+    );
+
+    await expect(
+      messagesApi.context(
+        "64d000000000000000000001",
+        "64f000000000000000000001",
+      ),
+    ).resolves.toEqual({
+      anchorMessageId: "64f000000000000000000001",
+      messages: [],
+      hasEarlier: true,
+      hasLater: true,
+    });
   });
 });

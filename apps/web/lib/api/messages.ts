@@ -1,5 +1,6 @@
 import {
   messageListResponseSchema,
+  messageContextResponseSchema,
   messageReadReceiptSummaryResponseSchema,
   messageReactionStateResponseSchema,
   messageReactionUsersResponseSchema,
@@ -20,6 +21,12 @@ export const messagesApi = {
     return apiRequest(
       `/api/v1/conversations/${conversationId}/messages?${query.toString()}`,
       messageListResponseSchema,
+    );
+  },
+  async context(conversationId: string, messageId: string) {
+    return apiRequest(
+      `/api/v1/conversations/${conversationId}/messages/${messageId}/context`,
+      messageContextResponseSchema,
     );
   },
   async create(conversationId: string, input: CreateMessageInput) {

@@ -10,6 +10,7 @@ import type { MessageBroadcaster } from "../src/broadcasting/messageBroadcaster.
 import createConversationPolicy from "../src/modules/conversations/conversation.policy.js";
 import type { ConversationRecord } from "../src/modules/conversations/conversation.types.js";
 import type { MessageRepository } from "../src/modules/message/message.repository.js";
+import { MessageNotFoundError } from "../src/modules/message/message.errors.js";
 import createMessageService from "../src/modules/message/message.service.js";
 import {
   MessageType,
@@ -49,6 +50,11 @@ const createRepository = (
   create: async () => message,
   findById: async () => message,
   listByConversation: async () => [message],
+  listContext: async () => ({
+    messages: [message],
+    hasEarlier: false,
+    hasLater: false,
+  }),
   updateContent: async () => ({ ...message, editedAt: now }),
   redact: async () => ({ ...message, content: null, deletedAt: now }),
   deleteByConversationId: async () => 0,
@@ -136,6 +142,45 @@ describe("messageService", () => {
       messages: [{ ...message, reactions: [], currentUserReaction: null }],
       nextCursor: null,
     });
+  });
+
+  test("returns decorated context around an exact anchor", async () => {
+    const service = createService(
+      createRepository({
+        listContext: async () => ({
+          messages: [message],
+          hasEarlier: true,
+          hasLater: true,
+        }),
+      }),
+      createBroadcaster(),
+    );
+    assert.deepEqual(
+      await service.context(userId, conversationId, message.id),
+      {
+        anchorMessageId: message.id,
+        messages: [{ ...message, reactions: [], currentUserReaction: null }],
+        hasEarlier: true,
+        hasLater: true,
+      },
+    );
+  });
+
+  test("conceals a missing or mismatched context anchor", async () => {
+    const service = createService(
+      createRepository({
+        listContext: async () => ({
+          messages: [],
+          hasEarlier: false,
+          hasLater: false,
+        }),
+      }),
+      createBroadcaster(),
+    );
+    await assert.rejects(
+      service.context(userId, conversationId, message.id),
+      MessageNotFoundError,
+    );
   });
 
   test("creates and broadcasts a scoped message", async () => {

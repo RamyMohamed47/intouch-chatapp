@@ -147,6 +147,11 @@ const createHarness = (targetMessage: MessageRecord = message) => {
     create: async () => targetMessage,
     findById: async () => targetMessage,
     listByConversation: async () => [],
+    listContext: async () => ({
+      messages: [targetMessage],
+      hasEarlier: false,
+      hasLater: false,
+    }),
     updateContent: async () => targetMessage,
     redact: async () => targetMessage,
     deleteByConversationId: async () => 0,

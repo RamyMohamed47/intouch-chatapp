@@ -54,6 +54,12 @@ const createService = (
   overrides: Partial<MessageService> = {},
 ): MessageService => ({
   list: async () => ({ messages: [], nextCursor: null }),
+  context: async () => ({
+    anchorMessageId: message.id,
+    messages: [messageView],
+    hasEarlier: false,
+    hasLater: false,
+  }),
   create: async () => messageView,
   update: async () => messageView,
   delete: async () => undefined,

@@ -95,6 +95,7 @@ values are:
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `GOOGLE_OAUTH_CALLBACK_URL`
 - `GOOGLE_OAUTH_FRONTEND_REDIRECT_URL`
+- `SEARCH_PROVIDER`; use `atlas` in production and `native` for local MongoDB
 
 `DATABASE` must connect to a MongoDB replica set or sharded cluster because
 organization creation and deletion use transactions. Atlas deployments support
@@ -267,6 +268,41 @@ JSON written to stdout.
 Pino HTTP still sets `X-Request-Id`, but automatic request completed logs are
 disabled to keep local output readable. Socket connection logs are emitted at
 `debug`, so they are hidden by the default `info` level.
+
+## Organization Search
+
+Authenticated organization members can search accessible messages, channels,
+and people from the workspace search control or with `Ctrl/Cmd+K`. Search is
+always scoped to one organization. Public channels require current membership;
+private channels and direct messages additionally require current
+participation. Deleted messages and stale participant records are excluded.
+
+Local development defaults to MongoDB native text search:
+
+```dotenv
+SEARCH_PROVIDER=native
+```
+
+Production must explicitly use Atlas Search and provision the three versioned
+indexes for messages, conversations, and users:
+
+```dotenv
+SEARCH_PROVIDER=atlas
+```
+
+After setting the API's production environment variables, run this idempotent
+command from the repository root against the target Atlas deployment:
+
+```bash
+npm run search:index:sync
+```
+
+The command creates or updates the `v1` definitions and waits until all indexes
+are queryable. A missing or building Atlas index makes only search requests
+return `503 SEARCH_UNAVAILABLE`; unrelated API features continue operating.
+Atlas result pagination uses opaque `searchAfter` cursors, while native search
+uses query-bound relevance cursors. Search terms and matched content are not
+written to application logs.
 
 ## Repository Layout
 

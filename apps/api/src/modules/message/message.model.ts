@@ -27,6 +27,10 @@ messageSchema.index(
   { conversationId: 1, _id: -1 },
   { name: "messages_by_conversation_cursor" },
 );
+messageSchema.index(
+  { content: "text" },
+  { name: "messages_content_text", default_language: "none" },
+);
 
 const MessageModel = model<Message>("Message", messageSchema);
 

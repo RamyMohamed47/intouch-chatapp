@@ -1,12 +1,14 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import type { OrganizationSearchQuery } from "@intouch/shared/search";
 
 import { categoriesApi } from "@/lib/api/categories";
 import { conversationsApi } from "@/lib/api/conversations";
 import { membershipsApi } from "@/lib/api/memberships";
 import { messagesApi } from "@/lib/api/messages";
 import { organizationsApi } from "@/lib/api/organizations";
+import { searchApi } from "@/lib/api/search";
 import { queryKeys } from "@/lib/query/keys";
 
 export const useOrganizations = () =>
@@ -76,13 +78,42 @@ export const useParticipants = (conversationId: string, enabled = true) =>
     enabled: enabled && Boolean(conversationId),
   });
 
-export const useMessages = (conversationId: string) =>
+export const useMessages = (conversationId: string, enabled = true) =>
   useInfiniteQuery({
     queryKey: queryKeys.conversations.messages(conversationId),
     queryFn: ({ pageParam }) => messagesApi.list(conversationId, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
-    enabled: Boolean(conversationId),
+    enabled: enabled && Boolean(conversationId),
+  });
+
+export const useMessageContext = (conversationId: string, messageId: string) =>
+  useQuery({
+    queryKey: queryKeys.conversations.messageContext(conversationId, messageId),
+    queryFn: () => messagesApi.context(conversationId, messageId),
+    enabled: Boolean(conversationId) && Boolean(messageId),
+  });
+
+export const useOrganizationSearch = (
+  organizationId: string,
+  input: Omit<OrganizationSearchQuery, "cursor">,
+  enabled = true,
+) =>
+  useInfiniteQuery({
+    queryKey: queryKeys.search.organization(
+      organizationId,
+      input.q,
+      input.type,
+      input.conversationId,
+    ),
+    queryFn: ({ pageParam }) =>
+      searchApi.search(organizationId, {
+        ...input,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    enabled: enabled && Boolean(organizationId) && input.q.trim().length >= 2,
   });
 
 export const useMessageReaders = (

@@ -247,3 +247,12 @@ channels and direct messages, current participant records. Message redaction,
 conversation deletion, organization deletion, private-participant removal, and
 public-to-private visibility transitions delete reactions that no longer have a
 valid lifecycle or authorized owner.
+
+Search does not introduce a persistence entity. Native development search uses
+text indexes on `Message.content`, `Conversation.name`, and the weighted
+`User.displayName`/`User.username` pair. Production uses three versioned Atlas
+Search indexes over the same collections. Message results are filtered to
+currently accessible conversation IDs before DTO serialization; people results
+are filtered to current organization memberships and never expose email or
+provider data. Search cursors are opaque and bound to the provider, normalized
+query, result type, and optional conversation filter.

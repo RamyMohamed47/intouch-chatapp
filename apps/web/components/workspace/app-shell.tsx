@@ -23,6 +23,7 @@ import type { ChannelConversationDto } from "@intouch/shared/conversations";
 
 import { BrandMark, BrandSignature } from "@/components/brand/brand";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
+import { OrganizationSearchDialog } from "@/components/search/organization-search-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -189,9 +190,11 @@ function NewDirectMessageDialog({
 function WorkspaceNavigation({
   mobile = false,
   onNavigate,
+  onSearch,
 }: {
   mobile?: boolean;
   onNavigate?: () => void;
+  onSearch: () => void;
 }) {
   const pathname = usePathname();
   const params = useParams<{ organizationId?: string }>();
@@ -315,11 +318,11 @@ function WorkspaceNavigation({
 
       <button
         type="button"
-        disabled
-        className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-sidebar-border bg-background/30 px-3 text-sm text-muted-foreground opacity-70"
-        title="Search is coming later"
+        onClick={onSearch}
+        className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-sidebar-border bg-background/30 px-3 text-sm text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
       >
         <Search className="size-4" /> Find anything
+        <span className="ml-auto font-mono text-[9px]">Ctrl K</span>
       </button>
 
       <ScrollArea className="mt-5 min-h-0 flex-1">
@@ -475,6 +478,7 @@ function WorkspaceNavigation({
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const params = useParams<{ organizationId?: string }>();
   const { connected, subscribeOrganization, unsubscribeOrganization } =
     useRealtime();
@@ -493,9 +497,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     unsubscribeOrganization,
   ]);
 
+  useEffect(() => {
+    const openSearch = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", openSearch);
+    return () => window.removeEventListener("keydown", openSearch);
+  }, []);
+
   return (
     <main className="flex h-dvh min-w-0 overflow-hidden bg-background text-foreground md:gap-3 md:p-3">
-      <WorkspaceNavigation />
+      <WorkspaceNavigation onSearch={() => setSearchOpen(true)} />
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden border-border bg-card/75 shadow-2xl shadow-background/40 backdrop-blur-xl md:rounded-[1.7rem] md:border">
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border/70 px-4 md:hidden">
           <Sheet
@@ -518,6 +533,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <WorkspaceNavigation
                 mobile
                 onNavigate={() => setMobileNavigationOpen(false)}
+                onSearch={() => {
+                  setMobileNavigationOpen(false);
+                  setSearchOpen(true);
+                }}
               />
             </SheetContent>
           </Sheet>
@@ -529,11 +548,24 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <div className="ml-auto flex items-center gap-1">
             <ThemeSwitcher />
-            <ComingSoonButton label="Search" icon={<Search />} />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Search"
+              onClick={() => setSearchOpen(true)}
+            >
+              <Search />
+            </Button>
           </div>
         </div>
         {children}
       </section>
+      <OrganizationSearchDialog
+        organizationId={organizationId}
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+      />
     </main>
   );
 }

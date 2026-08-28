@@ -18,6 +18,7 @@ export type {
 export {
   MessageType,
   messageCoreDtoSchema,
+  messageContextResponseSchema,
   messageDtoSchema,
   messageListResponseSchema,
   messageResponseSchema,
@@ -34,6 +35,7 @@ export {
 } from "./message.dto.js";
 export type {
   MessageCoreDto,
+  MessageContextResponse,
   MessageDto,
   MessageListResponse,
   MessageResponse,

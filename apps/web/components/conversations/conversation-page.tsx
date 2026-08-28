@@ -23,6 +23,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   createMessageSchema,
   updateMessageSchema,
@@ -69,6 +70,7 @@ import {
   useConversation,
   useMembers,
   useMessageReaders,
+  useMessageContext,
   useMessages,
   useOrganization,
 } from "@/lib/query/hooks";
@@ -76,6 +78,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { useRealtime } from "@/lib/realtime/provider";
 import { hasReadMessage } from "@/lib/realtime/read-receipt-cache";
 import { mergeReactionState } from "@/lib/reactions/message-reaction-cache";
+import { cn } from "@/lib/utils";
 
 const formatTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, {
@@ -175,6 +178,9 @@ export function ConversationPage({
   expectedType: "CHANNEL" | "DIRECT";
 }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const anchorMessageId = searchParams.get("messageId") ?? "";
   const { user } = useAuth();
   const realtime = useRealtime();
   const {
@@ -186,13 +192,17 @@ export function ConversationPage({
   } = realtime;
   const organization = useOrganization(organizationId);
   const conversation = useConversation(conversationId);
-  const messages = useMessages(conversationId);
+  const messages = useMessages(conversationId, !anchorMessageId);
+  const messageContext = useMessageContext(conversationId, anchorMessageId);
   const members = useMembers(organizationId);
   const [content, setContent] = useState("");
   const [focused, setFocused] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -252,9 +262,10 @@ export function ConversationPage({
     };
   }, [content, conversationId, focused, startTyping, stopTyping]);
 
-  const allMessages = (
-    messages.data?.pages.flatMap((page) => page.messages) ?? []
-  )
+  const sourceMessages = anchorMessageId
+    ? (messageContext.data?.messages ?? [])
+    : (messages.data?.pages.flatMap((page) => page.messages) ?? []);
+  const allMessages = sourceMessages
     .filter(
       (message, index, list) =>
         list.findIndex((item) => item.id === message.id) === index,
@@ -271,6 +282,14 @@ export function ConversationPage({
     channelReaderMessageId ?? "",
     Boolean(channelReaderMessageId),
   );
+  const messageDataPending = anchorMessageId
+    ? messageContext.isPending
+    : messages.isPending;
+  const messageDataError = anchorMessageId
+    ? messageContext.isError
+    : messages.isError;
+  const atLatestMessage =
+    !anchorMessageId || messageContext.data?.hasLater === false;
 
   useLayoutEffect(() => {
     if (scrollStateRef.current.conversationId !== conversationId) {
@@ -286,18 +305,18 @@ export function ConversationPage({
       forceBottomScrollRef.current = false;
     }
 
-    if (messages.isPending) return;
+    if (messageDataPending) return;
 
     const viewport = messageViewportRef.current;
     if (!viewport) return;
 
     const newestMessageId = newestMessage?.id ?? null;
     if (!scrollStateRef.current.initialized) {
-      viewport.scrollTop = viewport.scrollHeight;
+      if (!anchorMessageId) viewport.scrollTop = viewport.scrollHeight;
       scrollStateRef.current.initialized = true;
       scrollStateRef.current.newestMessageId = newestMessageId;
-      isNearBottomRef.current = true;
-      setNewestMessageVisible(true);
+      isNearBottomRef.current = !anchorMessageId;
+      setNewestMessageVisible(!anchorMessageId);
       return;
     }
 
@@ -313,7 +332,25 @@ export function ConversationPage({
         block: "end",
       });
     }
-  }, [conversationId, messages.isPending, newestMessage?.id]);
+  }, [anchorMessageId, conversationId, messageDataPending, newestMessage?.id]);
+
+  useEffect(() => {
+    if (!anchorMessageId || !messageContext.data) return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(`message-${anchorMessageId}`)
+        ?.scrollIntoView({ block: "center" });
+      setHighlightedMessageId(anchorMessageId);
+    });
+    const timeout = window.setTimeout(
+      () => setHighlightedMessageId(null),
+      2_500,
+    );
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [anchorMessageId, messageContext.data]);
   const receipt = useMutation({
     mutationFn: (messageId: string) =>
       messagesApi.updateReadReceipt(conversationId, { messageId }),
@@ -351,6 +388,7 @@ export function ConversationPage({
   useEffect(() => {
     if (
       !newestMessage ||
+      !atLatestMessage ||
       !documentActive ||
       !newestMessageVisible ||
       hasReadMessage(conversation.data?.readReceipt, newestMessage.id) ||
@@ -379,6 +417,7 @@ export function ConversationPage({
     newestMessage,
     newestMessageVisible,
     receipt,
+    atLatestMessage,
   ]);
 
   const sendMessage = useMutation({
@@ -391,6 +430,11 @@ export function ConversationPage({
       );
       setContent("");
       stopTyping(conversationId);
+      if (anchorMessageId) {
+        const segment =
+          expectedType === "CHANNEL" ? "channels" : "direct-messages";
+        router.replace(`/app/${organizationId}/${segment}/${conversationId}`);
+      }
       void refreshSummaries();
     },
   });
@@ -408,6 +452,12 @@ export function ConversationPage({
         (current) => upsertCachedMessage(current, message),
       );
       setEditingId(null);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.messageContext(
+          conversationId,
+          anchorMessageId,
+        ),
+      });
       void refreshSummaries();
     },
   });
@@ -444,6 +494,14 @@ export function ConversationPage({
           query.queryKey[1] === state.messageId &&
           query.queryKey[2] === "reaction-users",
       });
+      if (anchorMessageId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.messageContext(
+            conversationId,
+            anchorMessageId,
+          ),
+        });
+      }
       setError(null);
     },
     onError: (requestError) => setError(requestError.message),
@@ -614,11 +672,36 @@ export function ConversationPage({
             const viewport = event.currentTarget;
             const nearBottom = isNearConversationBottom(viewport);
             isNearBottomRef.current = nearBottom;
-            setNewestMessageVisible(isNearConversationBottom(viewport, 1));
+            setNewestMessageVisible(
+              atLatestMessage && isNearConversationBottom(viewport, 1),
+            );
           }}
         >
           <div className="mx-auto max-w-4xl p-5 md:p-8">
-            {messages.hasNextPage && (
+            {anchorMessageId && (
+              <div className="mb-6 flex flex-col items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm sm:flex-row">
+                <span className="text-muted-foreground">
+                  Viewing a search result in its conversation context.
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => {
+                    const segment =
+                      expectedType === "CHANNEL"
+                        ? "channels"
+                        : "direct-messages";
+                    router.replace(
+                      `/app/${organizationId}/${segment}/${conversationId}`,
+                    );
+                  }}
+                >
+                  Jump to latest
+                </Button>
+              </div>
+            )}
+            {!anchorMessageId && messages.hasNextPage && (
               <div className="mb-6 text-center">
                 <Button
                   type="button"
@@ -633,15 +716,19 @@ export function ConversationPage({
                 </Button>
               </div>
             )}
-            {messages.isPending && (
+            {messageDataPending && (
               <p className="text-center text-sm text-muted-foreground">
                 Loading messages...
               </p>
             )}
-            {messages.isError && (
+            {messageDataError && (
               <button
                 type="button"
-                onClick={() => void messages.refetch()}
+                onClick={() =>
+                  void (anchorMessageId
+                    ? messageContext.refetch()
+                    : messages.refetch())
+                }
                 className="w-full rounded-2xl border border-destructive/30 p-4 text-sm text-destructive"
               >
                 Messages could not be loaded. Select to retry.
@@ -658,7 +745,15 @@ export function ConversationPage({
                   (conversation.data.type === "CHANNEL" &&
                     organization.data.currentUserRole === "OWNER");
                 return (
-                  <article key={message.id} className="group flex gap-3">
+                  <article
+                    id={`message-${message.id}`}
+                    key={message.id}
+                    className={cn(
+                      "group flex gap-3 rounded-2xl transition duration-700",
+                      highlightedMessageId === message.id &&
+                        "bg-brand-orange/10 ring-2 ring-brand-orange/40 ring-offset-4 ring-offset-background",
+                    )}
+                  >
                     <Avatar>
                       <AvatarFallback>
                         {initials(sender?.displayName ?? "User")}
@@ -812,7 +907,7 @@ export function ConversationPage({
                   </article>
                 );
               })}
-              {!messages.isPending && allMessages.length === 0 && (
+              {!messageDataPending && allMessages.length === 0 && (
                 <div className="py-16 text-center">
                   <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
                     {conversation.data.type === "CHANNEL" ? (

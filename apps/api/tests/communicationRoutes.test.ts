@@ -119,6 +119,12 @@ const messages: MessageService = {
     receivedHistoryLimit = query.limit;
     return { messages: [message], nextCursor: null };
   },
+  context: async () => ({
+    anchorMessageId: messageId,
+    messages: [message],
+    hasEarlier: false,
+    hasLater: false,
+  }),
   create: async () => message,
   update: async () => message,
   delete: async () => undefined,
@@ -239,6 +245,21 @@ describe("category, conversation, and message routes", () => {
     );
     assert.equal(response.status, 200);
     assert.equal(receivedHistoryLimit, 25);
+  });
+
+  test("returns exact message context", async () => {
+    const response = await fetch(
+      `${baseUrl}/api/v1/conversations/${conversationId}/messages/${messageId}/context`,
+    );
+    const body = (await response.json()) as {
+      anchorMessageId: string;
+      hasEarlier: boolean;
+      hasLater: boolean;
+    };
+    assert.equal(response.status, 200);
+    assert.equal(body.anchorMessageId, messageId);
+    assert.equal(body.hasEarlier, false);
+    assert.equal(body.hasLater, false);
   });
 
   test("rejects malformed message content", async () => {

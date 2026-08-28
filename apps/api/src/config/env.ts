@@ -19,6 +19,7 @@ export interface AppConfig {
   loginAttemptWindowMs: number;
   loginThrottleSecret: string;
   port: number;
+  searchProvider: "atlas" | "native";
   trustProxy: boolean | number | string;
 }
 
@@ -101,6 +102,22 @@ const parsePort = (value: string | undefined) => {
   }
 
   return port;
+};
+
+const parseSearchProvider = (
+  value: string | undefined,
+  isProduction: boolean,
+): "atlas" | "native" => {
+  if (value === undefined) {
+    if (isProduction) {
+      throw new Error("SEARCH_PROVIDER env var is required in production");
+    }
+    return "native";
+  }
+  if (value !== "atlas" && value !== "native") {
+    throw new Error("SEARCH_PROVIDER must be atlas or native");
+  }
+  return value;
 };
 
 const parseGoogleUrl = (
@@ -200,6 +217,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       "LOGIN_THROTTLE_SECRET",
     ),
     port: parsePort(env.PORT),
+    searchProvider: parseSearchProvider(env.SEARCH_PROVIDER, isProduction),
     trustProxy: isProduction ? 1 : "loopback",
   };
 };

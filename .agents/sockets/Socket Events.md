@@ -89,6 +89,10 @@ the next heartbeat within approximately three seconds.
 Messages are written through REST. Socket.IO only manages authorized room
 subscriptions and scoped server events; no event is broadcast globally.
 
+Organization search has no Socket.IO event. Atlas and native indexes are
+eventually consistent read models; the frontend issues debounced REST searches
+and opens exact message context through the message-context endpoint.
+
 The member-list REST response is the initial presence snapshot. Web clients
 invalidate that exact organization roster after every successful
 `organization:subscribe`, including reconnects, and then apply

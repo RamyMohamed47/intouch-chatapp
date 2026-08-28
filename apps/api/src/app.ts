@@ -26,6 +26,7 @@ export interface AppDependencies {
   organizationConversationRouter?: Router;
   organizationRouter?: Router;
   readReceiptRouter?: Router;
+  searchRouter?: Router;
   trustProxy?: boolean | number | string;
 }
 
@@ -44,6 +45,7 @@ const createApp = ({
   organizationConversationRouter,
   organizationRouter,
   readReceiptRouter,
+  searchRouter,
   trustProxy = false,
 }: AppDependencies = {}) => {
   const app = express();
@@ -130,6 +132,10 @@ const createApp = ({
 
   if (messageReactionRouter) {
     app.use("/api/v1/messages", messageReactionRouter);
+  }
+
+  if (searchRouter) {
+    app.use("/api/v1/organizations", searchRouter);
   }
 
   app.use((req, _res, next) => {

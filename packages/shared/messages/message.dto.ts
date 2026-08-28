@@ -50,6 +50,15 @@ export const messageListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+export const messageContextResponseSchema = z
+  .object({
+    anchorMessageId: identifierDtoSchema,
+    messages: z.array(messageDtoSchema),
+    hasEarlier: z.boolean(),
+    hasLater: z.boolean(),
+  })
+  .strict();
+
 export const messageReactionStateResponseSchema = z
   .object({ reactionState: messageReactionStateDtoSchema })
   .strict();
@@ -93,6 +102,9 @@ export type MessageCoreDto = z.infer<typeof messageCoreDtoSchema>;
 export type MessageDto = z.infer<typeof messageDtoSchema>;
 export type MessageResponse = z.infer<typeof messageResponseSchema>;
 export type MessageListResponse = z.infer<typeof messageListResponseSchema>;
+export type MessageContextResponse = z.infer<
+  typeof messageContextResponseSchema
+>;
 export type ReadReceiptDto = z.infer<typeof readReceiptDtoSchema>;
 export type ReadReceiptResponse = z.infer<typeof readReceiptResponseSchema>;
 export type MessageReactionSummaryDto = z.infer<

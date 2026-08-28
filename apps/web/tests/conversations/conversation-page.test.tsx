@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => {
     conversationType: "CHANNEL" | "DIRECT";
     currentUserRole: "MEMBER" | "OWNER";
     messages: (typeof createdMessage)[];
+    anchorMessageId: string | null;
+    contextHasLater: boolean;
     peerReadReceipt: {
       id: string;
       conversationId: string;
@@ -49,6 +51,8 @@ const mocks = vi.hoisted(() => {
     conversationType: "CHANNEL",
     currentUserRole: "OWNER",
     messages: [],
+    anchorMessageId: null,
+    contextHasLater: false,
     peerReadReceipt: null,
     channelReaderSummary: undefined,
   };
@@ -61,6 +65,7 @@ const mocks = vi.hoisted(() => {
     leaveConversation: vi.fn(() => Promise.resolve({ success: true })),
     startTyping: vi.fn(),
     stopTyping: vi.fn(),
+    routerReplace: vi.fn(),
     updateReadReceipt: vi.fn(() =>
       Promise.resolve({
         id: "650000000000000000000001",
@@ -73,6 +78,16 @@ const mocks = vi.hoisted(() => {
     ),
   };
 });
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: mocks.routerReplace }),
+  useSearchParams: () =>
+    new URLSearchParams(
+      mocks.state.anchorMessageId
+        ? { messageId: mocks.state.anchorMessageId }
+        : undefined,
+    ),
+}));
 
 vi.mock("@/components/memberships/invite-member-dialog", () => ({
   InviteMemberDialog: () => <button type="button">Invite member</button>,
@@ -161,6 +176,19 @@ vi.mock("@/lib/query/hooks", () => ({
     fetchNextPage: vi.fn(),
     refetch: vi.fn(),
   }),
+  useMessageContext: () => ({
+    data: mocks.state.anchorMessageId
+      ? {
+          anchorMessageId: mocks.state.anchorMessageId,
+          messages: mocks.state.messages,
+          hasEarlier: true,
+          hasLater: mocks.state.contextHasLater,
+        }
+      : undefined,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   useMembers: () => ({
     data: [
       {
@@ -218,6 +246,8 @@ describe("ConversationPage interactions", () => {
     mocks.state.conversationType = "CHANNEL";
     mocks.state.currentUserRole = "OWNER";
     mocks.state.messages = [];
+    mocks.state.anchorMessageId = null;
+    mocks.state.contextHasLater = false;
     mocks.state.peerReadReceipt = null;
     mocks.state.channelReaderSummary = undefined;
     mocks.createMessage.mockClear();
@@ -352,6 +382,31 @@ describe("ConversationPage interactions", () => {
         "64d000000000000000000001",
         { messageId: mocks.createdMessage.id },
       ),
+    );
+  });
+
+  it("opens exact search context without marking later messages read", async () => {
+    mocks.state.messages = [mocks.createdMessage];
+    mocks.state.anchorMessageId = mocks.createdMessage.id;
+    mocks.state.contextHasLater = true;
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    renderConversation();
+
+    expect(
+      screen.getByText("Viewing a search result in its conversation context."),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(
+        document.getElementById(`message-${mocks.createdMessage.id}`),
+      ).toHaveClass("ring-brand-orange/40"),
+    );
+    expect(mocks.updateReadReceipt).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Jump to latest" }),
+    );
+    expect(mocks.routerReplace).toHaveBeenCalledWith(
+      "/app/64c000000000000000000001/channels/64d000000000000000000001",
     );
   });
 

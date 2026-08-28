@@ -108,6 +108,27 @@ const createMessageService = ({
     };
   },
 
+  async context(userId: string, conversationId: string, messageId: string) {
+    const conversation = await conversations.getAccessible(
+      userId,
+      conversationId,
+    );
+    const context = await messages.listContext(conversationId, messageId, 20);
+    if (!context.messages.some(({ id }) => id === messageId)) {
+      throw new MessageNotFoundError();
+    }
+    return {
+      anchorMessageId: messageId,
+      messages: await reactions.decorate(
+        userId,
+        conversation,
+        context.messages,
+      ),
+      hasEarlier: context.hasEarlier,
+      hasLater: context.hasLater,
+    };
+  },
+
   async update(userId: string, messageId: string, input: UpdateMessageInput) {
     const existing = await messages.findById(messageId);
     if (!existing) throw new MessageNotFoundError();

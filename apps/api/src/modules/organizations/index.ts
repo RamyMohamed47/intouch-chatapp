@@ -75,6 +75,13 @@ import {
   type PresenceRealtime,
 } from "../presence/index.js";
 import { createMongooseUserRepository } from "../user/index.js";
+import {
+  createMongooseSearchRepository,
+  createSearchController,
+  createSearchRouter,
+  createSearchService,
+  type SearchProvider,
+} from "../search/index.js";
 import createOrganizationController from "./organization.controller.js";
 import createOrganizationPolicy from "./organization.policy.js";
 import createMongooseOrganizationRepository from "./organization.repository.js";
@@ -93,6 +100,7 @@ export interface OrganizationModuleDependencies {
   readReceiptRealtime: ReadReceiptRealtime;
   rateLimits: AuthenticatedRateLimiter;
   requireAccessToken: RequestHandler;
+  searchProvider: SearchProvider;
 }
 
 const createOrganizationModule = ({
@@ -106,6 +114,7 @@ const createOrganizationModule = ({
   rateLimits,
   readReceiptRealtime,
   requireAccessToken,
+  searchProvider,
 }: OrganizationModuleDependencies) => {
   const createDirectMessageLimit = createAuthenticatedRateLimit(
     rateLimits,
@@ -131,6 +140,11 @@ const createOrganizationModule = ({
     rateLimits,
     RateLimitAction.READ_RECEIPT_UPDATE,
     "Too many read receipt updates",
+  );
+  const searchLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.SEARCH,
+    "Too many search requests",
   );
   const categories = createMongooseCategoryRepository();
   const conversations = createMongooseConversationRepository();
@@ -165,6 +179,17 @@ const createOrganizationModule = ({
     organizations,
     policy,
     presence: presenceService,
+    users,
+  });
+  const searchService = createSearchService({
+    conversations,
+    logger,
+    memberships,
+    organizationPolicy: policy,
+    organizations,
+    participants: conversationParticipants,
+    presence: presenceService,
+    repository: createMongooseSearchRepository(searchProvider),
     users,
   });
   const service = createOrganizationService({
@@ -258,6 +283,7 @@ const createOrganizationModule = ({
     membershipAccessService,
     membershipDirectory,
   );
+  const searchController = createSearchController(searchService);
   const router = createOrganizationRouter(controller, requireAccessToken);
   const accessRouter = createOrganizationAccessRouter(
     membershipController,
@@ -305,6 +331,11 @@ const createOrganizationModule = ({
     requireAccessToken,
     mutateMessageReactionLimit,
   );
+  const searchRouter = createSearchRouter(
+    searchController,
+    requireAccessToken,
+    searchLimit,
+  );
 
   return {
     accessRouter,
@@ -321,6 +352,7 @@ const createOrganizationModule = ({
     presenceService,
     readReceiptRouter,
     router,
+    searchRouter,
   };
 };
 

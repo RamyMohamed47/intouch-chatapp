@@ -36,6 +36,8 @@ Implemented capabilities include:
   headers.
 - Public, read-only Swagger UI plus downloadable OpenAPI YAML and JSON
   contracts.
+- Organization-scoped search across accessible messages, channels, and members,
+  including exact historical message context.
 
 Browse the API contract at `<frontend URL>/api/docs`, download it from
 `<frontend URL>/api/openapi.yaml` or `<frontend URL>/api/openapi.json`, and use
@@ -61,7 +63,7 @@ Treat these as known limitations unless behavior differs from the description:
   and adding a password to a Google-only account are not implemented.
 - Public organization discovery is not implemented. Public organizations are
   joinable only through a known organization URL.
-- Group DMs, attachments, custom emoji, threads, mentions, notifications, search,
+- Group DMs, attachments, custom emoji, threads, mentions, notifications,
   meetings, and message delivery receipts are not implemented.
 - Organization deletion is permanent. Deleted messages remain as redacted
   tombstones, but deleted organizations/channels are hard-deleted.
@@ -231,6 +233,23 @@ Record each case as `Pass`, `Fail`, `Blocked`, or `Not Run`.
 | MSG-22 | Reaction member list            | Open a reaction count with more than 30 reactors and load another page.                          | The popover shows safe current-user summaries, total count, cursor pagination, and no inaccessible former members.                   |
 | MSG-23 | Deleted-message reaction rule   | Delete a reacted message, then attempt to react through the API.                                 | Existing reactions are removed atomically; the new attempt returns `409`, and the tombstone has no controls.                         |
 | MSG-24 | Reaction access isolation       | Attempt reaction APIs for an inaccessible private channel or DM.                                 | The message is concealed as `404`, and no realtime invalidation reaches unauthorized sockets.                                        |
+
+### Organization Search
+
+| ID        | Test                        | Steps                                                                                                | Expected result                                                                                                                |
+| --------- | --------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| SEARCH-01 | Command access              | Open an organization and press `Ctrl+K` or `Cmd+K`; repeat from the workspace hub.                   | The responsive dialog opens; the hub explains that an organization must be opened before searching.                            |
+| SEARCH-02 | Query validation            | Enter one character, then a 2-100 character query, and rapidly replace it.                           | One character does not request search; valid input is debounced and superseded requests do not overwrite newer results.        |
+| SEARCH-03 | Grouped all results         | Search a term matching a message, channel, and member.                                               | `ALL` returns accessible grouped result kinds without exposing member email or provider data.                                  |
+| SEARCH-04 | Type filters and pagination | Open full search, switch among Messages, Channels, and People, then load more type-specific results. | URL filters remain synchronized and opaque cursors append results without duplicates.                                          |
+| SEARCH-05 | Conversation filter         | Filter message search to a public channel, private channel, and DM that the caller can access.       | Only messages from the selected conversation appear.                                                                           |
+| SEARCH-06 | Private-resource isolation  | Search as a member who is not a private-channel participant and as a third user outside a DM.        | Inaccessible names/content never appear; direct filtered requests are concealed as `404`.                                      |
+| SEARCH-07 | Deleted messages            | Search distinctive text, delete its message, then search again after index consistency delay.        | The redacted message is excluded from results.                                                                                 |
+| SEARCH-08 | Person to DM                | Select a person with and without an existing DM.                                                     | The existing DM opens or the idempotent DM endpoint creates one and navigates to it.                                           |
+| SEARCH-09 | Exact message context       | Select an old message result in a long conversation.                                                 | Its conversation opens centered on a brief highlight, nearby messages provide context, and `Jump to latest` restores the feed. |
+| SEARCH-10 | Historical read safety      | Open a result with newer unread messages while another client observes receipts.                     | Merely viewing older context does not advance the receipt past unseen newer messages.                                          |
+| SEARCH-11 | Rate limit                  | Issue the minimum burst needed to exceed the authenticated search bucket.                            | The API returns the standard `429` envelope and `Retry-After`; unrelated GET endpoints remain available.                       |
+| SEARCH-12 | Provider unavailable        | In a disposable environment, use Atlas before its index is queryable.                                | Search alone returns `503 SEARCH_UNAVAILABLE`; health, auth, organizations, and messaging remain operational.                  |
 
 ### Presence, Typing, and Read Receipts
 

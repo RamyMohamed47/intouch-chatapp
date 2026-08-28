@@ -12,6 +12,7 @@
     "messages/**/*.ts",
     "organizations/**/*.ts",
     "realtime/**/*.ts",
+    "search/**/*.ts",
     "users/**/*.ts",
     "tests/**/*.ts"
   ]

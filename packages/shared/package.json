@@ -36,6 +36,10 @@
       "types": "./dist/messages/index.d.ts",
       "import": "./dist/messages/index.js"
     },
+    "./search": {
+      "types": "./dist/search/index.d.ts",
+      "import": "./dist/search/index.js"
+    },
     "./realtime": {
       "types": "./dist/realtime/index.d.ts",
       "import": "./dist/realtime/index.js"

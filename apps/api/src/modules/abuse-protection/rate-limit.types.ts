@@ -4,6 +4,7 @@ export const RateLimitAction = {
   MESSAGE_MUTATE: "message:mutate",
   MESSAGE_REACTION: "message:reaction",
   READ_RECEIPT_UPDATE: "read-receipt:update",
+  SEARCH: "search:query",
   SOCKET_CONNECT: "socket:connect",
   SOCKET_SUBSCRIBE: "socket:subscribe",
   SOCKET_TYPING: "socket:typing",

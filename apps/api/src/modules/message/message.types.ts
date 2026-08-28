@@ -50,4 +50,10 @@ export interface MessagePage {
   nextCursor: string | null;
 }
 
+export interface MessageContextRecords {
+  messages: MessageRecord[];
+  hasEarlier: boolean;
+  hasLater: boolean;
+}
+
 export type { CreateMessageInput, MessageHistoryQuery, UpdateMessageInput };

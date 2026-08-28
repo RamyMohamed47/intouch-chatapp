@@ -184,6 +184,7 @@ const organizations = createOrganizationModule({
   rateLimits: abuseProtection.rateLimits,
   readReceiptRealtime: realtimeGateway,
   requireAccessToken: auth.requireAccessToken,
+  searchProvider: config.searchProvider,
 });
 const app = createApp({
   allowedOrigins: config.clientOrigins,
@@ -200,6 +201,7 @@ const app = createApp({
   organizationConversationRouter: organizations.organizationConversationRouter,
   organizationRouter: organizations.router,
   readReceiptRouter: organizations.readReceiptRouter,
+  searchRouter: organizations.searchRouter,
   trustProxy: config.trustProxy,
 });
 const server = http.createServer(app);

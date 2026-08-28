@@ -41,6 +41,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "openapi:lint": "redocly lint .agents/api/openapi.yaml --extends=minimal",
+    "search:index:sync": "npm run search:index:sync --workspace @intouch/api",
     "migrate:remove-user-status": "npm run migrate:remove-user-status --workspace @intouch/api",
     "format": "prettier . --write",
     "format:check": "prettier . --check",

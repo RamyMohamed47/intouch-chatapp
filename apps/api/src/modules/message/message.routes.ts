@@ -10,6 +10,7 @@ import {
   conversationMessagesParamsSchema,
   createMessageSchema,
   messageHistoryQuerySchema,
+  messageContextParamsSchema,
   messageParamsSchema,
   updateMessageSchema,
 } from "./message.schemas.js";
@@ -21,6 +22,11 @@ export const createConversationMessageRouter = (
 ) => {
   const router = express.Router();
   router.use(requireAccessToken);
+  router.get(
+    "/:conversationId/messages/:messageId/context",
+    validateParams(messageContextParamsSchema),
+    controller.context,
+  );
   router
     .route("/:conversationId/messages")
     .get(

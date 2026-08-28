@@ -137,6 +137,10 @@ conversationSchema.index(
     partialFilterExpression: { type: ConversationType.DIRECT },
   },
 );
+conversationSchema.index(
+  { name: "text" },
+  { name: "channel_name_text", default_language: "none" },
+);
 
 const ConversationModel = model<Conversation>(
   "Conversation",

@@ -16,6 +16,7 @@
     "messages/**/*.ts",
     "organizations/**/*.ts",
     "realtime/**/*.ts",
+    "search/**/*.ts",
     "users/**/*.ts"
   ],
   "exclude": ["tests/**/*.ts"]

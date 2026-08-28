@@ -27,6 +27,7 @@ tags:
   - name: Categories
   - name: Conversations
   - name: Messages
+  - name: Search
 
 security:
   - bearerAuth: []
@@ -430,6 +431,63 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   #
+  # Search
+  #
+
+  /organizations/{organizationId}/search:
+    get:
+      tags: [Search]
+      summary: Search an organization
+      description: Searches only messages, channels, and members accessible to the authenticated organization member. ALL returns up to five results per kind; type-specific searches support opaque cursor pagination.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 100
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [ALL, MESSAGES, CHANNELS, PEOPLE]
+            default: ALL
+        - name: conversationId
+          in: query
+          description: Valid only when type is MESSAGES.
+          schema:
+            type: string
+            pattern: "^[a-fA-F0-9]{24}$"
+        - name: cursor
+          in: query
+          description: Provider-specific opaque cursor valid only for a type-specific search with the same filters.
+          schema:
+            type: string
+            maxLength: 4096
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          $ref: "#/components/responses/SearchResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/SearchUnavailable"
+
+  #
   # Conversations
   #
 
@@ -728,6 +786,24 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+
+  /conversations/{conversationId}/messages/{messageId}/context:
+    get:
+      tags: [Messages]
+      summary: Get exact message context
+      description: Returns the anchor message with up to twenty messages on each side. Access follows the conversation's current organization membership and channel or direct-message rules.
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - $ref: "#/components/parameters/MessageId"
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageContextResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /conversations/{conversationId}/messages/{messageId}/readers:
     get:
@@ -1361,6 +1437,20 @@ components:
                   - type: string
                   - type: "null"
 
+    MessageContextResponse:
+      description: Exact message context returned successfully.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MessageContext"
+
+    SearchResponse:
+      description: Authorization-filtered organization search results.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OrganizationSearchResponse"
+
     MessageReactionStateResponse:
       description: Authoritative personalized reaction state for one message.
       content:
@@ -1437,6 +1527,13 @@ components:
 
     ServiceUnavailable:
       description: An upstream authentication provider is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    SearchUnavailable:
+      description: The configured search provider or its indexes are unavailable.
       content:
         application/json:
           schema:
@@ -1857,6 +1954,141 @@ components:
                 - type: string
                 - type: "null"
 
+    MessageContext:
+      type: object
+      additionalProperties: false
+      required: [anchorMessageId, messages, hasEarlier, hasLater]
+      properties:
+        anchorMessageId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        messages:
+          type: array
+          description: Chronological context containing the anchor and up to twenty messages on each side.
+          items:
+            $ref: "#/components/schemas/Message"
+        hasEarlier:
+          type: boolean
+        hasLater:
+          type: boolean
+
+    SearchHighlightSegment:
+      type: object
+      additionalProperties: false
+      required: [text, matched]
+      properties:
+        text:
+          type: string
+        matched:
+          type: boolean
+
+    SearchConversationContext:
+      type: object
+      additionalProperties: false
+      required: [id, type, label]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        type:
+          type: string
+          enum: [CHANNEL, DIRECT]
+        label:
+          type: string
+
+    MessageSearchResult:
+      type: object
+      additionalProperties: false
+      required: [kind, id, conversation, sender, snippet, createdAt]
+      properties:
+        kind:
+          type: string
+          const: MESSAGE
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        conversation:
+          $ref: "#/components/schemas/SearchConversationContext"
+        sender:
+          $ref: "#/components/schemas/ParticipantUser"
+        snippet:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SearchHighlightSegment"
+        createdAt:
+          type: string
+          format: date-time
+
+    ChannelSearchResult:
+      type: object
+      additionalProperties: false
+      required: [kind, id, categoryId, name, visibility]
+      properties:
+        kind:
+          type: string
+          const: CHANNEL
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        categoryId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        name:
+          type: string
+        visibility:
+          type: string
+          enum: [PUBLIC, PRIVATE]
+
+    PersonSearchResult:
+      type: object
+      additionalProperties: false
+      required: [kind, membershipId, role, user, directConversationId]
+      properties:
+        kind:
+          type: string
+          const: PERSON
+        membershipId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+        user:
+          $ref: "#/components/schemas/MemberUser"
+        directConversationId:
+          oneOf:
+            - type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            - type: "null"
+
+    OrganizationSearchResult:
+      oneOf:
+        - $ref: "#/components/schemas/MessageSearchResult"
+        - $ref: "#/components/schemas/ChannelSearchResult"
+        - $ref: "#/components/schemas/PersonSearchResult"
+      discriminator:
+        propertyName: kind
+
+    OrganizationSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [query, type, results, nextCursor]
+      properties:
+        query:
+          type: string
+        type:
+          type: string
+          enum: [ALL, MESSAGES, CHANNELS, PEOPLE]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrganizationSearchResult"
+        nextCursor:
+          oneOf:
+            - type: string
+            - type: "null"
+
     ReadReceipt:
       type: object
       required: [id, conversationId, userId, lastReadMessageId, lastReadAt]
@@ -2128,6 +2360,7 @@ components:
                 - CONFLICT
                 - TOO_MANY_REQUESTS
                 - SERVICE_UNAVAILABLE
+                - SEARCH_UNAVAILABLE
                 - INTERNAL_SERVER_ERROR
             message:
               type: string

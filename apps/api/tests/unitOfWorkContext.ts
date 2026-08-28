@@ -59,6 +59,11 @@ const messages: MessageRepository = {
   create: async () => unused(),
   findById: async () => null,
   listByConversation: async () => [],
+  listContext: async () => ({
+    messages: [],
+    hasEarlier: false,
+    hasLater: false,
+  }),
   updateContent: async () => null,
   redact: async () => null,
   deleteByConversationId: async () => 0,
