@@ -50,6 +50,14 @@ import {
 } from "@/components/conversations/message-reactions";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/form-error";
@@ -199,6 +207,7 @@ export function ConversationPage({
   const [focused, setFocused] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<MessageDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
@@ -464,6 +473,7 @@ export function ConversationPage({
   const deleteMessage = useMutation({
     mutationFn: (messageId: string) => messagesApi.remove(messageId),
     onSuccess: async () => {
+      setDeleteTarget(null);
       await queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.messages(conversationId),
       });
@@ -741,9 +751,10 @@ export function ConversationPage({
                 )?.user;
                 const own = message.senderId === user?.id;
                 const canDelete =
-                  own ||
-                  (conversation.data.type === "CHANNEL" &&
-                    organization.data.currentUserRole === "OWNER");
+                  !message.deletedAt &&
+                  (own ||
+                    (conversation.data.type === "CHANNEL" &&
+                      organization.data.currentUserRole === "OWNER"));
                 return (
                   <article
                     id={`message-${message.id}`}
@@ -811,7 +822,10 @@ export function ConversationPage({
                               size="icon-xs"
                               aria-label="Delete message"
                               disabled={deleteMessage.isPending}
-                              onClick={() => deleteMessage.mutate(message.id)}
+                              onClick={() => {
+                                deleteMessage.reset();
+                                setDeleteTarget(message);
+                              }}
                             >
                               <Trash2 />
                             </Button>
@@ -991,6 +1005,53 @@ export function ConversationPage({
           </form>
         </div>
       </div>
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteMessage.isPending) {
+            deleteMessage.reset();
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this message?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its content will be replaced with a deletion notice for everyone.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteMessage.isError && (
+            <FormError className="mt-4">
+              {deleteMessage.error.message}
+            </FormError>
+          )}
+          <AlertDialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteMessage.isPending}
+              onClick={() => {
+                deleteMessage.reset();
+                setDeleteTarget(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!deleteTarget || deleteMessage.isPending}
+              onClick={() => {
+                if (deleteTarget) deleteMessage.mutate(deleteTarget.id);
+              }}
+            >
+              {deleteMessage.isPending ? "Deleting..." : "Delete message"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

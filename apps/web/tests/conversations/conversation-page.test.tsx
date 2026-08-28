@@ -5,8 +5,10 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { MessageDto } from "@intouch/shared/messages";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
@@ -26,7 +28,7 @@ const mocks = vi.hoisted(() => {
   const state: {
     conversationType: "CHANNEL" | "DIRECT";
     currentUserRole: "MEMBER" | "OWNER";
-    messages: (typeof createdMessage)[];
+    messages: MessageDto[];
     anchorMessageId: string | null;
     contextHasLater: boolean;
     peerReadReceipt: {
@@ -60,6 +62,7 @@ const mocks = vi.hoisted(() => {
   return {
     createdMessage,
     createMessage: vi.fn(() => Promise.resolve(createdMessage)),
+    removeMessage: vi.fn(() => Promise.resolve(undefined)),
     state,
     joinConversation: vi.fn(() => Promise.resolve({ success: true })),
     leaveConversation: vi.fn(() => Promise.resolve({ success: true })),
@@ -218,7 +221,7 @@ vi.mock("@/lib/api/messages", () => ({
   messagesApi: {
     create: mocks.createMessage,
     update: vi.fn(),
-    remove: vi.fn(),
+    remove: mocks.removeMessage,
     updateReadReceipt: mocks.updateReadReceipt,
     listReaders: vi.fn(),
   },
@@ -251,6 +254,8 @@ describe("ConversationPage interactions", () => {
     mocks.state.peerReadReceipt = null;
     mocks.state.channelReaderSummary = undefined;
     mocks.createMessage.mockClear();
+    mocks.removeMessage.mockReset();
+    mocks.removeMessage.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -346,6 +351,60 @@ describe("ConversationPage interactions", () => {
     await userEvent.click(trigger);
     expect(screen.getByText("Lina Hassan")).toBeInTheDocument();
     expect(screen.getByText("And 3 others")).toBeInTheDocument();
+  });
+
+  it("confirms message deletion before sending the request", async () => {
+    const user = userEvent.setup();
+    mocks.state.messages = [mocks.createdMessage];
+    renderConversation();
+
+    await user.click(screen.getByRole("button", { name: "Delete message" }));
+    expect(mocks.removeMessage).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Delete this message?",
+    });
+    expect(dialog).toHaveTextContent("This action cannot be undone.");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete message" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.removeMessage).toHaveBeenCalledWith(mocks.createdMessage.id),
+    );
+  });
+
+  it("keeps deletion failures visible and hides controls on tombstones", async () => {
+    const user = userEvent.setup();
+    mocks.state.messages = [mocks.createdMessage];
+    mocks.removeMessage.mockRejectedValueOnce(
+      new Error("The message could not be deleted"),
+    );
+    const view = renderConversation();
+
+    await user.click(screen.getByRole("button", { name: "Delete message" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Delete this message?",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete message" }),
+    );
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "The message could not be deleted",
+    );
+
+    view.unmount();
+    mocks.state.messages = [
+      {
+        ...mocks.createdMessage,
+        content: null,
+        deletedAt: "2026-08-08T10:03:00.000Z",
+      },
+    ];
+    renderConversation();
+    expect(
+      screen.queryByRole("button", { name: "Delete message" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not advance while inactive or reading history", async () => {
