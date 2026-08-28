@@ -4,6 +4,8 @@ import { UserIdentityConflictError } from "./user.errors.js";
 import { UserModel } from "./user.model.js";
 import {
   AuthProvider,
+  EmailVerificationStatus,
+  type AuthAccount,
   type PasswordUser,
   type PublicUser,
   type User,
@@ -54,6 +56,17 @@ export interface UserRepository {
   updateLastSeen(userId: string, lastSeenAt: Date): Promise<void>;
 }
 
+export interface AuthUserRepository extends UserRepository {
+  findAuthAccountByEmail(email: string): Promise<AuthAccount | null>;
+  findVerifiedPublicByEmail(email: string): Promise<PublicUser | null>;
+  markEmailVerified(userId: string, verifiedAt: Date): Promise<boolean>;
+  updatePasswordAndVerify(
+    userId: string,
+    passwordHash: string,
+    usedAt: Date,
+  ): Promise<PublicUser | null>;
+}
+
 const isDuplicateKeyError = (error: unknown) =>
   typeof error === "object" &&
   error !== null &&
@@ -79,7 +92,7 @@ const toPublicUser = (user: UserRecord): PublicUser => {
 
 const createMongooseUserRepository = (
   session?: ClientSession,
-): UserRepository => ({
+): AuthUserRepository => ({
   async hasIdentityConflict(email, username) {
     const query = UserModel.findOne({
       $or: [{ email }, { username }],
@@ -102,6 +115,7 @@ const createMongooseUserRepository = (
             username: input.username,
             displayName: input.displayName,
             email: input.email,
+            emailVerificationStatus: EmailVerificationStatus.PENDING,
             loginProviders: [
               {
                 provider: AuthProvider.PASSWORD,
@@ -135,6 +149,8 @@ const createMongooseUserRepository = (
             username: input.username,
             displayName: input.displayName,
             email: input.email,
+            emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+            emailVerifiedAt: input.usedAt,
             ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
             loginProviders: [
               {
@@ -178,7 +194,38 @@ const createMongooseUserRepository = (
     return {
       user: toPublicUser(user),
       passwordHash: passwordProvider.passwordHash,
+      emailVerificationStatus:
+        user.emailVerificationStatus ?? EmailVerificationStatus.VERIFIED,
     };
+  },
+
+  async findAuthAccountByEmail(email) {
+    const query = UserModel.findOne({ email }).lean<UserRecord>();
+    if (session) query.session(session);
+    const user = await query.exec();
+    if (!user) return null;
+
+    return {
+      user: toPublicUser(user),
+      hasPassword: user.loginProviders.some(
+        (provider) => provider.provider === AuthProvider.PASSWORD,
+      ),
+      emailVerificationStatus:
+        user.emailVerificationStatus ?? EmailVerificationStatus.VERIFIED,
+    };
+  },
+
+  async findVerifiedPublicByEmail(email) {
+    const query = UserModel.findOne({
+      email,
+      $or: [
+        { emailVerificationStatus: EmailVerificationStatus.VERIFIED },
+        { emailVerificationStatus: { $exists: false } },
+      ],
+    }).lean<UserRecord>();
+    if (session) query.session(session);
+    const user = await query.exec();
+    return user ? toPublicUser(user) : null;
   },
 
   async findPublicByEmail(email) {
@@ -245,6 +292,10 @@ const createMongooseUserRepository = (
               linkedAt: usedAt,
               lastUsedAt: usedAt,
             },
+          },
+          $set: {
+            emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+            emailVerifiedAt: usedAt,
           },
         },
         { new: true },
@@ -314,6 +365,44 @@ const createMongooseUserRepository = (
     );
     if (session) query.session(session);
     await query.exec();
+  },
+
+  async markEmailVerified(userId, verifiedAt) {
+    const query = UserModel.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+          emailVerifiedAt: verifiedAt,
+        },
+      },
+    );
+    if (session) query.session(session);
+    const result = await query.exec();
+    return result.matchedCount === 1;
+  },
+
+  async updatePasswordAndVerify(userId, passwordHash, usedAt) {
+    const query = UserModel.findOneAndUpdate(
+      {
+        _id: userId,
+        loginProviders: {
+          $elemMatch: { provider: AuthProvider.PASSWORD },
+        },
+      },
+      {
+        $set: {
+          "loginProviders.$.passwordHash": passwordHash,
+          "loginProviders.$.lastUsedAt": usedAt,
+          emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+          emailVerifiedAt: usedAt,
+        },
+      },
+      { new: true },
+    ).lean<UserRecord>();
+    if (session) query.session(session);
+    const user = await query.exec();
+    return user ? toPublicUser(user) : null;
   },
 });
 

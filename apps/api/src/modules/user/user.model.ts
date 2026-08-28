@@ -1,6 +1,11 @@
 import { Schema, model } from "mongoose";
 
-import { AuthProvider, type LoginProvider, type User } from "./user.types.js";
+import {
+  AuthProvider,
+  EmailVerificationStatus,
+  type LoginProvider,
+  type User,
+} from "./user.types.js";
 
 const loginProviderSchema = new Schema<LoginProvider>(
   {
@@ -57,6 +62,13 @@ const userSchema = new Schema<User>(
     },
     avatarUrl: String,
     lastSeenAt: Date,
+    emailVerificationStatus: {
+      type: String,
+      enum: Object.values(EmailVerificationStatus),
+      default: EmailVerificationStatus.VERIFIED,
+      required: true,
+    },
+    emailVerifiedAt: Date,
     loginProviders: {
       type: [loginProviderSchema],
       default: [],

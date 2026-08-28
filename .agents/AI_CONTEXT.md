@@ -45,6 +45,12 @@
 - Production browser traffic reaches Railway through the frontend's same-origin API proxy.
 - Refresh requests require an allowlisted Origin and `X-CSRF-Protection: 1`.
 - Shared request contracts are exported by the `@intouch/shared` workspace.
+- Password registration creates a pending account and a single-use email
+  confirmation token; no session is issued until confirmation and login.
+- Password reset uses a single-use action token and revokes every refresh
+  session after the password changes.
+- SMTP delivery is decoupled through an encrypted MongoDB outbox with bounded
+  retries. Organization invitations are emailed to verified registered users.
 - Google sign-in uses a backend-owned authorization-code redirect flow.
 - Google identities are keyed by the verified ID-token `sub` claim and linked
   to existing users only through verified email addresses.

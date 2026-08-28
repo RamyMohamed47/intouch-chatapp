@@ -35,11 +35,19 @@ sequenceDiagram
 
     API->>MongoDB: Clear account attempt state
 
+    alt Email confirmation pending
+
+        API-->>Client: 403 EMAIL_VERIFICATION_REQUIRED
+
+    else Email confirmed
+
     API->>MongoDB: Create hashed refresh session
 
     API-->>Client: Access Token + HttpOnly Refresh Cookie
 
     Client-->>User: Logged In
+
+    end
 
     end
 

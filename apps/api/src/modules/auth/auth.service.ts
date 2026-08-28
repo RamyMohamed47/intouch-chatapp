@@ -1,19 +1,33 @@
-import type { LoginInput, RegisterInput } from "@intouch/shared/auth";
+import type {
+  ForgotPasswordInput,
+  LoginInput,
+  RegisterInput,
+  ResendVerificationInput,
+  ResetPasswordInput,
+  VerifyEmailInput,
+} from "@intouch/shared/auth";
 import { randomBytes } from "node:crypto";
 
 import {
+  EmailVerificationStatus,
   UserIdentityConflictError,
-  type UserRepository,
+  type AuthUserRepository,
 } from "../user/index.js";
+import type { MailOutboxJobFactory } from "../mail/index.js";
+import { AuthActionPurpose } from "./auth.action-token.model.js";
+import type { AuthActionTokenManager } from "./auth.action-token.js";
 import {
   DuplicateIdentityError,
+  EmailVerificationRequiredError,
   GoogleIdentityConflictError,
   InvalidCredentialsError,
+  InvalidOrExpiredAuthTokenError,
   InvalidRefreshTokenError,
 } from "./auth.errors.js";
 import type { AuthSessionRepository } from "./auth.repository.js";
 import type { AuthUnitOfWork } from "./auth.unit-of-work.js";
 import type { LoginProtectionService } from "./auth.login-protection.js";
+import type { AuthMailProtectionService } from "./auth.mail-protection.js";
 import type {
   AccessTokenManager,
   AuthResult,
@@ -23,13 +37,16 @@ import type {
   PasswordHasher,
   RefreshResult,
   RefreshTokenManager,
+  RegistrationPendingResult,
 } from "./auth.types.js";
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_USERNAME_ATTEMPTS = 5;
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 15 * 60 * 1000;
 
 export interface AuthServiceDependencies {
-  users: UserRepository;
+  users: AuthUserRepository;
   sessions: AuthSessionRepository;
   passwords: PasswordHasher;
   accessTokens: AccessTokenManager;
@@ -37,6 +54,9 @@ export interface AuthServiceDependencies {
   loginProtection: LoginProtectionService;
   refreshTokens: RefreshTokenManager;
   unitOfWork: AuthUnitOfWork;
+  actionTokens: AuthActionTokenManager;
+  mail: MailOutboxJobFactory;
+  mailProtection: AuthMailProtectionService;
   now?: () => Date;
   usernameSuffix?: () => string;
 }
@@ -50,6 +70,9 @@ const createAuthService = ({
   loginProtection,
   refreshTokens,
   unitOfWork,
+  actionTokens,
+  mail,
+  mailProtection,
   now = () => new Date(),
   usernameSuffix = () => randomBytes(4).toString("hex"),
 }: AuthServiceDependencies) => {
@@ -108,7 +131,7 @@ const createAuthService = ({
   };
 
   const linkGoogleIdentity = async (
-    userRepository: UserRepository,
+    userRepository: AuthUserRepository,
     user: AuthResult["user"],
     identity: GoogleIdentity,
     usedAt: Date,
@@ -142,7 +165,7 @@ const createAuthService = ({
   };
 
   const resolveGoogleUser = async (
-    userRepository: UserRepository,
+    userRepository: AuthUserRepository,
     identity: GoogleIdentity,
   ) => {
     const usedAt = now();
@@ -220,13 +243,14 @@ const createAuthService = ({
 
       return unitOfWork.run(async (context) => {
         const user = await resolveGoogleUser(context.users, identity);
+        await context.users.markEmailVerified(user.id, now());
         return {
           refreshToken: await issueRefreshSession(user, context.sessions),
         };
       });
     },
 
-    async register(input: RegisterInput): Promise<AuthResult> {
+    async register(input: RegisterInput): Promise<RegistrationPendingResult> {
       const passwordHash = await passwords.hash(input.password);
 
       try {
@@ -242,8 +266,29 @@ const createAuthService = ({
             email: input.email,
             passwordHash,
           });
+          const issuedAt = now();
+          const expiresAt = new Date(
+            issuedAt.getTime() + EMAIL_VERIFICATION_TTL_MS,
+          );
+          const actionToken = actionTokens.create();
+          await context.actionTokens.replace({
+            id: actionToken.id,
+            userId: user.id,
+            purpose: AuthActionPurpose.VERIFY_EMAIL,
+            secretHash: actionToken.secretHash,
+            expiresAt,
+          });
+          await context.mailOutbox.enqueue(
+            mail.verification({
+              userId: user.id,
+              email: user.email,
+              displayName: user.displayName,
+              token: actionToken.token,
+              expiresAt,
+            }),
+          );
 
-          return issueAuthentication(user, context.sessions);
+          return { email: user.email, verificationRequired: true as const };
         });
       } catch (error) {
         if (error instanceof UserIdentityConflictError) {
@@ -265,12 +310,133 @@ const createAuthService = ({
         throw new InvalidCredentialsError();
       }
 
+      if (
+        passwordUser.emailVerificationStatus === EmailVerificationStatus.PENDING
+      ) {
+        await loginProtection.clearAttempts(input.email);
+        throw new EmailVerificationRequiredError();
+      }
+
       await loginProtection.clearAttempts(input.email);
 
       return unitOfWork.run(async (context) => {
         await context.users.touchPasswordProvider(passwordUser.user.id, now());
         return issueAuthentication(passwordUser.user, context.sessions);
       });
+    },
+
+    async verifyEmail(input: VerifyEmailInput): Promise<void> {
+      const parsedToken = actionTokens.parse(input.token);
+      if (!parsedToken) throw new InvalidOrExpiredAuthTokenError();
+
+      await unitOfWork.run(async (context) => {
+        const userId = await context.actionTokens.consume({
+          ...parsedToken,
+          purpose: AuthActionPurpose.VERIFY_EMAIL,
+          now: now(),
+        });
+        if (!userId) throw new InvalidOrExpiredAuthTokenError();
+        if (!(await context.users.markEmailVerified(userId, now()))) {
+          throw new InvalidOrExpiredAuthTokenError();
+        }
+        await context.mailOutbox.cancel(`auth-verification:${userId}`);
+      });
+    },
+
+    async resendVerification(input: ResendVerificationInput): Promise<void> {
+      await mailProtection.reserve(input.email, "VERIFICATION");
+      const account = await users.findAuthAccountByEmail(input.email);
+      if (
+        !account?.hasPassword ||
+        account.emailVerificationStatus === EmailVerificationStatus.VERIFIED
+      ) {
+        return;
+      }
+
+      const issuedAt = now();
+      const expiresAt = new Date(
+        issuedAt.getTime() + EMAIL_VERIFICATION_TTL_MS,
+      );
+      const actionToken = actionTokens.create();
+      await unitOfWork.run(async (context) => {
+        await context.actionTokens.replace({
+          id: actionToken.id,
+          userId: account.user.id,
+          purpose: AuthActionPurpose.VERIFY_EMAIL,
+          secretHash: actionToken.secretHash,
+          expiresAt,
+        });
+        await context.mailOutbox.enqueue(
+          mail.verification({
+            userId: account.user.id,
+            email: account.user.email,
+            displayName: account.user.displayName,
+            token: actionToken.token,
+            expiresAt,
+          }),
+        );
+      });
+    },
+
+    async forgotPassword(input: ForgotPasswordInput): Promise<void> {
+      await mailProtection.reserve(input.email, "PASSWORD_RESET");
+      const account = await users.findAuthAccountByEmail(input.email);
+      if (!account?.hasPassword) return;
+
+      const issuedAt = now();
+      const expiresAt = new Date(issuedAt.getTime() + PASSWORD_RESET_TTL_MS);
+      const actionToken = actionTokens.create();
+      await unitOfWork.run(async (context) => {
+        await context.actionTokens.replace({
+          id: actionToken.id,
+          userId: account.user.id,
+          purpose: AuthActionPurpose.RESET_PASSWORD,
+          secretHash: actionToken.secretHash,
+          expiresAt,
+        });
+        await context.mailOutbox.enqueue(
+          mail.passwordReset({
+            userId: account.user.id,
+            email: account.user.email,
+            displayName: account.user.displayName,
+            token: actionToken.token,
+            expiresAt,
+          }),
+        );
+      });
+    },
+
+    async resetPassword(input: ResetPasswordInput): Promise<void> {
+      const parsedToken = actionTokens.parse(input.token);
+      if (!parsedToken) throw new InvalidOrExpiredAuthTokenError();
+      const passwordHash = await passwords.hash(input.password);
+      const resetAt = now();
+
+      const email = await unitOfWork.run(async (context) => {
+        const userId = await context.actionTokens.consume({
+          ...parsedToken,
+          purpose: AuthActionPurpose.RESET_PASSWORD,
+          now: resetAt,
+        });
+        if (!userId) throw new InvalidOrExpiredAuthTokenError();
+        const updated = await context.users.updatePasswordAndVerify(
+          userId,
+          passwordHash,
+          resetAt,
+        );
+        if (!updated) throw new InvalidOrExpiredAuthTokenError();
+
+        await context.sessions.deleteByUserId(userId);
+        await context.actionTokens.deleteForUser(
+          userId,
+          AuthActionPurpose.VERIFY_EMAIL,
+        );
+        await context.mailOutbox.cancel(`auth-reset:${userId}`);
+        await context.mailOutbox.cancel(`auth-verification:${userId}`);
+        return updated.email;
+      });
+
+      await loginProtection.clearAttempts(email);
     },
 
     async refresh(token: string): Promise<RefreshResult> {

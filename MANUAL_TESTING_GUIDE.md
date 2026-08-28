@@ -18,6 +18,8 @@ sessions, and Socket.IO.
 Implemented capabilities include:
 
 - Email/password registration and login.
+- Single-use email confirmation and password recovery backed by transactional
+  SMTP delivery.
 - Backend-owned Google OAuth redirect authentication.
 - In-memory access JWTs and rotating refresh tokens in secure `HttpOnly`
   cookies.
@@ -49,10 +51,9 @@ separately in `.agents/sockets/Socket Events.md`.
 
 Treat these as known limitations unless behavior differs from the description:
 
-- Invitations target an already registered email address and are discovered in
-  the in-app invitation inbox. No invitation email is sent.
-- Email verification, password recovery, MFA, account unlock, logout-all, and
-  session management are not implemented.
+- Invitations target an already registered, verified email address. They are
+  delivered by email and remain available in the in-app invitation inbox.
+- MFA, account unlock, logout-all, and session management are not implemented.
 - Google identities are automatically linked to an existing account with the
   same Google-verified email. There is no additional local ownership challenge.
 - Passwords require at least 8 characters and at most 72 UTF-8 bytes for bcrypt.
@@ -148,41 +149,48 @@ Record each case as `Pass`, `Fail`, `Blocked`, or `Not Run`.
 
 ### Registration, Login, Session, and OAuth
 
-| ID      | Test                        | Steps                                                                                                                                | Expected result                                                                                               |
-| ------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| AUTH-01 | Valid registration          | Register a unique username/email with a valid display name and password.                                                             | Account is created, user enters `/app`, and the refresh cookie is set.                                        |
-| AUTH-02 | Registration normalization  | Register using surrounding spaces and uppercase letters in the email.                                                                | Text is trimmed where defined; email is normalized to lowercase.                                              |
-| AUTH-03 | Registration validation     | Try a short username, invalid characters, blank display name, invalid email, password under 8 characters, and an oversized password. | Field-level validation prevents submission or returns a clear validation message; no account is created.      |
-| AUTH-04 | Duplicate identities        | Attempt registration with an existing email, then with an existing username.                                                         | Each returns a conflict without creating another user.                                                        |
-| AUTH-05 | Valid password login        | Log out, then sign in with the registered email/password.                                                                            | User returns to `/app`; no refresh token appears in response JSON.                                            |
-| AUTH-06 | Generic login failure       | Try an unknown email, wrong password, and a Google-only account through password login.                                              | All produce the same generic `401` message without revealing account existence.                               |
-| AUTH-07 | Return path                 | Open a protected organization/conversation URL while signed out, then log in.                                                        | User returns only to the original safe `/app` path, never to an external URL.                                 |
-| AUTH-08 | Session restoration         | Log in, reload the page, and open a new tab on the same origin.                                                                      | Session restores through the refresh cookie and protected data loads without another login.                   |
-| AUTH-09 | Logout                      | Log out, then use Back and reload.                                                                                                   | User remains signed out, private query data is gone, realtime disconnects, and the refresh cookie is cleared. |
-| AUTH-10 | Google success              | Select Google, choose an account, and complete consent.                                                                              | Callback shows/restores success and redirects to `/app`; no token/code appears in the final URL.              |
-| AUTH-11 | Google cancellation/failure | Cancel Google consent or invoke callback failure.                                                                                    | A branded failure state appears with a safe retry path; OAuth state cookie is cleared.                        |
-| AUTH-12 | Password visibility         | Toggle the password visibility button by mouse and keyboard.                                                                         | Password visibility changes, label changes between Show/Hide, and focus remains usable.                       |
+| ID      | Test                        | Steps                                                                                                                                | Expected result                                                                                                                   |
+| ------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| AUTH-01 | Valid registration          | Register a unique username/email with a valid display name and password.                                                             | Pending account is created, no token/cookie is issued, and the confirmation screen asks the user to check email.                  |
+| AUTH-02 | Registration normalization  | Register using surrounding spaces and uppercase letters in the email.                                                                | Text is trimmed where defined; email is normalized to lowercase.                                                                  |
+| AUTH-03 | Registration validation     | Try a short username, invalid characters, blank display name, invalid email, password under 8 characters, and an oversized password. | Field-level validation prevents submission or returns a clear validation message; no account is created.                          |
+| AUTH-04 | Duplicate identities        | Attempt registration with an existing email, then with an existing username.                                                         | Each returns a conflict without creating another user.                                                                            |
+| AUTH-05 | Valid password login        | Log out, then sign in with the registered email/password.                                                                            | User returns to `/app`; no refresh token appears in response JSON.                                                                |
+| AUTH-06 | Generic login failure       | Try an unknown email, wrong password, and a Google-only account through password login.                                              | All produce the same generic `401` message without revealing account existence.                                                   |
+| AUTH-07 | Return path                 | Open a protected organization/conversation URL while signed out, then log in.                                                        | User returns only to the original safe `/app` path, never to an external URL.                                                     |
+| AUTH-08 | Session restoration         | Log in, reload the page, and open a new tab on the same origin.                                                                      | Session restores through the refresh cookie and protected data loads without another login.                                       |
+| AUTH-09 | Logout                      | Log out, then use Back and reload.                                                                                                   | User remains signed out, private query data is gone, realtime disconnects, and the refresh cookie is cleared.                     |
+| AUTH-10 | Google success              | Select Google, choose an account, and complete consent.                                                                              | Callback shows/restores success and redirects to `/app`; no token/code appears in the final URL.                                  |
+| AUTH-11 | Google cancellation/failure | Cancel Google consent or invoke callback failure.                                                                                    | A branded failure state appears with a safe retry path; OAuth state cookie is cleared.                                            |
+| AUTH-12 | Password visibility         | Toggle the password visibility button by mouse and keyboard.                                                                         | Password visibility changes, label changes between Show/Hide, and focus remains usable.                                           |
+| AUTH-13 | Confirm email               | Open the emailed confirmation link within 24 hours, then sign in.                                                                    | Link confirms once, redirects to login, and password login succeeds. Reusing the link returns an invalid/expired error.           |
+| AUTH-14 | Pending login               | Enter the correct password before confirming the email.                                                                              | Login returns `403 EMAIL_VERIFICATION_REQUIRED`; no refresh cookie or access token is issued.                                     |
+| AUTH-15 | Resend confirmation         | Request another confirmation message for pending, verified, and unknown emails.                                                      | Each request returns the same accepted response; only an eligible pending account receives mail and the older link stops working. |
+| AUTH-16 | Forgot password privacy     | Request reset mail for existing, unknown, and Google-only emails.                                                                    | Every request returns the same generic `202`; no response reveals account existence.                                              |
+| AUTH-17 | Reset password              | Open a reset link within 15 minutes and choose a valid new password.                                                                 | Reset succeeds once, confirms the email, revokes existing refresh sessions, and only the new password works.                      |
+| AUTH-18 | Expired/replayed reset      | Reuse a consumed reset link or use one after expiry.                                                                                 | Standard `400 INVALID_OR_EXPIRED_TOKEN`; password and sessions remain unchanged.                                                  |
 
 ### Organizations and Memberships
 
-| ID     | Test                        | Steps                                                                                       | Expected result                                                                                                       |
-| ------ | --------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| ORG-01 | Create private organization | Create an organization with name only.                                                      | It is created as private, appears in the hub/rail, and creator is `OWNER`.                                            |
-| ORG-02 | Create public organization  | Create one with `PUBLIC` visibility and optional HTTP(S) logo URL.                          | Organization is created with the chosen visibility and logo.                                                          |
-| ORG-03 | Organization validation     | Submit blank/over-100-character name, invalid logo URL, and unsupported protocol.           | Submission fails with a useful validation message.                                                                    |
-| ORG-04 | Update organization         | As owner, change name, logo, and visibility.                                                | Updated values appear throughout the UI; the organization ID/slug route remains stable.                               |
-| ORG-05 | Member settings denial      | As `Member B`, directly open the organization settings URL.                                 | Access-denied UI appears and mutation controls are unavailable.                                                       |
-| ORG-06 | Private concealment         | As `Outsider D`, open a private organization URL and call its API by ID.                    | Resource is concealed as unavailable/`404`.                                                                           |
-| ORG-07 | Public view and join        | As `Outsider D`, open a known public organization URL and select Join.                      | Join CTA is shown; joining creates `MEMBER` access and updates the rail.                                              |
-| ORG-08 | Repeated public join        | Repeat the join request through an API client.                                              | Returns `409`; no duplicate membership is created.                                                                    |
-| ORG-09 | Invite registered user      | As owner, invite `Member B` by email from settings and from the conversation-header dialog. | Invitation succeeds, email resets, and confirmation text is green and announced as status.                            |
-| ORG-10 | Invitation failures         | Invite an unknown email, self, existing member, and duplicate pending recipient.            | Appropriate error is shown in red; no duplicate invitation is created.                                                |
-| ORG-11 | Invitation authorization    | As a member, confirm invite controls are absent; attempt the API directly.                  | UI hides owner action and API returns `403`.                                                                          |
-| ORG-12 | Invitation inbox            | Sign in as invited user and open `/app/invitations`.                                        | Pending invitation appears with organization, visibility, role, and expiration.                                       |
-| ORG-13 | Accept invitation           | Accept as the intended recipient.                                                           | Invitation disappears, organization enters the rail, membership is `MEMBER`, and repeat acceptance returns not found. |
-| ORG-14 | Decline invitation          | Create another invitation and decline it.                                                   | Invitation disappears, organization is not joined, and repeat decline returns not found.                              |
-| ORG-15 | Wrong invitation recipient  | Attempt to accept another user's invitation through the API.                                | Returns concealed `404`; no membership is created.                                                                    |
-| ORG-16 | Delete organization         | As owner, delete a disposable organization containing categories/channels/messages.         | Confirmation is required; organization disappears and copied resource URLs stop working.                              |
+| ID      | Test                        | Steps                                                                                       | Expected result                                                                                                       |
+| ------- | --------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| ORG-01  | Create private organization | Create an organization with name only.                                                      | It is created as private, appears in the hub/rail, and creator is `OWNER`.                                            |
+| ORG-02  | Create public organization  | Create one with `PUBLIC` visibility and optional HTTP(S) logo URL.                          | Organization is created with the chosen visibility and logo.                                                          |
+| ORG-03  | Organization validation     | Submit blank/over-100-character name, invalid logo URL, and unsupported protocol.           | Submission fails with a useful validation message.                                                                    |
+| ORG-04  | Update organization         | As owner, change name, logo, and visibility.                                                | Updated values appear throughout the UI; the organization ID/slug route remains stable.                               |
+| ORG-05  | Member settings denial      | As `Member B`, directly open the organization settings URL.                                 | Access-denied UI appears and mutation controls are unavailable.                                                       |
+| ORG-06  | Private concealment         | As `Outsider D`, open a private organization URL and call its API by ID.                    | Resource is concealed as unavailable/`404`.                                                                           |
+| ORG-07  | Public view and join        | As `Outsider D`, open a known public organization URL and select Join.                      | Join CTA is shown; joining creates `MEMBER` access and updates the rail.                                              |
+| ORG-08  | Repeated public join        | Repeat the join request through an API client.                                              | Returns `409`; no duplicate membership is created.                                                                    |
+| ORG-09  | Invite registered user      | As owner, invite `Member B` by email from settings and from the conversation-header dialog. | Invitation succeeds, email resets, and confirmation text is green and announced as status.                            |
+| ORG-09A | Invitation email delivery   | Inspect `Member B`'s inbox after ORG-09 and open the message CTA.                           | Branded email identifies inviter and organization, links to `/app/invitations`, and does not expose a credential.     |
+| ORG-10  | Invitation failures         | Invite an unknown email, self, existing member, and duplicate pending recipient.            | Appropriate error is shown in red; no duplicate invitation is created.                                                |
+| ORG-11  | Invitation authorization    | As a member, confirm invite controls are absent; attempt the API directly.                  | UI hides owner action and API returns `403`.                                                                          |
+| ORG-12  | Invitation inbox            | Sign in as invited user and open `/app/invitations`.                                        | Pending invitation appears with organization, visibility, role, and expiration.                                       |
+| ORG-13  | Accept invitation           | Accept as the intended recipient.                                                           | Invitation disappears, organization enters the rail, membership is `MEMBER`, and repeat acceptance returns not found. |
+| ORG-14  | Decline invitation          | Create another invitation and decline it.                                                   | Invitation disappears, organization is not joined, and repeat decline returns not found.                              |
+| ORG-15  | Wrong invitation recipient  | Attempt to accept another user's invitation through the API.                                | Returns concealed `404`; no membership is created.                                                                    |
+| ORG-16  | Delete organization         | As owner, delete a disposable organization containing categories/channels/messages.         | Confirmation is required; organization disappears and copied resource URLs stop working.                              |
 
 ### Categories, Channels, and Participants
 
@@ -310,6 +318,9 @@ deployment. Never reuse another real user's credentials.
 | Password login identifier            | 10 attempts per normalized email per 15 minutes, then 15-minute cooldown |
 | Refresh/logout                       | 60 per 15 minutes per IP                                                 |
 | Google OAuth start/callback          | 10 starts / 20 callbacks per 15 minutes per IP                           |
+| Verification/reset email requests    | 5 per 15 minutes per IP and 3 per hour per normalized email/purpose      |
+| Verification/reset token submission  | 20 per 15 minutes per IP                                                 |
+| Organization invitation creation     | Burst 5; refill 1 every 60 seconds per authenticated user                |
 | Create message                       | Burst 10; refill 1 every 2 seconds per user                              |
 | Edit/delete message combined         | Burst 10; refill 1 every 3 seconds per user                              |
 | Read receipt                         | Burst 30; refill 1 every 500 ms per user                                 |

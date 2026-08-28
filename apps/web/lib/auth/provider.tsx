@@ -19,7 +19,11 @@ import {
   type PublicUser,
 } from "@/lib/auth/client";
 import { subscribeToAccessToken } from "@/lib/auth/access-token";
-import type { LoginInput, RegisterInput } from "@intouch/shared/auth";
+import type {
+  LoginInput,
+  RegisterInput,
+  RegistrationPendingResponse,
+} from "@intouch/shared/auth";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -27,7 +31,7 @@ interface AuthContextValue {
   status: AuthStatus;
   user: PublicUser | null;
   login: (input: LoginInput) => Promise<PublicUser>;
-  register: (input: RegisterInput) => Promise<PublicUser>;
+  register: (input: RegisterInput) => Promise<RegistrationPendingResponse>;
   restore: () => Promise<PublicUser | null>;
   logout: () => Promise<void>;
 }
@@ -86,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status,
         user,
         login: (input) => authenticate(() => loginRequest(input)),
-        register: (input) => authenticate(() => registerRequest(input)),
+        register: (input) => registerRequest(input),
         restore,
         logout,
       }}

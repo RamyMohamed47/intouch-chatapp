@@ -88,6 +88,7 @@ import createMongooseOrganizationRepository from "./organization.repository.js";
 import createOrganizationRouter from "./organization.routes.js";
 import createOrganizationService from "./organization.service.js";
 import createMongooseOrganizationUnitOfWork from "./organization.unit-of-work.js";
+import type { MailOutboxJobFactory } from "../mail/index.js";
 
 export interface OrganizationModuleDependencies {
   conversationActivityRealtime: ConversationActivityRealtime;
@@ -101,6 +102,7 @@ export interface OrganizationModuleDependencies {
   rateLimits: AuthenticatedRateLimiter;
   requireAccessToken: RequestHandler;
   searchProvider: SearchProvider;
+  mail: MailOutboxJobFactory;
 }
 
 const createOrganizationModule = ({
@@ -115,6 +117,7 @@ const createOrganizationModule = ({
   readReceiptRealtime,
   requireAccessToken,
   searchProvider,
+  mail,
 }: OrganizationModuleDependencies) => {
   const createDirectMessageLimit = createAuthenticatedRateLimit(
     rateLimits,
@@ -145,6 +148,11 @@ const createOrganizationModule = ({
     rateLimits,
     RateLimitAction.SEARCH,
     "Too many search requests",
+  );
+  const createInvitationLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.INVITATION_CREATE,
+    "Too many invitation attempts",
   );
   const categories = createMongooseCategoryRepository();
   const conversations = createMongooseConversationRepository();
@@ -272,6 +280,7 @@ const createOrganizationModule = ({
     policy,
     unitOfWork,
     users,
+    mail,
   });
   const membershipAccessService = createMembershipAccessService({
     policy,
@@ -289,6 +298,7 @@ const createOrganizationModule = ({
     membershipController,
     invitationController,
     requireAccessToken,
+    createInvitationLimit,
   );
   const invitationRouter = createInvitationRouter(
     invitationController,

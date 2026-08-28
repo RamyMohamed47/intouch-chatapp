@@ -4,6 +4,11 @@ export enum AuthProvider {
   GITHUB = "GITHUB",
 }
 
+export enum EmailVerificationStatus {
+  PENDING = "PENDING",
+  VERIFIED = "VERIFIED",
+}
+
 export interface LoginProvider {
   provider: AuthProvider;
   providerAccountId: string;
@@ -19,6 +24,8 @@ export interface User {
   email: string;
   avatarUrl?: string;
   lastSeenAt?: Date;
+  emailVerificationStatus?: EmailVerificationStatus;
+  emailVerifiedAt?: Date;
   loginProviders: LoginProvider[];
   createdAt: Date;
   updatedAt: Date;
@@ -37,4 +44,11 @@ export interface PublicUser {
 export interface PasswordUser {
   user: PublicUser;
   passwordHash: string;
+  emailVerificationStatus: EmailVerificationStatus;
+}
+
+export interface AuthAccount {
+  user: PublicUser;
+  hasPassword: boolean;
+  emailVerificationStatus: EmailVerificationStatus;
 }

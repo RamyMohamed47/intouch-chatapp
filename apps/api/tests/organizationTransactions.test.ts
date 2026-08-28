@@ -24,9 +24,15 @@ import createOrganizationService from "../src/modules/organizations/organization
 import createMongooseOrganizationUnitOfWork, {
   type OrganizationUnitOfWork,
 } from "../src/modules/organizations/organization.unit-of-work.js";
-import type { UserRepository } from "../src/modules/user/user.repository.js";
-import type { PublicUser } from "../src/modules/user/user.types.js";
-import { emptyCommunicationContext } from "./unitOfWorkContext.js";
+import type { AuthUserRepository } from "../src/modules/user/user.repository.js";
+import {
+  EmailVerificationStatus,
+  type PublicUser,
+} from "../src/modules/user/user.types.js";
+import {
+  emptyCommunicationContext,
+  testMailFactory,
+} from "./unitOfWorkContext.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const invitedUserId = "507f1f77bcf86cd799439099";
@@ -72,11 +78,17 @@ const invitedUser: PublicUser = {
   createdAt: now,
   updatedAt: now,
 };
-const users: UserRepository = {
+const users: AuthUserRepository = {
   hasIdentityConflict: async () => false,
   createPasswordUser: async () => invitedUser,
   createGoogleUser: async () => invitedUser,
   findPasswordUserByEmail: async () => null,
+  findAuthAccountByEmail: async () => ({
+    user: invitedUser,
+    hasPassword: true,
+    emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+  }),
+  findVerifiedPublicByEmail: async () => invitedUser,
   findPublicByEmail: async () => invitedUser,
   findPublicById: async () => invitedUser,
   findPublicByIds: async () => [invitedUser],
@@ -86,6 +98,8 @@ const users: UserRepository = {
   useGoogleProvider: async () => invitedUser,
   usernameExists: async () => false,
   updateLastSeen: async () => undefined,
+  markEmailVerified: async () => true,
+  updatePasswordAndVerify: async () => invitedUser,
 };
 
 describe("organization transactions", () => {
@@ -240,6 +254,7 @@ describe("organization transactions", () => {
       },
       unitOfWork: failingUnitOfWork,
       users,
+      mail: testMailFactory,
       now: () => now,
     });
 

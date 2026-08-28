@@ -18,6 +18,17 @@ export interface AppConfig {
   loginAttemptLimit: number;
   loginAttemptWindowMs: number;
   loginThrottleSecret: string;
+  authActionTokenSecret: string;
+  mailOutboxEncryptionSecret: string;
+  mailFromAddress: string;
+  mailFromName: string;
+  smtpHost: string;
+  smtpPassword: string;
+  smtpPort: number;
+  smtpRequireTls: boolean;
+  smtpSecure: boolean;
+  smtpUser: string;
+  webAppUrl: string;
   port: number;
   searchProvider: "atlas" | "native";
   trustProxy: boolean | number | string;
@@ -34,7 +45,15 @@ const requireEnv = (
     | "GOOGLE_OAUTH_CLIENT_ID"
     | "GOOGLE_OAUTH_CLIENT_SECRET"
     | "GOOGLE_OAUTH_FRONTEND_REDIRECT_URL"
-    | "LOGIN_THROTTLE_SECRET",
+    | "LOGIN_THROTTLE_SECRET"
+    | "AUTH_ACTION_TOKEN_SECRET"
+    | "MAIL_OUTBOX_ENCRYPTION_SECRET"
+    | "MAIL_FROM_ADDRESS"
+    | "MAIL_FROM_NAME"
+    | "SMTP_HOST"
+    | "SMTP_PASSWORD"
+    | "SMTP_USER"
+    | "WEB_APP_URL",
 ) => {
   const value = env[name];
 
@@ -102,6 +121,40 @@ const parsePort = (value: string | undefined) => {
   }
 
   return port;
+};
+
+const parseBoolean = (value: string | undefined, name: string) => {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`${name} must be true or false`);
+};
+
+const parseEmailAddress = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    throw new Error("MAIL_FROM_ADDRESS must be a valid email address");
+  }
+
+  return normalized;
+};
+
+const parseWebAppUrl = (
+  value: string,
+  clientOrigins: readonly string[],
+  isProduction: boolean,
+) => {
+  const url = new URL(value);
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("WEB_APP_URL must be an HTTP(S) URL");
+  }
+  if (isProduction && url.protocol !== "https:") {
+    throw new Error("WEB_APP_URL must use HTTPS in production");
+  }
+  if (!clientOrigins.includes(url.origin)) {
+    throw new Error("WEB_APP_URL origin must be included in CLIENT_ORIGINS");
+  }
+  return url.origin;
 };
 
 const parseSearchProvider = (
@@ -176,8 +229,21 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     clientOrigins,
     isProduction,
   );
+  const smtpRequireTls = parseBoolean(
+    env.SMTP_REQUIRE_TLS ?? "true",
+    "SMTP_REQUIRE_TLS",
+  );
+  const smtpSecure = parseBoolean(env.SMTP_SECURE ?? "false", "SMTP_SECURE");
+
+  if (isProduction && !smtpRequireTls && !smtpSecure) {
+    throw new Error("SMTP transport must require TLS in production");
+  }
 
   return {
+    authActionTokenSecret: validateSecret(
+      requireEnv(env, "AUTH_ACTION_TOKEN_SECRET"),
+      "AUTH_ACTION_TOKEN_SECRET",
+    ),
     accessTokenAudience: env.ACCESS_TOKEN_AUDIENCE ?? "intouch-client",
     accessTokenIssuer: env.ACCESS_TOKEN_ISSUER ?? "intouch-api",
     accessTokenSecret: validateAccessTokenSecret(
@@ -216,8 +282,25 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       requireEnv(env, "LOGIN_THROTTLE_SECRET"),
       "LOGIN_THROTTLE_SECRET",
     ),
+    mailOutboxEncryptionSecret: validateSecret(
+      requireEnv(env, "MAIL_OUTBOX_ENCRYPTION_SECRET"),
+      "MAIL_OUTBOX_ENCRYPTION_SECRET",
+    ),
+    mailFromAddress: parseEmailAddress(requireEnv(env, "MAIL_FROM_ADDRESS")),
+    mailFromName: requireEnv(env, "MAIL_FROM_NAME"),
     port: parsePort(env.PORT),
     searchProvider: parseSearchProvider(env.SEARCH_PROVIDER, isProduction),
+    smtpHost: requireEnv(env, "SMTP_HOST"),
+    smtpPassword: requireEnv(env, "SMTP_PASSWORD"),
+    smtpPort: parseBoundedInteger(env.SMTP_PORT, 587, "SMTP_PORT", 65_535),
+    smtpRequireTls,
+    smtpSecure,
+    smtpUser: requireEnv(env, "SMTP_USER"),
     trustProxy: isProduction ? 1 : "loopback",
+    webAppUrl: parseWebAppUrl(
+      requireEnv(env, "WEB_APP_URL"),
+      clientOrigins,
+      isProduction,
+    ),
   };
 };

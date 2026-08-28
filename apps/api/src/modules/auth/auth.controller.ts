@@ -1,8 +1,10 @@
 import type { RequestHandler, Response } from "express";
 import {
+  authRequestAcceptedResponseSchema,
   authResponseSchema,
   googleOAuthCallbackQuerySchema,
   refreshResponseSchema,
+  registrationPendingResponseSchema,
 } from "@intouch/shared/auth";
 import { userResponseSchema } from "@intouch/shared/users";
 
@@ -12,7 +14,14 @@ import {
   GoogleProviderUnavailableError,
   InvalidGoogleAuthenticationError,
 } from "./auth.errors.js";
-import type { LoginInput, RegisterInput } from "./auth.schemas.js";
+import type {
+  ForgotPasswordInput,
+  LoginInput,
+  RegisterInput,
+  ResendVerificationInput,
+  ResetPasswordInput,
+  VerifyEmailInput,
+} from "./auth.schemas.js";
 import type { AuthService } from "./auth.service.js";
 import type {
   AuthCookieConfig,
@@ -26,6 +35,10 @@ export interface AuthController {
   googleCallback: RequestHandler;
   googleStart: RequestHandler;
   register: RequestHandler;
+  verifyEmail: RequestHandler;
+  resendVerification: RequestHandler;
+  forgotPassword: RequestHandler;
+  resetPassword: RequestHandler;
   login: RequestHandler;
   logout: RequestHandler;
   refresh: RequestHandler;
@@ -167,9 +180,31 @@ const createAuthController = (
 
   register: catchAsync(async (req, res) => {
     const result = await authService.register(req.body as RegisterInput);
+    res.status(201).json(registrationPendingResponseSchema.parse(result));
+  }),
 
-    setRefreshCookie(res, cookie, result.refreshToken);
-    res.status(201).json(authResponseSchema.parse(result));
+  verifyEmail: catchAsync(async (req, res) => {
+    await authService.verifyEmail(req.body as VerifyEmailInput);
+    res.status(204).send();
+  }),
+
+  resendVerification: catchAsync(async (req, res) => {
+    await authService.resendVerification(req.body as ResendVerificationInput);
+    res
+      .status(202)
+      .json(authRequestAcceptedResponseSchema.parse({ accepted: true }));
+  }),
+
+  forgotPassword: catchAsync(async (req, res) => {
+    await authService.forgotPassword(req.body as ForgotPasswordInput);
+    res
+      .status(202)
+      .json(authRequestAcceptedResponseSchema.parse({ accepted: true }));
+  }),
+
+  resetPassword: catchAsync(async (req, res) => {
+    await authService.resetPassword(req.body as ResetPasswordInput);
+    res.status(204).send();
   }),
 
   login: catchAsync(async (req, res) => {

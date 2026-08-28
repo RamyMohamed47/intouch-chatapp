@@ -43,6 +43,7 @@
     "openapi:lint": "redocly lint .agents/api/openapi.yaml --extends=minimal",
     "search:index:sync": "npm run search:index:sync --workspace @intouch/api",
     "migrate:remove-user-status": "npm run migrate:remove-user-status --workspace @intouch/api",
+    "migrate:verify-existing-users": "npm run migrate:verify-existing-users --workspace @intouch/api",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "check": "npm run format:check && npm run openapi:lint && npm run lint && npm run typecheck && npm test && npm run build",

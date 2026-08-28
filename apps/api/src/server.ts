@@ -19,6 +19,14 @@ import createAbuseProtectionModule from "./modules/abuse-protection/index.js";
 import createOrganizationModule from "./modules/organizations/index.js";
 import configureSocket from "./sockets/socket.js";
 import { createTypingService } from "./modules/typing/index.js";
+import {
+  createMailOutboxJobFactory,
+  createMailOutboxWorker,
+  createMailPayloadCipher,
+  createMailRenderer,
+  createMongooseMailOutboxRepository,
+  createSmtpMailTransport,
+} from "./modules/mail/index.js";
 
 loadEnvFile();
 
@@ -32,6 +40,7 @@ type InTouchServer = Server<
 
 const resources: {
   closeAbuseProtection?: () => void;
+  closeMail?: () => Promise<void>;
   server?: http.Server;
   io?: InTouchServer;
 } = {};
@@ -107,6 +116,7 @@ const shutdown = (
       await closeSocketServer();
       await closeHttpServer();
       resources.closeAbuseProtection?.();
+      await resources.closeMail?.();
       await disconnectDatabase(logger);
       clearTimeout(forceShutdownTimer);
       logger.info({ reason }, "Graceful shutdown complete");
@@ -139,6 +149,25 @@ process.once("SIGINT", () => {
 });
 
 const config = loadConfig();
+const mailCipher = createMailPayloadCipher(config.mailOutboxEncryptionSecret);
+const mailJobs = createMailOutboxJobFactory(mailCipher);
+const mailWorker = createMailOutboxWorker({
+  cipher: mailCipher,
+  logger,
+  outbox: createMongooseMailOutboxRepository(),
+  render: createMailRenderer(config.webAppUrl),
+  transport: createSmtpMailTransport({
+    host: config.smtpHost,
+    port: config.smtpPort,
+    secure: config.smtpSecure,
+    requireTls: config.smtpRequireTls,
+    user: config.smtpUser,
+    password: config.smtpPassword,
+    fromName: config.mailFromName,
+    fromAddress: config.mailFromAddress,
+  }),
+});
+resources.closeMail = () => mailWorker.close();
 const apiDocsRouter = createApiDocsRouter(loadOpenApiContract());
 const abuseProtection = createAbuseProtectionModule(logger);
 resources.closeAbuseProtection = abuseProtection.close;
@@ -146,6 +175,7 @@ const realtimeGateway = createSocketRealtimeGateway();
 const typingService = createTypingService({ realtime: realtimeGateway });
 realtimeGateway.setTypingService(typingService);
 const auth = createAuthModule({
+  actionTokenSecret: config.authActionTokenSecret,
   accessTokenSecret: config.accessTokenSecret,
   accessTokenIssuer: config.accessTokenIssuer,
   accessTokenAudience: config.accessTokenAudience,
@@ -172,6 +202,7 @@ const auth = createAuthModule({
     hashSecret: config.loginThrottleSecret,
     windowMs: config.loginAttemptWindowMs,
   },
+  mail: mailJobs,
 });
 const organizations = createOrganizationModule({
   conversationActivityRealtime: realtimeGateway,
@@ -185,6 +216,7 @@ const organizations = createOrganizationModule({
   readReceiptRealtime: realtimeGateway,
   requireAccessToken: auth.requireAccessToken,
   searchProvider: config.searchProvider,
+  mail: mailJobs,
 });
 const app = createApp({
   allowedOrigins: config.clientOrigins,
@@ -237,6 +269,7 @@ configureSocket(
 
 try {
   await connectDatabase(config.databaseUri, logger);
+  mailWorker.start();
 
   server.listen(config.port, () => {
     logger.info({ port: config.port }, "Server running");

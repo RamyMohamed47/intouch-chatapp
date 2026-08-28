@@ -13,6 +13,7 @@ const createOrganizationAccessRouter = (
   membershipController: MembershipController,
   invitationController: InvitationController,
   requireAccessToken: RequestHandler,
+  createInvitationLimit: RequestHandler = (_req, _res, next) => next(),
 ) => {
   const router = express.Router();
 
@@ -30,6 +31,7 @@ const createOrganizationAccessRouter = (
   router.post(
     "/:id/invitations",
     validateParams(organizationIdParamsSchema),
+    createInvitationLimit,
     validateBody(inviteMemberSchema),
     invitationController.create,
   );

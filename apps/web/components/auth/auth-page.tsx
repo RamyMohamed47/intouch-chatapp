@@ -46,9 +46,17 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [showPassword, setShowPassword] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailVerificationRequired, setEmailVerificationRequired] =
+    useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const isRegister = mode === "register";
   const returnPath = getSafeReturnPath(searchParams.get("next"));
+  const successMessage =
+    !isRegister && searchParams.get("verified") === "1"
+      ? "Email confirmed. You can sign in now."
+      : !isRegister && searchParams.get("passwordReset") === "1"
+        ? "Password updated. Sign in with your new password."
+        : null;
 
   useEffect(() => {
     if (status === "authenticated") router.replace(returnPath);
@@ -73,6 +81,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
     const parsed = (isRegister ? registerSchema : loginSchema).safeParse(input);
 
     setError(null);
+    setEmailVerificationRequired(false);
     setFieldErrors({});
     if (!parsed.success) {
       const errors: FieldErrors = {};
@@ -89,12 +98,26 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
     setPending(true);
     try {
       if (isRegister) {
-        await register(registerSchema.parse(input));
+        const result = await register(registerSchema.parse(input));
+        sessionStorage.setItem("intouch:verification-email", result.email);
+        router.replace("/verify-email");
+        return;
       } else {
         await login(loginSchema.parse(input));
       }
       router.replace(returnPath);
     } catch (requestError) {
+      if (
+        !isRegister &&
+        requestError instanceof ApiError &&
+        requestError.code === "EMAIL_VERIFICATION_REQUIRED"
+      ) {
+        sessionStorage.setItem(
+          "intouch:verification-email",
+          loginSchema.parse(input).email,
+        );
+        setEmailVerificationRequired(true);
+      }
       setError(
         requestError instanceof ApiError
           ? requestError.message
@@ -250,9 +273,12 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
                 {!isRegister && (
-                  <span className="text-xs text-muted-foreground">
-                    Recovery coming later
-                  </span>
+                  <Link
+                    href={`/forgot-password?next=${encodeURIComponent(returnPath)}`}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
                 )}
               </div>
               <div className="relative">
@@ -289,7 +315,23 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                 </p>
               )}
             </div>
+            {successMessage && (
+              <p
+                role="status"
+                className="rounded-xl border border-status/30 bg-status/10 px-3 py-2 text-sm text-status"
+              >
+                {successMessage}
+              </p>
+            )}
             {error && <FormError>{error}</FormError>}
+            {emailVerificationRequired && (
+              <Link
+                href="/verify-email"
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Resend your confirmation email
+              </Link>
+            )}
             <Button
               type="submit"
               size="lg"

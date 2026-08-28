@@ -23,9 +23,13 @@ import createOrganizationPolicy from "../src/modules/organizations/organization.
 import type { OrganizationRepository } from "../src/modules/organizations/organization.repository.js";
 import type { OrganizationRecord } from "../src/modules/organizations/organization.types.js";
 import type { OrganizationUnitOfWork } from "../src/modules/organizations/organization.unit-of-work.js";
-import type { UserRepository } from "../src/modules/user/user.repository.js";
+import type { AuthUserRepository } from "../src/modules/user/user.repository.js";
+import { EmailVerificationStatus } from "../src/modules/user/user.types.js";
 import type { PublicUser } from "../src/modules/user/user.types.js";
-import { emptyCommunicationContext } from "./unitOfWorkContext.js";
+import {
+  emptyCommunicationContext,
+  testMailFactory,
+} from "./unitOfWorkContext.js";
 
 const now = new Date("2026-07-30T00:00:00.000Z");
 const inviterUserId = "507f1f77bcf86cd799439011";
@@ -182,11 +186,18 @@ const createHarness = ({
     listForOrganization: async () => [ownerMembership],
     deleteForOrganization: async () => 0,
   };
-  const users: UserRepository = {
+  const users: AuthUserRepository = {
     hasIdentityConflict: async () => false,
     createPasswordUser: async () => invitedUser,
     createGoogleUser: async () => invitedUser,
     findPasswordUserByEmail: async () => null,
+    findAuthAccountByEmail: async () => ({
+      user: invitedUser,
+      hasPassword: true,
+      emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+    }),
+    findVerifiedPublicByEmail: async () =>
+      invitedUserExists ? invitedUser : null,
     findPublicByEmail: async () => (invitedUserExists ? invitedUser : null),
     findPublicById: async () => invitedUser,
     findPublicByIds: async () => [invitedUser],
@@ -196,6 +207,8 @@ const createHarness = ({
     useGoogleProvider: async () => invitedUser,
     usernameExists: async () => false,
     updateLastSeen: async () => undefined,
+    markEmailVerified: async () => true,
+    updatePasswordAndVerify: async () => invitedUser,
   };
   const unitOfWork: OrganizationUnitOfWork = {
     run: (work) =>
@@ -218,6 +231,7 @@ const createHarness = ({
     unitOfWork,
     users,
     now: () => now,
+    mail: testMailFactory,
   });
 
   return { membershipEvents, records, service };

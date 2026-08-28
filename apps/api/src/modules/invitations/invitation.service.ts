@@ -1,6 +1,7 @@
 import type { InviteMemberInput } from "@intouch/shared/memberships";
 
-import type { UserRepository } from "../user/index.js";
+import type { AuthUserRepository } from "../user/index.js";
+import type { MailOutboxJobFactory } from "../mail/index.js";
 import { MembershipConflictError } from "../memberships/membership.errors.js";
 import {
   createNoopMembershipRealtime,
@@ -31,7 +32,8 @@ export interface InvitationServiceDependencies {
   policy: OrganizationPolicy;
   realtime?: MembershipRealtime;
   unitOfWork: OrganizationUnitOfWork;
-  users: UserRepository;
+  users: AuthUserRepository;
+  mail: MailOutboxJobFactory;
   now?: () => Date;
 }
 
@@ -63,6 +65,7 @@ const createInvitationService = ({
   realtime = createNoopMembershipRealtime(),
   unitOfWork,
   users,
+  mail,
   now = () => new Date(),
 }: InvitationServiceDependencies) => ({
   async create(
@@ -70,7 +73,7 @@ const createInvitationService = ({
     organizationId: string,
     input: InviteMemberInput,
   ) {
-    const invitedUser = await users.findPublicByEmail(input.email);
+    const invitedUser = await users.findVerifiedPublicByEmail(input.email);
 
     if (!invitedUser) {
       throw new InvitationTargetNotFoundError();
@@ -78,6 +81,7 @@ const createInvitationService = ({
 
     const currentTime = now();
     const expiresAt = new Date(currentTime.getTime() + INVITATION_LIFETIME_MS);
+    const inviter = await users.findPublicById(inviterUserId);
 
     try {
       return await unitOfWork.run(async (context) => {
@@ -124,6 +128,17 @@ const createInvitationService = ({
           invitedByUserId: inviterUserId,
           expiresAt,
         });
+        await context.mailOutbox.enqueue(
+          mail.organizationInvitation({
+            organizationId,
+            invitationId: invitation.id,
+            email: invitedUser.email,
+            displayName: invitedUser.displayName,
+            organizationName: authorizedOrganization.name,
+            inviterName: inviter?.displayName ?? "An InTouch member",
+            expiresAt,
+          }),
+        );
 
         return toPublicInvitation(invitation, authorizedOrganization);
       });
@@ -200,6 +215,9 @@ const createInvitationService = ({
         if (!consumed) {
           throw new InvitationNotFoundError();
         }
+        await context.mailOutbox.cancel(
+          `organization:${invitation.organizationId}:invitation:${invitation.id}`,
+        );
 
         return createdMembership;
       });
@@ -218,16 +236,19 @@ const createInvitationService = ({
   },
 
   async decline(userId: string, invitationId: string) {
-    const invitation = policy.assertInvitationRecipient(
-      await invitations.findById(invitationId),
-      userId,
-      now(),
-    );
-    const deleted = await invitations.deleteById(invitation.id);
+    await unitOfWork.run(async (context) => {
+      const invitation = policy.assertInvitationRecipient(
+        await context.invitations.findById(invitationId),
+        userId,
+        now(),
+      );
+      const deleted = await context.invitations.deleteById(invitation.id);
 
-    if (!deleted) {
-      throw new InvitationNotFoundError();
-    }
+      if (!deleted) throw new InvitationNotFoundError();
+      await context.mailOutbox.cancel(
+        `organization:${invitation.organizationId}:invitation:${invitation.id}`,
+      );
+    });
   },
 });
 

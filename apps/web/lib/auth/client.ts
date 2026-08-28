@@ -1,7 +1,13 @@
 import {
+  authRequestAcceptedResponseSchema,
   authResponseSchema,
+  registrationPendingResponseSchema,
+  type ForgotPasswordInput,
   type LoginInput,
   type RegisterInput,
+  type ResendVerificationInput,
+  type ResetPasswordInput,
+  type VerifyEmailInput,
 } from "@intouch/shared/auth";
 import { userResponseSchema, type PublicUserDto } from "@intouch/shared/users";
 
@@ -15,8 +21,8 @@ import { setAccessToken } from "@/lib/auth/access-token";
 export type PublicUser = PublicUserDto;
 
 const authenticate = async (
-  endpoint: "/api/v1/auth/login" | "/api/v1/auth/register",
-  input: LoginInput | RegisterInput,
+  endpoint: "/api/v1/auth/login",
+  input: LoginInput,
 ) => {
   const result = await apiRequest(
     endpoint,
@@ -32,10 +38,47 @@ const authenticate = async (
 };
 
 export const register = (input: RegisterInput) =>
-  authenticate("/api/v1/auth/register", input);
+  apiRequest(
+    "/api/v1/auth/register",
+    registrationPendingResponseSchema,
+    { method: "POST", body: JSON.stringify(input) },
+    false,
+  );
 
 export const login = (input: LoginInput) =>
   authenticate("/api/v1/auth/login", input);
+
+export const verifyEmail = (input: VerifyEmailInput) =>
+  apiRequest(
+    "/api/v1/auth/verify-email",
+    noContentSchema,
+    { method: "POST", body: JSON.stringify(input) },
+    false,
+  );
+
+export const resendVerification = (input: ResendVerificationInput) =>
+  apiRequest(
+    "/api/v1/auth/resend-verification",
+    authRequestAcceptedResponseSchema,
+    { method: "POST", body: JSON.stringify(input) },
+    false,
+  );
+
+export const forgotPassword = (input: ForgotPasswordInput) =>
+  apiRequest(
+    "/api/v1/auth/forgot-password",
+    authRequestAcceptedResponseSchema,
+    { method: "POST", body: JSON.stringify(input) },
+    false,
+  );
+
+export const resetPassword = (input: ResetPasswordInput) =>
+  apiRequest(
+    "/api/v1/auth/reset-password",
+    noContentSchema,
+    { method: "POST", body: JSON.stringify(input) },
+    false,
+  );
 
 export const getCurrentUser = async () =>
   (

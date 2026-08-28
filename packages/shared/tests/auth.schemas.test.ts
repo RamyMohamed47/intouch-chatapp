@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { loginSchema, refreshSchema, registerSchema } from "../auth/index.js";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  refreshSchema,
+  registerSchema,
+  resendVerificationSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+} from "../auth/index.js";
 
 describe("shared auth schemas", () => {
   test("normalizes a valid registration request", () => {
@@ -56,5 +64,45 @@ describe("shared auth schemas", () => {
     assert.deepEqual(refreshSchema.parse({ refreshToken: "session.secret" }), {
       refreshToken: "session.secret",
     });
+  });
+
+  test("normalizes strict email-action requests", () => {
+    assert.deepEqual(
+      forgotPasswordSchema.parse({ email: "  RAMY@EXAMPLE.COM " }),
+      { email: "ramy@example.com" },
+    );
+    assert.deepEqual(
+      resendVerificationSchema.parse({ email: " RAMY@EXAMPLE.COM " }),
+      { email: "ramy@example.com" },
+    );
+    assert.equal(
+      forgotPasswordSchema.safeParse({
+        email: "ramy@example.com",
+        accountExists: true,
+      }).success,
+      false,
+    );
+  });
+
+  test("validates opaque action tokens and reset password limits", () => {
+    const token = `${"a".repeat(24)}.${"b".repeat(43)}`;
+
+    assert.deepEqual(verifyEmailSchema.parse({ token }), { token });
+    assert.deepEqual(
+      resetPasswordSchema.parse({
+        token,
+        password: "correct horse battery staple",
+      }),
+      { token, password: "correct horse battery staple" },
+    );
+    assert.equal(
+      verifyEmailSchema.safeParse({ token: "invalid" }).success,
+      false,
+    );
+    assert.equal(
+      resetPasswordSchema.safeParse({ token, password: "é".repeat(37) })
+        .success,
+      false,
+    );
   });
 });

@@ -20,6 +20,7 @@ export interface AuthSessionRepository {
   create(input: CreateAuthSessionInput): Promise<void>;
   rotate(input: RotateAuthSessionInput): Promise<string | null>;
   deleteById(sessionId: string): Promise<void>;
+  deleteByUserId(userId: string): Promise<void>;
 }
 
 const createMongooseAuthSessionRepository = (
@@ -67,6 +68,12 @@ const createMongooseAuthSessionRepository = (
 
   async deleteById(sessionId) {
     const query = AuthSessionModel.deleteOne({ _id: sessionId });
+    if (session) query.session(session);
+    await query.exec();
+  },
+
+  async deleteByUserId(userId) {
+    const query = AuthSessionModel.deleteMany({ userId });
     if (session) query.session(session);
     await query.exec();
   },

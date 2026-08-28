@@ -11,6 +11,11 @@ import type {
   OrganizationUnitOfWork,
   OrganizationWorkContext,
 } from "../src/modules/organizations/organization.unit-of-work.js";
+import type { MailOutboxRepository } from "../src/modules/mail/index.js";
+import {
+  MailKind,
+  type MailOutboxJobFactory,
+} from "../src/modules/mail/index.js";
 
 const unused = (): never => {
   throw new Error("Unused test repository method");
@@ -96,6 +101,46 @@ const conversationReadStates: ConversationReadStateRepository = {
   deleteByOrganizationId: async () => 0,
 };
 
+const mailOutbox: MailOutboxRepository = {
+  enqueue: async () => undefined,
+  cancel: async () => undefined,
+  cancelByPrefix: async () => undefined,
+  claimNext: async () => null,
+  markSent: async () => undefined,
+  scheduleRetry: async () => undefined,
+  markFailed: async () => undefined,
+};
+
+export const testMailFactory: MailOutboxJobFactory = {
+  verification: (input) => ({
+    aggregateKey: `auth-verification:${input.userId}`,
+    kind: MailKind.EMAIL_VERIFICATION,
+    ciphertext: "encrypted",
+    iv: "iv",
+    authTag: "tag",
+    availableAt: new Date(0),
+    expiresAt: input.expiresAt,
+  }),
+  passwordReset: (input) => ({
+    aggregateKey: `auth-reset:${input.userId}`,
+    kind: MailKind.PASSWORD_RESET,
+    ciphertext: "encrypted",
+    iv: "iv",
+    authTag: "tag",
+    availableAt: new Date(0),
+    expiresAt: input.expiresAt,
+  }),
+  organizationInvitation: (input) => ({
+    aggregateKey: `organization:${input.organizationId}:invitation:${input.invitationId}`,
+    kind: MailKind.ORGANIZATION_INVITATION,
+    ciphertext: "encrypted",
+    iv: "iv",
+    authTag: "tag",
+    availableAt: new Date(0),
+    expiresAt: input.expiresAt,
+  }),
+};
+
 export const emptyCommunicationContext = {
   categories,
   conversations,
@@ -103,6 +148,7 @@ export const emptyCommunicationContext = {
   conversationReadStates,
   messageReactions,
   messages,
+  mailOutbox,
 };
 
 const organizations: OrganizationRepository = {

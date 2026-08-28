@@ -4,7 +4,14 @@ import { rateLimit } from "express-rate-limit";
 import TooManyRequestsError from "../../errors/TooManyRequestsError.js";
 import type { AuthController } from "./auth.controller.js";
 import type { AuthMiddleware } from "./auth.middleware.js";
-import { loginSchema, registerSchema } from "./auth.schemas.js";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resendVerificationSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+} from "./auth.schemas.js";
 import { validateBody } from "../../middleware/validateRequest.js";
 
 const createLimiter = (
@@ -50,6 +57,12 @@ const createAuthRouter = (
   const googleCallbackLimit = rateLimitsEnabled
     ? createLimiter(15 * 60 * 1000, 20, "Too many Google callback attempts")
     : noLimit;
+  const emailRequestLimit = rateLimitsEnabled
+    ? createLimiter(15 * 60 * 1000, 5, "Too many email requests")
+    : noLimit;
+  const tokenActionLimit = rateLimitsEnabled
+    ? createLimiter(15 * 60 * 1000, 20, "Too many authentication attempts")
+    : noLimit;
 
   router.get("/oauth/google", googleStartLimit, controller.googleStart);
   router.get(
@@ -69,6 +82,30 @@ const createAuthRouter = (
     loginLimit,
     validateBody(loginSchema),
     controller.login,
+  );
+  router.post(
+    "/verify-email",
+    tokenActionLimit,
+    validateBody(verifyEmailSchema),
+    controller.verifyEmail,
+  );
+  router.post(
+    "/resend-verification",
+    emailRequestLimit,
+    validateBody(resendVerificationSchema),
+    controller.resendVerification,
+  );
+  router.post(
+    "/forgot-password",
+    emailRequestLimit,
+    validateBody(forgotPasswordSchema),
+    controller.forgotPassword,
+  );
+  router.post(
+    "/reset-password",
+    tokenActionLimit,
+    validateBody(resetPasswordSchema),
+    controller.resetPassword,
   );
   router.post(
     "/refresh",

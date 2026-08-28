@@ -40,6 +40,7 @@ import createMongooseUserRepository from "../src/modules/user/user.repository.js
 import { UserModel } from "../src/modules/user/user.model.js";
 import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
 import createMongooseConversationReadStateRepository from "../src/modules/read-receipts/read-receipt.repository.js";
+import { createMongooseMailOutboxRepository } from "../src/modules/mail/index.js";
 
 const ownerId = "507f1f77bcf86cd799439011";
 const memberId = "507f1f77bcf86cd799439012";
@@ -513,6 +514,7 @@ describe("category and conversation transactions", () => {
             ),
             messages: createMongooseMessageRepository(session),
             messageReactions: createMongooseMessageReactionRepository(session),
+            mailOutbox: createMongooseMailOutboxRepository(session),
             conversationReadStates:
               createMongooseConversationReadStateRepository(session),
             organizations: createMongooseOrganizationRepository(session),

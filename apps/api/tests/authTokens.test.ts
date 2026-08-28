@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { createJwtAccessTokenManager } from "../src/modules/auth/auth.access-token.js";
 import { createBcryptPasswordHasher } from "../src/modules/auth/auth.password.js";
 import { createRefreshTokenManager } from "../src/modules/auth/auth.refresh-token.js";
+import { createAuthActionTokenManager } from "../src/modules/auth/auth.action-token.js";
 
 describe("auth token primitives", () => {
   test("hashes and verifies passwords without retaining plaintext", async () => {
@@ -53,6 +54,21 @@ describe("auth token primitives", () => {
       sessionId: created.sessionId,
     });
     assert.equal(tokens.hash(created.token), tokens.hash(created.token));
+    assert.equal(tokens.parse("malformed"), null);
+  });
+
+  test("creates parseable action tokens without storing their secret", () => {
+    const tokens = createAuthActionTokenManager(
+      "test-action-token-secret-that-is-at-least-32-bytes",
+    );
+    const created = tokens.create();
+    const parsed = tokens.parse(created.token);
+
+    assert.ok(parsed);
+    assert.equal(parsed.id, created.id);
+    assert.equal(parsed.secretHash, created.secretHash);
+    assert.equal(created.secretHash.includes(created.token), false);
+    assert.equal(tokens.parse(`${created.token}.extra`), null);
     assert.equal(tokens.parse("malformed"), null);
   });
 });

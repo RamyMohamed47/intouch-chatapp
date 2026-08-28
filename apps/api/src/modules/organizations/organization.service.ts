@@ -213,6 +213,9 @@ const createOrganizationService = ({
       await context.categories.deleteByOrganizationId(organizationId);
       await context.memberships.deleteForOrganization(organizationId);
       await context.invitations.deleteByOrganizationId(organizationId);
+      await context.mailOutbox.cancelByPrefix(
+        `organization:${organizationId}:invitation:`,
+      );
       const deleted = await context.organizations.deleteById(organizationId);
 
       if (!deleted) {

@@ -7,6 +7,8 @@ erDiagram
         string displayName
         string email
         string avatarUrl
+        enum emailVerificationStatus
+        datetime emailVerifiedAt
         datetime lastSeenAt
         LoginProvider[] loginProviders
         datetime createdAt
@@ -27,6 +29,33 @@ erDiagram
         ObjectId userId
         string tokenHash
         datetime expiresAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    AuthActionToken {
+        string id
+        ObjectId userId
+        enum purpose
+        string secretHash
+        datetime expiresAt
+        datetime createdAt
+    }
+
+    MailOutbox {
+        ObjectId id
+        string aggregateKey
+        enum kind
+        string ciphertext
+        string iv
+        string authTag
+        enum status
+        int attempts
+        datetime availableAt
+        datetime leaseUntil
+        datetime expiresAt
+        datetime sentAt
+        datetime purgeAt
         datetime createdAt
         datetime updatedAt
     }
@@ -144,6 +173,7 @@ erDiagram
     User ||--o{ Membership : joins
     User ||--o{ LoginProvider : embeds
     User ||--o{ AuthSession : authenticates
+    User ||--o{ AuthActionToken : authorizes_email_action
     Organization ||--o{ Membership : has
     Organization ||--o{ Invitation : has
     User ||--o{ Invitation : receives
@@ -180,8 +210,24 @@ erDiagram
 
 `LoginProvider.providerAccountId` stores the Google `sub` for Google identities.
 The pair of `provider` and `providerAccountId` is uniquely indexed across users.
-New users/provider links and their initial `AuthSession` are committed in one
-MongoDB transaction.
+Google users/provider links and their initial `AuthSession` are committed in
+one MongoDB transaction. Password registration instead commits a pending user,
+a single-use verification token, and its encrypted outbox job atomically; it
+does not create an authenticated session until the user confirms the email and
+logs in.
+
+`AuthActionToken` stores only an HMAC of the opaque token secret. Tokens are
+unique per `(userId, purpose)`, expire through a TTL index, and are consumed
+atomically. Email-confirmation tokens live for 24 hours; password-reset tokens
+live for 15 minutes. Successful password reset also confirms the email and
+deletes every refresh session for that user in the same transaction.
+
+`MailOutbox` is the transactional boundary between MongoDB changes and SMTP.
+Sensitive recipient/token payloads are AES-256-GCM encrypted at rest. A unique
+aggregate key supersedes pending verification/reset jobs, while the worker uses
+leases, bounded retries, and TTL cleanup. Delivery happens after the surrounding
+database transaction commits; SMTP failure never leaves an orphaned account or
+invitation mutation.
 
 Organization ownership is represented only by an `OWNER` membership. The
 organization document does not duplicate ownership with an `ownerId` field.
@@ -198,7 +244,9 @@ or changing `updatedAt`.
 
 Invitation documents represent pending invitations only. They are unique by
 `(organizationId, invitedUserId)`, expire after seven days, and are deleted when
-accepted, declined, or when the organization is deleted.
+accepted, declined, or when the organization is deleted. Creating a pending
+invitation queues its email in the same transaction; consuming or deleting the
+invitation cancels a still-pending outbox job.
 
 Category names are case-insensitively unique within an organization through the
 internal `nameKey`. Channel conversations require a category, use

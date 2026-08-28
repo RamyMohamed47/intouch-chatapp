@@ -5,11 +5,12 @@ import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
 
 import { AuthSessionModel } from "../src/modules/auth/auth.model.js";
-import createMongooseAuthSessionRepository, {
-  type AuthSessionRepository,
-} from "../src/modules/auth/auth.repository.js";
+import createMongooseAuthSessionRepository from "../src/modules/auth/auth.repository.js";
 import { createRefreshTokenManager } from "../src/modules/auth/auth.refresh-token.js";
 import createAuthService from "../src/modules/auth/auth.service.js";
+import { createAuthActionTokenManager } from "../src/modules/auth/auth.action-token.js";
+import { createMongooseAuthActionTokenRepository } from "../src/modules/auth/auth.action-token.repository.js";
+import { AuthActionTokenModel } from "../src/modules/auth/auth.action-token.model.js";
 import type { LoginProtectionService } from "../src/modules/auth/auth.login-protection.js";
 import type { AuthUnitOfWork } from "../src/modules/auth/auth.unit-of-work.js";
 import type {
@@ -19,19 +20,32 @@ import type {
 } from "../src/modules/auth/auth.types.js";
 import { UserModel } from "../src/modules/user/user.model.js";
 import createMongooseUserRepository from "../src/modules/user/user.repository.js";
+import {
+  MailOutboxModel,
+  createMongooseMailOutboxRepository,
+  type MailOutboxRepository,
+} from "../src/modules/mail/index.js";
+import { testMailFactory } from "./unitOfWorkContext.js";
 
 let replicaSet: MongoMemoryReplSet;
 
 before(async () => {
   replicaSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(replicaSet.getUri("intouch-auth-transactions"));
-  await Promise.all([UserModel.syncIndexes(), AuthSessionModel.syncIndexes()]);
+  await Promise.all([
+    UserModel.syncIndexes(),
+    AuthSessionModel.syncIndexes(),
+    AuthActionTokenModel.syncIndexes(),
+    MailOutboxModel.syncIndexes(),
+  ]);
 });
 
 beforeEach(async () => {
   await Promise.all([
     UserModel.deleteMany({}).exec(),
     AuthSessionModel.deleteMany({}).exec(),
+    AuthActionTokenModel.deleteMany({}).exec(),
+    MailOutboxModel.deleteMany({}).exec(),
   ]);
 });
 
@@ -61,20 +75,21 @@ const googleOAuth: GoogleOAuthClient = {
 };
 
 describe("authentication transactions", () => {
-  test("rolls back user creation when refresh-session creation fails", async () => {
+  test("rolls back registration when outbox creation fails", async () => {
     const unitOfWork: AuthUnitOfWork = {
       run: (work) =>
         mongoose.connection.transaction((session) => {
-          const sessionRepository =
-            createMongooseAuthSessionRepository(session);
-          const failingSessions: AuthSessionRepository = {
-            ...sessionRepository,
-            create: async () => {
-              throw new Error("forced session failure");
+          const outbox = createMongooseMailOutboxRepository(session);
+          const failingOutbox: MailOutboxRepository = {
+            ...outbox,
+            enqueue: async () => {
+              throw new Error("forced outbox failure");
             },
           };
           return work({
-            sessions: failingSessions,
+            actionTokens: createMongooseAuthActionTokenRepository(session),
+            mailOutbox: failingOutbox,
+            sessions: createMongooseAuthSessionRepository(session),
             users: createMongooseUserRepository(session),
           });
         }),
@@ -88,6 +103,11 @@ describe("authentication transactions", () => {
       sessions: createMongooseAuthSessionRepository(),
       unitOfWork,
       users: createMongooseUserRepository(),
+      actionTokens: createAuthActionTokenManager(
+        "test-auth-action-token-secret-that-is-long-enough",
+      ),
+      mail: testMailFactory,
+      mailProtection: { reserve: async () => undefined },
     });
 
     await assert.rejects(
@@ -97,7 +117,7 @@ describe("authentication transactions", () => {
         email: "transaction@example.com",
         password: "correct horse battery staple",
       }),
-      /forced session failure/,
+      /forced outbox failure/,
     );
     assert.equal(await UserModel.countDocuments(), 0);
     assert.equal(await AuthSessionModel.countDocuments(), 0);

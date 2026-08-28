@@ -2,6 +2,7 @@ import ConflictError from "../../errors/ConflictError.js";
 import ServiceUnavailableError from "../../errors/ServiceUnavailableError.js";
 import TooManyRequestsError from "../../errors/TooManyRequestsError.js";
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
+import AppError from "../../errors/AppError.js";
 
 export class DuplicateIdentityError extends ConflictError {
   constructor() {
@@ -12,6 +13,26 @@ export class DuplicateIdentityError extends ConflictError {
 export class InvalidCredentialsError extends UnauthorizedError {
   constructor() {
     super("Invalid email or password");
+  }
+}
+
+export class EmailVerificationRequiredError extends AppError {
+  constructor() {
+    super(
+      "Confirm your email address before signing in",
+      403,
+      "EMAIL_VERIFICATION_REQUIRED",
+    );
+  }
+}
+
+export class InvalidOrExpiredAuthTokenError extends AppError {
+  constructor() {
+    super(
+      "Authentication link is invalid or expired",
+      400,
+      "INVALID_OR_EXPIRED_TOKEN",
+    );
   }
 }
 

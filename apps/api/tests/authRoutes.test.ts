@@ -5,6 +5,7 @@ import { after, before, describe, test } from "node:test";
 import createApp from "../src/app.js";
 import createAuthController from "../src/modules/auth/auth.controller.js";
 import {
+  EmailVerificationRequiredError,
   GoogleProviderUnavailableError,
   LoginAttemptsExceededError,
 } from "../src/modules/auth/auth.errors.js";
@@ -51,10 +52,13 @@ const authService: AuthService = {
     return { refreshToken: "google-refresh-token" };
   },
   register: async () => ({
-    user,
-    accessToken: "register-access-token",
-    refreshToken: "register-refresh-token",
+    email: user.email,
+    verificationRequired: true,
   }),
+  verifyEmail: async () => undefined,
+  resendVerification: async () => undefined,
+  forgotPassword: async () => undefined,
+  resetPassword: async () => undefined,
   login: async () => {
     if (loginError) throw loginError;
 
@@ -229,7 +233,7 @@ describe("auth routes", () => {
     }
   });
 
-  test("registers with a secure HttpOnly cookie and no token in JSON", async () => {
+  test("registers a pending account without authentication credentials", async () => {
     const response = await fetch(`${baseUrl}/api/v1/auth/register`, {
       method: "POST",
       headers: {
@@ -247,14 +251,92 @@ describe("auth routes", () => {
     const setCookie = response.headers.get("set-cookie");
 
     assert.equal(response.status, 201);
-    assert.equal(body.accessToken, "register-access-token");
+    assert.equal(body.email, user.email);
+    assert.equal(body.verificationRequired, true);
+    assert.equal("accessToken" in body, false);
     assert.equal("refreshToken" in body, false);
-    assert.ok(setCookie);
-    assert.match(setCookie, /intouch_refresh=register-refresh-token/);
-    assert.match(setCookie, /HttpOnly/i);
-    assert.match(setCookie, /Secure/i);
-    assert.match(setCookie, /SameSite=Lax/i);
-    assert.match(setCookie, /Path=\/api\/v1\/auth/i);
+    assert.equal(setCookie, null);
+  });
+
+  test("accepts email verification and recovery requests without leaking accounts", async () => {
+    const token = `${"a".repeat(24)}.${"b".repeat(43)}`;
+    const requests = [
+      {
+        path: "verify-email",
+        body: { token },
+        status: 204,
+      },
+      {
+        path: "resend-verification",
+        body: { email: user.email },
+        status: 202,
+      },
+      {
+        path: "forgot-password",
+        body: { email: user.email },
+        status: 202,
+      },
+      {
+        path: "reset-password",
+        body: { token, password: "new correct horse battery staple" },
+        status: 204,
+      },
+    ] as const;
+
+    for (const request of requests) {
+      const response = await fetch(`${baseUrl}/api/v1/auth/${request.path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify(request.body),
+      });
+
+      assert.equal(response.status, request.status);
+      if (request.status === 202) {
+        assert.deepEqual(await response.json(), { accepted: true });
+      } else {
+        assert.equal(await response.text(), "");
+      }
+    }
+  });
+
+  test("rejects malformed email-action requests", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify({ email: "not-an-email", extra: true }),
+    });
+
+    assert.equal(response.status, 400);
+    const body = (await response.json()) as {
+      error: { code: string };
+    };
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+  });
+
+  test("returns a specific verification-required code after valid credentials", async () => {
+    loginError = new EmailVerificationRequiredError();
+
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({
+          email: user.email,
+          password: "correct horse battery staple",
+        }),
+      });
+
+      assert.equal(response.status, 403);
+      assert.deepEqual(await response.json(), {
+        success: false,
+        error: {
+          code: "EMAIL_VERIFICATION_REQUIRED",
+          message: "Confirm your email address before signing in",
+        },
+      });
+    } finally {
+      loginError = undefined;
+    }
   });
 
   test("rejects refresh without CSRF protection", async () => {

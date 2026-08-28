@@ -88,6 +88,8 @@ values are:
 
 - `ACCESS_TOKEN_SECRET`, at least 32 bytes
 - `LOGIN_THROTTLE_SECRET`, an independent secret of at least 32 bytes
+- `AUTH_ACTION_TOKEN_SECRET`, an independent secret of at least 32 bytes
+- `MAIL_OUTBOX_ENCRYPTION_SECRET`, an independent secret of at least 32 bytes
 - `CLIENT_ORIGINS`, comma-separated exact frontend origins
 - `DATABASE`
 - `DB_PASSWORD`
@@ -95,6 +97,9 @@ values are:
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `GOOGLE_OAUTH_CALLBACK_URL`
 - `GOOGLE_OAUTH_FRONTEND_REDIRECT_URL`
+- `WEB_APP_URL`, the exact frontend origin used in email links
+- `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASSWORD`
+- `MAIL_FROM_NAME` and `MAIL_FROM_ADDRESS`
 - `SEARCH_PROVIDER`; use `atlas` in production and `native` for local MongoDB
 
 `DATABASE` must connect to a MongoDB replica set or sharded cluster because
@@ -124,6 +129,9 @@ Optional:
 - `LOGIN_ATTEMPT_LIMIT`, defaults to `10`
 - `LOGIN_ATTEMPT_WINDOW_MS`, defaults to `900000` (15 minutes)
 - `LOGIN_ATTEMPT_COOLDOWN_MS`, defaults to `900000` (15 minutes)
+- `SMTP_PORT`, defaults to `587`
+- `SMTP_SECURE`, defaults to `false` for STARTTLS
+- `SMTP_REQUIRE_TLS`, defaults to `true` and cannot be disabled in production
 
 Example development auth configuration:
 
@@ -143,6 +151,41 @@ attempts within fifteen minutes are admitted, and further attempts receive a
 generic `429` response during a non-extending fifteen-minute cooldown.
 Successful password or verified Google authentication clears the account
 attempt state.
+
+## Transactional Email
+
+Password registration requires email confirmation. Registration returns a
+pending-account response without an access token or refresh cookie; the user
+confirms the 24-hour single-use link before logging in. Forgot-password requests
+return the same generic `202` response for every email. Reset links are
+single-use, expire after 15 minutes, confirm the account email, and revoke all
+existing refresh sessions.
+
+Mail delivery uses provider-neutral SMTP through Nodemailer. A free SMTP
+provider can be configured on Railway; local development can use Mailpit on
+`localhost:1025` with `SMTP_REQUIRE_TLS=false`. Production must use TLS. The API
+stores encrypted outbox payloads and retries failed deliveries after the
+database transaction commits, so registration and invitation writes do not
+depend on an SMTP request succeeding synchronously.
+
+Example production-style settings:
+
+```dotenv
+WEB_APP_URL=https://your-frontend.example
+SMTP_HOST=your-smtp-provider.example
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_REQUIRE_TLS=true
+SMTP_USER=provider-username
+SMTP_PASSWORD=provider-password
+MAIL_FROM_NAME=InTouch
+MAIL_FROM_ADDRESS=noreply@your-verified-domain.example
+```
+
+Generate independent random values for `AUTH_ACTION_TOKEN_SECRET` and
+`MAIL_OUTBOX_ENCRYPTION_SECRET`; do not reuse the JWT or login-throttle secret.
+After deploying this feature to an existing database, mark legacy accounts as
+verified once with `npm run migrate:verify-existing-users`.
 
 ## Google OAuth
 
@@ -170,8 +213,9 @@ tokens are not stored.
 
 Organization owners can invite an existing registered user by email through
 `POST /api/v1/organizations/:id/invitations`. Invitations remain pending for
-seven days. No email is sent; authenticated recipients discover them through
-`GET /api/v1/invitations`, then accept or decline them.
+seven days. A transactional invitation email directs the verified recipient to
+the existing invitation inbox; authenticated recipients can also discover them
+through `GET /api/v1/invitations`, then accept or decline them.
 
 Authenticated users can join public organizations directly through
 `POST /api/v1/organizations/:id/join`. Private organizations require invitation
@@ -233,8 +277,9 @@ which forwards to the Railway API. The proxy must preserve `Origin`, `Cookie`,
 `X-CSRF-Protection` headers. It must also pass Google start and callback
 redirects through without following them server-side.
 
-Register and login responses set an `HttpOnly` refresh cookie. The browser never
-receives the refresh token in JSON. Refresh requests must include
+Successful login responses set an `HttpOnly` refresh cookie; registration does
+not authenticate a pending account. The browser never receives the refresh
+token in JSON. Refresh requests must include
 `X-CSRF-Protection: 1`; the access token remains a Bearer token and should be
 stored in frontend memory. The production cookie is `Secure`, `SameSite=Lax`,
 and scoped to `/api/v1/auth`.

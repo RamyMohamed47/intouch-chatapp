@@ -6,6 +6,7 @@ import { getEnvFilePath, loadConfig } from "../src/config/env.js";
 
 const validEnv: NodeJS.ProcessEnv = {
   ACCESS_TOKEN_SECRET: "a-development-secret-that-is-over-32-bytes",
+  AUTH_ACTION_TOKEN_SECRET: "an-auth-action-secret-that-is-over-32-bytes",
   CLIENT_ORIGINS: "https://app.example.com,http://localhost:5173/",
   DATABASE: "mongodb://example.test/<db_password>",
   DB_PASSWORD: "password",
@@ -15,7 +16,17 @@ const validEnv: NodeJS.ProcessEnv = {
   GOOGLE_OAUTH_CLIENT_SECRET: "google-client-secret",
   GOOGLE_OAUTH_FRONTEND_REDIRECT_URL: "https://app.example.com/auth/callback",
   LOGIN_THROTTLE_SECRET: "a-login-throttle-secret-that-is-over-32-bytes",
+  MAIL_FROM_ADDRESS: "noreply@example.com",
+  MAIL_FROM_NAME: "InTouch",
+  MAIL_OUTBOX_ENCRYPTION_SECRET:
+    "a-mail-outbox-encryption-secret-over-32-bytes",
   SEARCH_PROVIDER: "native",
+  SMTP_HOST: "smtp.example.com",
+  SMTP_PASSWORD: "smtp-password",
+  SMTP_REQUIRE_TLS: "true",
+  SMTP_SECURE: "false",
+  SMTP_USER: "smtp-user",
+  WEB_APP_URL: "https://app.example.com",
 };
 
 describe("auth environment configuration", () => {
@@ -146,6 +157,22 @@ describe("auth environment configuration", () => {
     assert.throws(
       () => loadConfig({ ...validEnv, SEARCH_PROVIDER: "invalid" }),
       /SEARCH_PROVIDER must be atlas or native/,
+    );
+  });
+
+  test("rejects insecure SMTP transport in production", () => {
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          NODE_ENV: "production",
+          SEARCH_PROVIDER: "atlas",
+          GOOGLE_OAUTH_CALLBACK_URL:
+            "https://app.example.com/api/v1/auth/oauth/google/callback",
+          SMTP_REQUIRE_TLS: "false",
+          SMTP_SECURE: "false",
+        }),
+      /SMTP transport must require TLS in production/,
     );
   });
 });

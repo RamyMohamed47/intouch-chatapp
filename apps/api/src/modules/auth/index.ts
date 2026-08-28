@@ -7,9 +7,12 @@ import createAuthMiddleware from "./auth.middleware.js";
 import { createOAuthStateManager } from "./auth.oauth-state.js";
 import { createBcryptPasswordHasher } from "./auth.password.js";
 import { createRefreshTokenManager } from "./auth.refresh-token.js";
+import { createAuthActionTokenManager } from "./auth.action-token.js";
+import type { MailOutboxJobFactory } from "../mail/index.js";
 import createMongooseAuthSessionRepository from "./auth.repository.js";
 import createMongooseLoginAttemptRepository from "./auth.login-attempt.repository.js";
 import createLoginProtectionService from "./auth.login-protection.js";
+import createAuthMailProtectionService from "./auth.mail-protection.js";
 import createAuthRouter from "./auth.routes.js";
 import createAuthService from "./auth.service.js";
 import createMongooseAuthUnitOfWork from "./auth.unit-of-work.js";
@@ -34,6 +37,8 @@ export interface AuthModuleConfig {
     hashSecret: string;
     windowMs: number;
   };
+  actionTokenSecret: string;
+  mail: MailOutboxJobFactory;
   rateLimitsEnabled?: boolean;
 }
 
@@ -50,6 +55,7 @@ const createAuthModule = (config: AuthModuleConfig) => {
     audience: config.accessTokenAudience,
   });
   const refreshTokens = createRefreshTokenManager();
+  const actionTokens = createAuthActionTokenManager(config.actionTokenSecret);
   const googleOAuth = createGoogleOAuthClient(config.googleOAuth, undefined, {
     providerUnavailable(details) {
       logger.error(
@@ -71,6 +77,16 @@ const createAuthModule = (config: AuthModuleConfig) => {
       },
     },
   });
+  const mailProtection = createAuthMailProtectionService({
+    attempts: loginAttempts,
+    hashSecret: config.actionTokenSecret,
+    throttled(details) {
+      logger.warn(
+        { securityEvent: "auth.email.throttled", ...details },
+        "Authentication email requests throttled",
+      );
+    },
+  });
   const service = createAuthService({
     users,
     sessions,
@@ -80,6 +96,9 @@ const createAuthModule = (config: AuthModuleConfig) => {
     loginProtection,
     refreshTokens,
     unitOfWork,
+    actionTokens,
+    mail: config.mail,
+    mailProtection,
   });
   const controller = createAuthController(service, config.cookie, {
     frontendRedirectUrl: config.googleOAuth.frontendRedirectUrl,

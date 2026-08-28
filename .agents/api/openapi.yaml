@@ -47,7 +47,7 @@ paths:
         $ref: "#/components/requestBodies/RegisterRequest"
       responses:
         "201":
-          $ref: "#/components/responses/AuthResponse"
+          $ref: "#/components/responses/RegistrationPendingResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
         "409":
@@ -74,6 +74,76 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Valid credentials supplied, but email confirmation is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/verify-email:
+    post:
+      tags: [Authentication]
+      summary: Confirm a password account email
+      description: Consumes a single-use 24-hour email-confirmation token.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/VerifyEmailRequest"
+      responses:
+        "204":
+          description: Email confirmed
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/resend-verification:
+    post:
+      tags: [Authentication]
+      summary: Request another email-confirmation message
+      description: Always returns the same accepted response for eligible and ineligible addresses.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/EmailRequest"
+      responses:
+        "202":
+          $ref: "#/components/responses/AuthRequestAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/forgot-password:
+    post:
+      tags: [Authentication]
+      summary: Request a password-reset message
+      description: Always returns the same accepted response and never reveals account existence.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/EmailRequest"
+      responses:
+        "202":
+          $ref: "#/components/responses/AuthRequestAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/reset-password:
+    post:
+      tags: [Authentication]
+      summary: Replace a password using a reset token
+      description: Consumes a single-use 15-minute token, confirms the email, and revokes all refresh sessions.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/ResetPasswordRequest"
+      responses:
+        "204":
+          description: Password replaced and existing refresh sessions revoked
+        "400":
+          $ref: "#/components/responses/ValidationError"
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
@@ -1070,6 +1140,30 @@ components:
           schema:
             $ref: "#/components/schemas/LoginInput"
 
+    VerifyEmailRequest:
+      description: Defined by the shared email-confirmation contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/VerifyEmailInput"
+
+    EmailRequest:
+      description: Normalized email request used for generic mail actions.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AuthEmailInput"
+
+    ResetPasswordRequest:
+      description: Defined by the shared password-reset contract.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ResetPasswordInput"
+
     CreateOrganizationRequest:
       description: Defined by shared Zod contract.
       required: true
@@ -1159,6 +1253,20 @@ components:
             $ref: "#/components/schemas/SetMessageReactionInput"
 
   responses:
+
+    RegistrationPendingResponse:
+      description: Account created pending email confirmation; no session is issued.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RegistrationPendingPayload"
+
+    AuthRequestAcceptedResponse:
+      description: Request accepted without revealing whether an eligible account exists.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AuthRequestAcceptedPayload"
 
     AuthResponse:
       description: Authentication completed and refresh cookie set.
@@ -2298,6 +2406,43 @@ components:
           maxLength: 72
           writeOnly: true
 
+    AuthActionToken:
+      type: string
+      minLength: 43
+      maxLength: 256
+      pattern: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+      writeOnly: true
+
+    VerifyEmailInput:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          $ref: "#/components/schemas/AuthActionToken"
+
+    AuthEmailInput:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    ResetPasswordInput:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token:
+          $ref: "#/components/schemas/AuthActionToken"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+
     PublicUser:
       type: object
       required: [id, username, displayName, email, createdAt, updatedAt]
@@ -2330,6 +2475,27 @@ components:
         accessToken:
           type: string
 
+    RegistrationPendingPayload:
+      type: object
+      additionalProperties: false
+      required: [email, verificationRequired]
+      properties:
+        email:
+          type: string
+          format: email
+        verificationRequired:
+          type: boolean
+          const: true
+
+    AuthRequestAcceptedPayload:
+      type: object
+      additionalProperties: false
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
+          const: true
+
     AccessTokenPayload:
       type: object
       required: [accessToken]
@@ -2361,6 +2527,8 @@ components:
                 - TOO_MANY_REQUESTS
                 - SERVICE_UNAVAILABLE
                 - SEARCH_UNAVAILABLE
+                - EMAIL_VERIFICATION_REQUIRED
+                - INVALID_OR_EXPIRED_TOKEN
                 - INTERNAL_SERVER_ERROR
             message:
               type: string

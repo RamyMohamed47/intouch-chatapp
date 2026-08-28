@@ -54,6 +54,11 @@ export interface GoogleAuthResult {
   refreshToken: string;
 }
 
+export interface RegistrationPendingResult {
+  email: string;
+  verificationRequired: true;
+}
+
 export interface AuthLocals {
   refreshToken?: string;
   userId?: string;
