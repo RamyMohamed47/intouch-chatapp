@@ -176,7 +176,6 @@ const createMongooseSearchRepository = (
                       filter: [
                         { in: { path: "conversationId", value: allowedIds } },
                       ],
-                      mustNot: [{ exists: { path: "deletedAt" } }],
                     },
                     sort: {
                       score: { $meta: "searchScore" },
