@@ -18,6 +18,13 @@ import {
   createDirectMessageService,
 } from "../direct-messages/index.js";
 import {
+  createChatWallpaperController,
+  createChatWallpaperService,
+  createConversationChatWallpaperRouter,
+  createMongooseChatWallpaperRepository,
+  createUserChatWallpaperRouter,
+} from "../chat-wallpapers/index.js";
+import {
   createCategoryController,
   createCategoryRouter,
   createCategoryService,
@@ -168,7 +175,13 @@ const createOrganizationModule = ({
     RateLimitAction.NOTIFICATION_MUTATE,
     "Too many notification updates",
   );
+  const mutateWallpaperLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.WALLPAPER_MUTATE,
+    "Too many wallpaper updates",
+  );
   const categories = createMongooseCategoryRepository();
+  const chatWallpapers = createMongooseChatWallpaperRepository();
   const conversations = createMongooseConversationRepository();
   const conversationParticipants =
     createMongooseConversationParticipantRepository();
@@ -252,6 +265,14 @@ const createOrganizationModule = ({
     users,
     notificationDelivery: notificationService,
   });
+  const chatWallpaperService = createChatWallpaperService({
+    conversations,
+    memberships,
+    participants: conversationParticipants,
+    policy: conversationPolicy,
+    preferences: chatWallpapers,
+    unitOfWork,
+  });
   const messageReactionService = createMessageReactionService({
     conversations: conversationService,
     logger,
@@ -294,6 +315,8 @@ const createOrganizationModule = ({
   const categoryController = createCategoryController(categoryService);
   const conversationController =
     createConversationController(conversationService);
+  const chatWallpaperController =
+    createChatWallpaperController(chatWallpaperService);
   const messageController = createMessageController(messageService);
   const messageReactionController = createMessageReactionController(
     messageReactionService,
@@ -348,6 +371,16 @@ const createOrganizationModule = ({
     conversationController,
     requireAccessToken,
   );
+  const conversationChatWallpaperRouter = createConversationChatWallpaperRouter(
+    chatWallpaperController,
+    requireAccessToken,
+    mutateWallpaperLimit,
+  );
+  const userChatWallpaperRouter = createUserChatWallpaperRouter(
+    chatWallpaperController,
+    requireAccessToken,
+    mutateWallpaperLimit,
+  );
   const directMessageRouter = createDirectMessageRouter(
     directMessageController,
     requireAccessToken,
@@ -388,6 +421,7 @@ const createOrganizationModule = ({
     accessRouter,
     categoryRouter,
     conversationMessageRouter,
+    conversationChatWallpaperRouter,
     conversationRouter,
     conversationService,
     directMessageRouter,
@@ -401,6 +435,7 @@ const createOrganizationModule = ({
     readReceiptRouter,
     router,
     searchRouter,
+    userChatWallpaperRouter,
   };
 };
 

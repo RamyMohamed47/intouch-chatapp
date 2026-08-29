@@ -155,6 +155,16 @@ erDiagram
         datetime lastReadAt
     }
 
+    ChatWallpaperPreference {
+        ObjectId id
+        ObjectId userId
+        ObjectId conversationId
+        enum wallpaperId
+        int dimming
+        datetime createdAt
+        datetime updatedAt
+    }
+
     Attachment {
         ObjectId id
         ObjectId messageId
@@ -216,6 +226,10 @@ erDiagram
     Conversation ||--o{ ConversationReadState : tracks_reads
 
     User ||--o{ ConversationReadState : reads
+
+    User ||--o{ ChatWallpaperPreference : customizes
+
+    Conversation ||--o{ ChatWallpaperPreference : overrides
 
     Message ||--o{ Attachment : has
 
@@ -302,6 +316,14 @@ reader state remains private and is used for that reader's unread count. The
 channel reader summaries. Those summaries are derived by joining current
 organization memberships and, for private channels, current participants; no
 separate receipt-detail collection is stored.
+
+`ChatWallpaperPreference` stores private, per-user presentation preferences.
+`conversationId = null` represents the user's default; a conversation ID
+represents an override visible only to that user. A unique
+`(userId, conversationId)` index permits one preference per scope, and a
+conversation cleanup index supports transactional channel and organization
+deletion. Preset IDs are platform-neutral shared contracts; image files remain
+client assets rather than database content.
 
 Online presence and typing are runtime-only state. `User.lastSeenAt` is the only
 persisted presence field and is updated after the user's final socket has been

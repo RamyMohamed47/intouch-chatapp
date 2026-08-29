@@ -487,6 +487,7 @@ const createConversationService = ({
         const count = await context.conversations.countByCategory(
           channel.categoryId,
         );
+        await context.chatWallpapers.deleteByConversationId(conversationId);
         await context.messageReactions.deleteByConversationId(conversationId);
         await context.messages.deleteByConversationId(conversationId);
         await context.conversationReadStates.deleteByConversationId(

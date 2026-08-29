@@ -42,6 +42,8 @@ Implemented capabilities include:
   contracts.
 - Organization-scoped search across accessible messages, channels, and members,
   including exact historical message context.
+- Private synchronized chat wallpapers with per-conversation overrides,
+  bundled doodle, abstract, and scenery presets, and adjustable dimming.
 
 Browse the API contract at `<frontend URL>/api/docs`, download it from
 `<frontend URL>/api/openapi.yaml` or `<frontend URL>/api/openapi.json`, and use
@@ -403,6 +405,27 @@ deployment. Never reuse another real user's credentials.
 - Briefly disconnect and reconnect Socket.IO after activity in another
   conversation. Cached channel and DM summaries should reconcile without a
   full page reload.
+
+### Chat Wallpapers
+
+- Open both a channel and a direct message. The wallpaper control should appear
+  in each conversation header and should never appear to other participants as
+  shared conversation data.
+- Choose presets from Doodles, Abstract, and Scenery. Changing the selection or
+  dimming slider should update only the dialog preview until `Apply to this
+chat` is pressed.
+- Apply a conversation wallpaper, reload, and confirm it remains selected.
+  Open the same conversation as another user and confirm their wallpaper did
+  not change.
+- Use `Set as default`, then open a conversation without an override. It should
+  use the new default. Existing conversation overrides should remain intact.
+- Use `Use my default` on an overridden conversation and confirm the override is
+  removed. Choose `Plain` and confirm dimming is disabled and normalized to
+  zero.
+- Verify message text, reactions, receipts, and focus states remain readable at
+  0% and 80% dimming across Ink, Cloud, Aurora, and Ember themes.
+- Delete an overridden channel or organization and confirm no wallpaper
+  preference survives for the deleted conversation.
 
 ## 9. Defect Reporting Template
 

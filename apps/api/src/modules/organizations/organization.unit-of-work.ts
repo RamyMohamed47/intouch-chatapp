@@ -3,6 +3,9 @@ import mongoose from "mongoose";
 import createMongooseCategoryRepository, {
   type CategoryRepository,
 } from "../categories/category.repository.js";
+import createMongooseChatWallpaperRepository, {
+  type ChatWallpaperRepository,
+} from "../chat-wallpapers/chat-wallpaper.repository.js";
 import createMongooseConversationParticipantRepository, {
   type ConversationParticipantRepository,
 } from "../conversations/conversation-participant.repository.js";
@@ -37,6 +40,7 @@ import type { MailOutboxRepository } from "../mail/index.js";
 
 export interface OrganizationWorkContext {
   categories: CategoryRepository;
+  chatWallpapers: ChatWallpaperRepository;
   conversations: ConversationRepository;
   conversationParticipants: ConversationParticipantRepository;
   organizations: OrganizationRepository;
@@ -62,6 +66,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
       const organizations = createMongooseOrganizationRepository(session);
       const invitations = createMongooseInvitationRepository(session);
       const categories = createMongooseCategoryRepository(session);
+      const chatWallpapers = createMongooseChatWallpaperRepository(session);
       const conversations = createMongooseConversationRepository(session);
       const conversationParticipants =
         createMongooseConversationParticipantRepository(session);
@@ -74,6 +79,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
 
       return work({
         categories,
+        chatWallpapers,
         conversations,
         conversationParticipants,
         invitations,

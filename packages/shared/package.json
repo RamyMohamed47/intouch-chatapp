@@ -28,6 +28,10 @@
       "types": "./dist/categories/index.d.ts",
       "import": "./dist/categories/index.js"
     },
+    "./chat-wallpapers": {
+      "types": "./dist/chat-wallpapers/index.d.ts",
+      "import": "./dist/chat-wallpapers/index.js"
+    },
     "./conversations": {
       "types": "./dist/conversations/index.d.ts",
       "import": "./dist/conversations/index.js"

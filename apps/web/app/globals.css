@@ -286,3 +286,164 @@
     transform: none;
   }
 }
+
+.chat-wallpaper-art {
+  isolation: isolate;
+  background-color: var(--background);
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.chat-wallpaper-surface {
+  container-type: size;
+}
+
+.chat-wallpaper-scene {
+  display: none;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.chat-wallpaper-scene-portrait {
+  display: block;
+}
+
+@container (min-aspect-ratio: 1 / 1) {
+  .chat-wallpaper-scene-portrait {
+    display: none;
+  }
+
+  .chat-wallpaper-scene-standard {
+    display: block;
+  }
+}
+
+@container (min-aspect-ratio: 3 / 2) {
+  .chat-wallpaper-scene-standard {
+    display: none;
+  }
+
+  .chat-wallpaper-scene-wide {
+    display: block;
+  }
+}
+
+.chat-wallpaper-art:is(
+    [data-wallpaper="INTOUCH_DOODLE"],
+    [data-wallpaper="DOODLE_ORBIT"],
+    [data-wallpaper="DOODLE_CHAT"],
+    [data-wallpaper="DOODLE_NIGHT"]
+  )::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-color: color-mix(in oklab, var(--foreground) 72%, var(--primary));
+  opacity: 0.2;
+  mask-position: center;
+  mask-repeat: repeat;
+  mask-size: 180px 180px;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: 180px 180px;
+}
+
+.chat-wallpaper-art:is(
+    [data-wallpaper="INTOUCH_DOODLE"],
+    [data-wallpaper="DOODLE_ORBIT"],
+    [data-wallpaper="DOODLE_CHAT"],
+    [data-wallpaper="DOODLE_NIGHT"]
+  )[data-preview="true"]::before {
+  mask-size: 112px 112px;
+  -webkit-mask-size: 112px 112px;
+}
+
+.chat-wallpaper-art[data-wallpaper="INTOUCH_DOODLE"] {
+  background-color: color-mix(in oklab, var(--background) 94%, var(--primary));
+}
+
+.chat-wallpaper-art[data-wallpaper="INTOUCH_DOODLE"]::before {
+  mask-image: url("/wallpapers/doodle-intouch.svg");
+  -webkit-mask-image: url("/wallpapers/doodle-intouch.svg");
+}
+
+.chat-wallpaper-art[data-wallpaper="DOODLE_ORBIT"] {
+  background-color: color-mix(
+    in oklab,
+    var(--background) 95%,
+    var(--brand-glow)
+  );
+}
+
+.chat-wallpaper-art[data-wallpaper="DOODLE_ORBIT"]::before {
+  background-color: color-mix(
+    in oklab,
+    var(--brand-blue) 70%,
+    var(--foreground)
+  );
+  mask-image: url("/wallpapers/doodle-orbit.svg");
+  -webkit-mask-image: url("/wallpapers/doodle-orbit.svg");
+}
+
+.chat-wallpaper-art[data-wallpaper="DOODLE_CHAT"] {
+  background-color: color-mix(
+    in oklab,
+    var(--background) 95%,
+    var(--brand-orange)
+  );
+}
+
+.chat-wallpaper-art[data-wallpaper="DOODLE_CHAT"]::before {
+  background-color: color-mix(
+    in oklab,
+    var(--brand-orange) 52%,
+    var(--foreground)
+  );
+  mask-image: url("/wallpapers/doodle-chat.svg");
+  -webkit-mask-image: url("/wallpapers/doodle-chat.svg");
+}
+
+.chat-wallpaper-art[data-wallpaper="DOODLE_NIGHT"] {
+  background-color: #07101f;
+}
+
+.chat-wallpaper-art[data-wallpaper="DOODLE_NIGHT"]::before {
+  background-color: #8abce9;
+  mask-image: url("/wallpapers/doodle-night.svg");
+  -webkit-mask-image: url("/wallpapers/doodle-night.svg");
+}
+
+.chat-wallpaper-art[data-wallpaper="ABSTRACT_AURORA"] {
+  background-image:
+    radial-gradient(circle at 12% 22%, #33d8ff 0, transparent 38%),
+    radial-gradient(circle at 82% 70%, #6b5cff 0, transparent 42%),
+    linear-gradient(145deg, #09172d, #1e153c 58%, #071624);
+  background-size: 100% 100%;
+}
+
+.chat-wallpaper-art[data-wallpaper="ABSTRACT_SUNSET"] {
+  background-image:
+    radial-gradient(circle at 72% 25%, #ffb143 0, transparent 34%),
+    radial-gradient(circle at 18% 82%, #e34b3f 0, transparent 40%),
+    linear-gradient(145deg, #30122a, #7c2c38 48%, #13213b);
+  background-size: 100% 100%;
+}
+
+.chat-wallpaper-art[data-wallpaper="ABSTRACT_OCEAN"] {
+  background-image:
+    radial-gradient(ellipse at 50% 115%, #168fc2 0, transparent 52%),
+    linear-gradient(160deg, #041b36, #0b4568 52%, #071525);
+  background-size: 100% 100%;
+}
+
+.chat-wallpaper-art[data-wallpaper="ABSTRACT_PAPER"] {
+  background-color: #e8dfd2;
+  background-image:
+    linear-gradient(115deg, rgb(255 255 255 / 34%), transparent 42%),
+    repeating-linear-gradient(
+      0deg,
+      rgb(71 53 38 / 4%) 0 1px,
+      transparent 1px 5px
+    );
+  background-size: 100% 100%;
+}

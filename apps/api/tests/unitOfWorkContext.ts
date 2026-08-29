@@ -1,4 +1,5 @@
 import type { CategoryRepository } from "../src/modules/categories/category.repository.js";
+import type { ChatWallpaperRepository } from "../src/modules/chat-wallpapers/chat-wallpaper.repository.js";
 import type { ConversationParticipantRepository } from "../src/modules/conversations/conversation-participant.repository.js";
 import type { ConversationRepository } from "../src/modules/conversations/conversation.repository.js";
 import type { MessageRepository } from "../src/modules/message/message.repository.js";
@@ -33,6 +34,15 @@ const categories: CategoryRepository = {
   shiftPositions: async () => undefined,
   deleteById: async () => false,
   deleteByOrganizationId: async () => 0,
+};
+
+const chatWallpapers: ChatWallpaperRepository = {
+  findDefault: async () => null,
+  findForConversation: async () => null,
+  upsert: async () => unused(),
+  deleteForConversation: async () => false,
+  deleteByConversationId: async () => 0,
+  deleteByConversationIds: async () => 0,
 };
 
 const conversations: ConversationRepository = {
@@ -208,6 +218,7 @@ export const testMailFactory: MailOutboxJobFactory = {
 
 export const emptyCommunicationContext = {
   categories,
+  chatWallpapers,
   conversations,
   conversationParticipants,
   conversationReadStates,

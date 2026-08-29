@@ -11,6 +11,11 @@ export const queryKeys = {
     all: ["notifications"] as const,
     list: (status: string) => ["notifications", status] as const,
   },
+  chatWallpapers: {
+    default: ["chat-wallpapers", "default"] as const,
+    conversation: (conversationId: string) =>
+      ["chat-wallpapers", "conversations", conversationId] as const,
+  },
   categories: {
     list: (organizationId: string) =>
       ["organizations", organizationId, "categories"] as const,

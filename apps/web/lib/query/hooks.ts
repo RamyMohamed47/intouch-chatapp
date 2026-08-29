@@ -5,6 +5,7 @@ import type { OrganizationSearchQuery } from "@intouch/shared/search";
 import type { NotificationStatusValue } from "@intouch/shared/notifications";
 
 import { categoriesApi } from "@/lib/api/categories";
+import { chatWallpapersApi } from "@/lib/api/chat-wallpapers";
 import { conversationsApi } from "@/lib/api/conversations";
 import { membershipsApi } from "@/lib/api/memberships";
 import { messagesApi } from "@/lib/api/messages";
@@ -83,6 +84,19 @@ export const useConversation = (conversationId: string) =>
   useQuery({
     queryKey: queryKeys.conversations.detail(conversationId),
     queryFn: () => conversationsApi.get(conversationId),
+    enabled: Boolean(conversationId),
+  });
+
+export const useDefaultChatWallpaper = () =>
+  useQuery({
+    queryKey: queryKeys.chatWallpapers.default,
+    queryFn: () => chatWallpapersApi.getDefault(),
+  });
+
+export const useChatWallpaper = (conversationId: string) =>
+  useQuery({
+    queryKey: queryKeys.chatWallpapers.conversation(conversationId),
+    queryFn: () => chatWallpapersApi.getForConversation(conversationId),
     enabled: Boolean(conversationId),
   });
 

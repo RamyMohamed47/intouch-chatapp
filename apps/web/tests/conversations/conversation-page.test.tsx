@@ -168,6 +168,15 @@ vi.mock("@/lib/query/hooks", () => ({
     isPending: false,
     isError: false,
   }),
+  useChatWallpaper: () => ({
+    data: {
+      wallpaperId: "INTOUCH_DOODLE",
+      dimming: 35,
+      source: "DEFAULT",
+    },
+    isPending: false,
+    isError: false,
+  }),
   useMessages: () => ({
     data: {
       pages: [{ messages: mocks.state.messages, nextCursor: null }],

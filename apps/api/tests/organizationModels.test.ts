@@ -11,6 +11,7 @@ import OrganizationModel from "../src/modules/organizations/organization.model.j
 import MessageModel from "../src/modules/message/message.model.js";
 import MessageReactionModel from "../src/modules/message-reactions/message-reaction.model.js";
 import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
+import ChatWallpaperPreferenceModel from "../src/modules/chat-wallpapers/chat-wallpaper.model.js";
 
 describe("organization persistence indexes", () => {
   test("enforces unique organization slugs", () => {
@@ -129,5 +130,18 @@ describe("organization persistence indexes", () => {
             options.name === "read_receipts_by_conversation_high_water_mark",
         ),
     );
+  });
+
+  test("enforces one wallpaper preference per user and scope", () => {
+    const indexes = ChatWallpaperPreferenceModel.schema.indexes();
+    const uniquePreference = indexes.find(
+      ([, options]) => options.name === "unique_user_chat_wallpaper_preference",
+    );
+    const conversationCleanup = indexes.find(
+      ([, options]) => options.name === "chat_wallpapers_by_conversation",
+    );
+
+    assert.equal(uniquePreference?.[1].unique, true);
+    assert.ok(conversationCleanup);
   });
 });

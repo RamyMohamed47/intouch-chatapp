@@ -11,6 +11,7 @@
     "auth/**/*.ts",
     "common/**/*.ts",
     "categories/**/*.ts",
+    "chat-wallpapers/**/*.ts",
     "conversations/**/*.ts",
     "memberships/**/*.ts",
     "messages/**/*.ts",

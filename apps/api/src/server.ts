@@ -234,6 +234,8 @@ const app = createApp({
   authRouter: auth.router,
   categoryRouter: organizations.categoryRouter,
   conversationMessageRouter: organizations.conversationMessageRouter,
+  conversationChatWallpaperRouter:
+    organizations.conversationChatWallpaperRouter,
   conversationRouter: organizations.conversationRouter,
   directMessageRouter: organizations.directMessageRouter,
   invitationRouter: organizations.invitationRouter,
@@ -245,6 +247,7 @@ const app = createApp({
   organizationRouter: organizations.router,
   readReceiptRouter: organizations.readReceiptRouter,
   searchRouter: organizations.searchRouter,
+  userChatWallpaperRouter: organizations.userChatWallpaperRouter,
   trustProxy: config.trustProxy,
 });
 const server = http.createServer(app);

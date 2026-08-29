@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
 import { ConversationVisibility } from "@intouch/shared/conversations";
+import { ChatWallpaperId } from "@intouch/shared/chat-wallpapers";
 import { OrganizationVisibility } from "@intouch/shared/organizations";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
@@ -9,6 +10,8 @@ import mongoose from "mongoose";
 import CategoryModel from "../src/modules/categories/category.model.js";
 import createMongooseCategoryRepository from "../src/modules/categories/category.repository.js";
 import createCategoryService from "../src/modules/categories/category.service.js";
+import createMongooseChatWallpaperRepository from "../src/modules/chat-wallpapers/chat-wallpaper.repository.js";
+import ChatWallpaperPreferenceModel from "../src/modules/chat-wallpapers/chat-wallpaper.model.js";
 import createMongooseConversationActivityAudienceRepository from "../src/modules/conversation-activity/conversation-activity.repository.js";
 import ConversationParticipantModel from "../src/modules/conversations/conversation-participant.model.js";
 import createMongooseConversationParticipantRepository from "../src/modules/conversations/conversation-participant.repository.js";
@@ -59,6 +62,7 @@ before(async () => {
     MessageModel.syncIndexes(),
     MessageReactionModel.syncIndexes(),
     ConversationReadStateModel.syncIndexes(),
+    ChatWallpaperPreferenceModel.syncIndexes(),
     UserModel.syncIndexes(),
   ]);
 });
@@ -73,6 +77,7 @@ beforeEach(async () => {
     MessageModel.deleteMany({}).exec(),
     MessageReactionModel.deleteMany({}).exec(),
     ConversationReadStateModel.deleteMany({}).exec(),
+    ChatWallpaperPreferenceModel.deleteMany({}).exec(),
     UserModel.deleteMany({}).exec(),
   ]);
 });
@@ -502,6 +507,7 @@ describe("category and conversation transactions", () => {
             createMongooseConversationParticipantRepository(session);
           return work({
             categories: createMongooseCategoryRepository(session),
+            chatWallpapers: createMongooseChatWallpaperRepository(session),
             conversations: createMongooseConversationRepository(session),
             conversationParticipants: {
               ...participantRepository,
@@ -689,6 +695,12 @@ describe("category and conversation transactions", () => {
       lastReadMessageId: message.id,
       lastReadAt: new Date(),
     });
+    await createMongooseChatWallpaperRepository().upsert({
+      userId: ownerId,
+      conversationId: conversation.id,
+      wallpaperId: ChatWallpaperId.ABSTRACT_AURORA,
+      dimming: 30,
+    });
     await assert.rejects(
       categoryService.delete(ownerId, organization.id, category.id),
       /Category must be empty/,
@@ -697,6 +709,7 @@ describe("category and conversation transactions", () => {
     assert.equal(await MessageModel.countDocuments(), 0);
     assert.equal(await MessageReactionModel.countDocuments(), 0);
     assert.equal(await ConversationReadStateModel.countDocuments(), 0);
+    assert.equal(await ChatWallpaperPreferenceModel.countDocuments(), 0);
     await categoryService.delete(ownerId, organization.id, category.id);
     assert.equal(await CategoryModel.countDocuments(), 0);
   });
@@ -749,6 +762,13 @@ describe("category and conversation transactions", () => {
       emoji: "❤️",
     });
 
+    await createMongooseChatWallpaperRepository().upsert({
+      userId: ownerId,
+      conversationId: conversation.id,
+      wallpaperId: ChatWallpaperId.SCENERY_COAST,
+      dimming: 40,
+    });
+
     await organizationService.delete(ownerId, organization.id);
 
     assert.equal(await OrganizationModel.countDocuments(), 0);
@@ -757,5 +777,6 @@ describe("category and conversation transactions", () => {
     assert.equal(await ConversationParticipantModel.countDocuments(), 0);
     assert.equal(await MessageModel.countDocuments(), 0);
     assert.equal(await MessageReactionModel.countDocuments(), 0);
+    assert.equal(await ChatWallpaperPreferenceModel.countDocuments(), 0);
   });
 });

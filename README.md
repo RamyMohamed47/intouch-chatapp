@@ -79,6 +79,15 @@ To run both workflows explicitly:
 npm run check:all
 ```
 
+## Chat Wallpapers
+
+Authenticated users can choose a private chat wallpaper from the conversation
+header. InTouch bundles doodle, abstract, and scenery presets with adjustable
+dimming. A user default applies to chats without an override, while individual
+channel and direct-message overrides synchronize through MongoDB for future
+web and mobile clients. Wallpaper images remain client assets; the API stores
+only stable preset IDs and dimming values.
+
 ## Runtime
 
 The API reads `apps/api/config.env`. The path is resolved from the API package,

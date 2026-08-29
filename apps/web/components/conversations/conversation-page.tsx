@@ -31,6 +31,10 @@ import {
   type MessageListResponse,
   type MessageReadReceiptSummaryDto,
 } from "@intouch/shared/messages";
+import {
+  ChatWallpaperId,
+  ChatWallpaperSource,
+} from "@intouch/shared/chat-wallpapers";
 
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
@@ -43,6 +47,8 @@ import {
   shouldSendMessageFromKey,
 } from "@/components/conversations/conversation-interactions";
 import { TypingIndicator } from "@/components/conversations/typing-indicator";
+import { ChatWallpaperSurface } from "@/components/conversations/chat-wallpaper";
+import { ChatWallpaperDialog } from "@/components/conversations/chat-wallpaper-dialog";
 import { ComposerEmojiPicker } from "@/components/conversations/composer-emoji-picker";
 import {
   MessageReactionPicker,
@@ -76,6 +82,7 @@ import { useAuth } from "@/lib/auth/provider";
 import { messagesApi } from "@/lib/api/messages";
 import {
   useConversation,
+  useChatWallpaper,
   useMembers,
   useMessageReaders,
   useMessageContext,
@@ -200,6 +207,7 @@ export function ConversationPage({
   } = realtime;
   const organization = useOrganization(organizationId);
   const conversation = useConversation(conversationId);
+  const chatWallpaper = useChatWallpaper(conversationId);
   const messages = useMessages(conversationId, !anchorMessageId);
   const messageContext = useMessageContext(conversationId, anchorMessageId);
   const members = useMembers(organizationId);
@@ -230,6 +238,11 @@ export function ConversationPage({
       typeof document === "undefined" ||
       (document.visibilityState === "visible" && document.hasFocus()),
   );
+  const activeWallpaper = chatWallpaper.data ?? {
+    wallpaperId: ChatWallpaperId.INTOUCH_DOODLE,
+    dimming: 35,
+    source: ChatWallpaperSource.DEFAULT,
+  };
   const refreshSummaries = () =>
     Promise.all([
       queryClient.invalidateQueries({
@@ -662,6 +675,10 @@ export function ConversationPage({
         }
         actions={
           <>
+            <ChatWallpaperDialog
+              conversationId={conversationId}
+              wallpaper={activeWallpaper}
+            />
             {organization.data.currentUserRole === "OWNER" && (
               <InviteMemberDialog
                 organizationId={organizationId}
@@ -675,273 +692,277 @@ export function ConversationPage({
         }
       />
       <div className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea
-          className="min-h-0 flex-1"
-          viewportRef={messageViewportRef}
-          onViewportScroll={(event) => {
-            const viewport = event.currentTarget;
-            const nearBottom = isNearConversationBottom(viewport);
-            isNearBottomRef.current = nearBottom;
-            setNewestMessageVisible(
-              atLatestMessage && isNearConversationBottom(viewport, 1),
-            );
-          }}
-        >
-          <div className="mx-auto max-w-4xl p-5 md:p-8">
-            {anchorMessageId && (
-              <div className="mb-6 flex flex-col items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm sm:flex-row">
-                <span className="text-muted-foreground">
-                  Viewing a search result in its conversation context.
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={() => {
-                    const segment =
-                      expectedType === "CHANNEL"
-                        ? "channels"
-                        : "direct-messages";
-                    router.replace(
-                      `/app/${organizationId}/${segment}/${conversationId}`,
-                    );
-                  }}
-                >
-                  Jump to latest
-                </Button>
-              </div>
-            )}
-            {!anchorMessageId && messages.hasNextPage && (
-              <div className="mb-6 text-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full"
-                  disabled={messages.isFetchingNextPage}
-                  onClick={() => void loadEarlierMessages()}
-                >
-                  {messages.isFetchingNextPage
-                    ? "Loading..."
-                    : "Load earlier messages"}
-                </Button>
-              </div>
-            )}
-            {messageDataPending && (
-              <p className="text-center text-sm text-muted-foreground">
-                Loading messages...
-              </p>
-            )}
-            {messageDataError && (
-              <button
-                type="button"
-                onClick={() =>
-                  void (anchorMessageId
-                    ? messageContext.refetch()
-                    : messages.refetch())
-                }
-                className="w-full rounded-2xl border border-destructive/30 p-4 text-sm text-destructive"
-              >
-                Messages could not be loaded. Select to retry.
-              </button>
-            )}
-            <div className="grid gap-5">
-              {allMessages.map((message) => {
-                const sender = members.data?.find(
-                  (member) => member.user.id === message.senderId,
-                )?.user;
-                const own = message.senderId === user?.id;
-                const canDelete =
-                  !message.deletedAt &&
-                  (own ||
-                    (conversation.data.type === "CHANNEL" &&
-                      organization.data.currentUserRole === "OWNER"));
-                return (
-                  <article
-                    id={`message-${message.id}`}
-                    key={message.id}
-                    className={cn(
-                      "group flex gap-3 rounded-2xl transition duration-700",
-                      highlightedMessageId === message.id &&
-                        "bg-brand-orange/10 ring-2 ring-brand-orange/40 ring-offset-4 ring-offset-background",
-                    )}
-                  >
-                    <Avatar>
-                      <AvatarFallback>
-                        {initials(sender?.displayName ?? "User")}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1 rounded-2xl border border-border bg-background/30 p-4">
-                      <div className="flex items-center gap-2">
-                        <strong className="truncate text-sm">
-                          {sender?.displayName ?? "Member"}
-                        </strong>
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          {formatTime(message.createdAt)}
-                        </span>
-                        {message.editedAt && (
-                          <span className="text-[10px] text-muted-foreground">
-                            edited
-                          </span>
-                        )}
-                        <div className="ml-auto flex gap-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
-                          {!message.deletedAt && (
-                            <MessageReactionPicker
-                              currentReaction={message.currentUserReaction}
-                              disabled={
-                                mutateReaction.isPending &&
-                                mutateReaction.variables?.messageId ===
-                                  message.id
-                              }
-                              onSelect={(emoji) =>
-                                mutateReaction.mutate({
-                                  emoji,
-                                  messageId: message.id,
-                                  remove: message.currentUserReaction === emoji,
-                                })
-                              }
-                            />
-                          )}
-                          {own && !message.deletedAt && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label="Edit message"
-                              onClick={() => {
-                                setEditingId(message.id);
-                                setEditingContent(message.content ?? "");
-                              }}
-                            >
-                              <Pencil />
-                            </Button>
-                          )}
-                          {canDelete && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label="Delete message"
-                              disabled={deleteMessage.isPending}
-                              onClick={() => {
-                                deleteMessage.reset();
-                                setDeleteTarget(message);
-                              }}
-                            >
-                              <Trash2 />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      {editingId === message.id ? (
-                        <form
-                          className="mt-2 flex gap-2"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            const parsed = updateMessageSchema.safeParse({
-                              content: editingContent,
-                            });
-                            if (parsed.success) {
-                              editMessage.mutate({
-                                messageId: message.id,
-                                messageContent: parsed.data.content,
-                              });
-                            }
-                          }}
-                        >
-                          <Input
-                            value={editingContent}
-                            onChange={(event) =>
-                              setEditingContent(event.target.value)
-                            }
-                          />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            disabled={editMessage.isPending}
-                          >
-                            Save
-                          </Button>
-                        </form>
-                      ) : (
-                        <p
-                          className={
-                            message.deletedAt
-                              ? "mt-2 text-sm italic text-muted-foreground"
-                              : "mt-2 whitespace-pre-wrap text-sm leading-6"
-                          }
-                        >
-                          {message.deletedAt
-                            ? "Message deleted"
-                            : message.content}
-                        </p>
-                      )}
-                      <MessageReactionSummaries
-                        message={message}
-                        disabled={
-                          mutateReaction.isPending &&
-                          mutateReaction.variables?.messageId === message.id
-                        }
-                        onToggle={(emoji) =>
-                          mutateReaction.mutate({
-                            emoji,
-                            messageId: message.id,
-                            remove: message.currentUserReaction === emoji,
-                          })
-                        }
-                      />
-                      {own &&
-                        conversation.data.type === "DIRECT" &&
-                        message.id === latestOutgoingMessage?.id && (
-                          <p
-                            className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground"
-                            role="status"
-                            aria-live="polite"
-                            aria-label={
-                              latestOutgoingRead
-                                ? "Message read"
-                                : "Message sent"
-                            }
-                          >
-                            {latestOutgoingRead ? (
-                              <CheckCheck className="size-3" aria-hidden />
-                            ) : (
-                              <Check className="size-3" aria-hidden />
-                            )}
-                            {latestOutgoingRead ? "Read" : "Sent"}
-                          </p>
-                        )}
-                      {own &&
-                        conversation.data.type === "CHANNEL" &&
-                        message.id === latestOutgoingMessage?.id && (
-                          <ChannelReadReceiptStatus
-                            summary={channelReaders.data}
-                          />
-                        )}
-                    </div>
-                  </article>
-                );
-              })}
-              {!messageDataPending && allMessages.length === 0 && (
-                <div className="py-16 text-center">
-                  <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-                    {conversation.data.type === "CHANNEL" ? (
-                      <Hash />
-                    ) : (
-                      <MessageCircle />
-                    )}
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <ChatWallpaperSurface wallpaper={activeWallpaper} />
+          <ScrollArea
+            className="relative z-10 h-full bg-transparent"
+            viewportRef={messageViewportRef}
+            onViewportScroll={(event) => {
+              const viewport = event.currentTarget;
+              const nearBottom = isNearConversationBottom(viewport);
+              isNearBottomRef.current = nearBottom;
+              setNewestMessageVisible(
+                atLatestMessage && isNearConversationBottom(viewport, 1),
+              );
+            }}
+          >
+            <div className="mx-auto max-w-4xl p-5 md:p-8">
+              {anchorMessageId && (
+                <div className="mb-6 flex flex-col items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm sm:flex-row">
+                  <span className="text-muted-foreground">
+                    Viewing a search result in its conversation context.
                   </span>
-                  <h2 className="mt-5 text-xl font-semibold">
-                    Start the conversation
-                  </h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    The first message sets the context.
-                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => {
+                      const segment =
+                        expectedType === "CHANNEL"
+                          ? "channels"
+                          : "direct-messages";
+                      router.replace(
+                        `/app/${organizationId}/${segment}/${conversationId}`,
+                      );
+                    }}
+                  >
+                    Jump to latest
+                  </Button>
                 </div>
               )}
-              <div ref={messageEndRef} aria-hidden="true" />
+              {!anchorMessageId && messages.hasNextPage && (
+                <div className="mb-6 text-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    disabled={messages.isFetchingNextPage}
+                    onClick={() => void loadEarlierMessages()}
+                  >
+                    {messages.isFetchingNextPage
+                      ? "Loading..."
+                      : "Load earlier messages"}
+                  </Button>
+                </div>
+              )}
+              {messageDataPending && (
+                <p className="text-center text-sm text-muted-foreground">
+                  Loading messages...
+                </p>
+              )}
+              {messageDataError && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void (anchorMessageId
+                      ? messageContext.refetch()
+                      : messages.refetch())
+                  }
+                  className="w-full rounded-2xl border border-destructive/30 p-4 text-sm text-destructive"
+                >
+                  Messages could not be loaded. Select to retry.
+                </button>
+              )}
+              <div className="grid gap-5">
+                {allMessages.map((message) => {
+                  const sender = members.data?.find(
+                    (member) => member.user.id === message.senderId,
+                  )?.user;
+                  const own = message.senderId === user?.id;
+                  const canDelete =
+                    !message.deletedAt &&
+                    (own ||
+                      (conversation.data.type === "CHANNEL" &&
+                        organization.data.currentUserRole === "OWNER"));
+                  return (
+                    <article
+                      id={`message-${message.id}`}
+                      key={message.id}
+                      className={cn(
+                        "group flex gap-3 rounded-2xl transition duration-700",
+                        highlightedMessageId === message.id &&
+                          "bg-brand-orange/10 ring-2 ring-brand-orange/40 ring-offset-4 ring-offset-background",
+                      )}
+                    >
+                      <Avatar>
+                        <AvatarFallback>
+                          {initials(sender?.displayName ?? "User")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1 rounded-2xl border border-border bg-card/82 p-4 shadow-sm backdrop-blur-md">
+                        <div className="flex items-center gap-2">
+                          <strong className="truncate text-sm">
+                            {sender?.displayName ?? "Member"}
+                          </strong>
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            {formatTime(message.createdAt)}
+                          </span>
+                          {message.editedAt && (
+                            <span className="text-[10px] text-muted-foreground">
+                              edited
+                            </span>
+                          )}
+                          <div className="ml-auto flex gap-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
+                            {!message.deletedAt && (
+                              <MessageReactionPicker
+                                currentReaction={message.currentUserReaction}
+                                disabled={
+                                  mutateReaction.isPending &&
+                                  mutateReaction.variables?.messageId ===
+                                    message.id
+                                }
+                                onSelect={(emoji) =>
+                                  mutateReaction.mutate({
+                                    emoji,
+                                    messageId: message.id,
+                                    remove:
+                                      message.currentUserReaction === emoji,
+                                  })
+                                }
+                              />
+                            )}
+                            {own && !message.deletedAt && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label="Edit message"
+                                onClick={() => {
+                                  setEditingId(message.id);
+                                  setEditingContent(message.content ?? "");
+                                }}
+                              >
+                                <Pencil />
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label="Delete message"
+                                disabled={deleteMessage.isPending}
+                                onClick={() => {
+                                  deleteMessage.reset();
+                                  setDeleteTarget(message);
+                                }}
+                              >
+                                <Trash2 />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        {editingId === message.id ? (
+                          <form
+                            className="mt-2 flex gap-2"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              const parsed = updateMessageSchema.safeParse({
+                                content: editingContent,
+                              });
+                              if (parsed.success) {
+                                editMessage.mutate({
+                                  messageId: message.id,
+                                  messageContent: parsed.data.content,
+                                });
+                              }
+                            }}
+                          >
+                            <Input
+                              value={editingContent}
+                              onChange={(event) =>
+                                setEditingContent(event.target.value)
+                              }
+                            />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              disabled={editMessage.isPending}
+                            >
+                              Save
+                            </Button>
+                          </form>
+                        ) : (
+                          <p
+                            className={
+                              message.deletedAt
+                                ? "mt-2 text-sm italic text-muted-foreground"
+                                : "mt-2 whitespace-pre-wrap text-sm leading-6"
+                            }
+                          >
+                            {message.deletedAt
+                              ? "Message deleted"
+                              : message.content}
+                          </p>
+                        )}
+                        <MessageReactionSummaries
+                          message={message}
+                          disabled={
+                            mutateReaction.isPending &&
+                            mutateReaction.variables?.messageId === message.id
+                          }
+                          onToggle={(emoji) =>
+                            mutateReaction.mutate({
+                              emoji,
+                              messageId: message.id,
+                              remove: message.currentUserReaction === emoji,
+                            })
+                          }
+                        />
+                        {own &&
+                          conversation.data.type === "DIRECT" &&
+                          message.id === latestOutgoingMessage?.id && (
+                            <p
+                              className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground"
+                              role="status"
+                              aria-live="polite"
+                              aria-label={
+                                latestOutgoingRead
+                                  ? "Message read"
+                                  : "Message sent"
+                              }
+                            >
+                              {latestOutgoingRead ? (
+                                <CheckCheck className="size-3" aria-hidden />
+                              ) : (
+                                <Check className="size-3" aria-hidden />
+                              )}
+                              {latestOutgoingRead ? "Read" : "Sent"}
+                            </p>
+                          )}
+                        {own &&
+                          conversation.data.type === "CHANNEL" &&
+                          message.id === latestOutgoingMessage?.id && (
+                            <ChannelReadReceiptStatus
+                              summary={channelReaders.data}
+                            />
+                          )}
+                      </div>
+                    </article>
+                  );
+                })}
+                {!messageDataPending && allMessages.length === 0 && (
+                  <div className="py-16 text-center">
+                    <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+                      {conversation.data.type === "CHANNEL" ? (
+                        <Hash />
+                      ) : (
+                        <MessageCircle />
+                      )}
+                    </span>
+                    <h2 className="mt-5 text-xl font-semibold">
+                      Start the conversation
+                    </h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      The first message sets the context.
+                    </p>
+                  </div>
+                )}
+                <div ref={messageEndRef} aria-hidden="true" />
+              </div>
             </div>
-          </div>
-        </ScrollArea>
+          </ScrollArea>
+        </div>
 
         <div className="shrink-0 border-t border-border bg-card/80 p-4">
           <form onSubmit={submit} className="mx-auto max-w-4xl">

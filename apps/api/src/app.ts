@@ -17,6 +17,7 @@ export interface AppDependencies {
   authRouter?: Router;
   categoryRouter?: Router;
   conversationMessageRouter?: Router;
+  conversationChatWallpaperRouter?: Router;
   conversationRouter?: Router;
   directMessageRouter?: Router;
   invitationRouter?: Router;
@@ -28,6 +29,7 @@ export interface AppDependencies {
   organizationRouter?: Router;
   readReceiptRouter?: Router;
   searchRouter?: Router;
+  userChatWallpaperRouter?: Router;
   trustProxy?: boolean | number | string;
 }
 
@@ -37,6 +39,7 @@ const createApp = ({
   authRouter,
   categoryRouter,
   conversationMessageRouter,
+  conversationChatWallpaperRouter,
   conversationRouter,
   directMessageRouter,
   invitationRouter,
@@ -48,6 +51,7 @@ const createApp = ({
   organizationRouter,
   readReceiptRouter,
   searchRouter,
+  userChatWallpaperRouter,
   trustProxy = false,
 }: AppDependencies = {}) => {
   const app = express();
@@ -116,6 +120,10 @@ const createApp = ({
     app.use("/api/v1/conversations", conversationRouter);
   }
 
+  if (conversationChatWallpaperRouter) {
+    app.use("/api/v1/conversations", conversationChatWallpaperRouter);
+  }
+
   if (conversationMessageRouter) {
     app.use("/api/v1/conversations", conversationMessageRouter);
   }
@@ -142,6 +150,10 @@ const createApp = ({
 
   if (searchRouter) {
     app.use("/api/v1/organizations", searchRouter);
+  }
+
+  if (userChatWallpaperRouter) {
+    app.use("/api/v1/users", userChatWallpaperRouter);
   }
 
   app.use((req, _res, next) => {
