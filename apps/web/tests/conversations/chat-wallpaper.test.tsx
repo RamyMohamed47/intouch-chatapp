@@ -22,7 +22,16 @@ describe("ChatWallpaperSurface", () => {
     for (const wallpaperId of sceneryIds) {
       const assets = sceneryWallpaperAssets[wallpaperId];
       expect(assets).toBeDefined();
-      for (const path of Object.values(assets ?? {})) {
+      if (!assets) throw new Error(`Missing scenery assets for ${wallpaperId}`);
+      const paths = [
+        assets.portrait,
+        assets.standard,
+        assets.wide,
+        assets.portraitThumbnail,
+        assets.standardThumbnail,
+        assets.wideThumbnail,
+      ];
+      for (const path of paths) {
         expect(
           existsSync(resolve(process.cwd(), "public", path.slice(1))),
         ).toBe(true);
