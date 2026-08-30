@@ -63,7 +63,7 @@ describe("frontend content security policy", () => {
       "connect-src 'self' https://api.intouch.example wss://api.intouch.example https://account-id.r2.cloudflarestorage.com",
     );
     expect(directive(policy, "img-src")).toBe(
-      "img-src 'self' data: blob: https://account-id.r2.cloudflarestorage.com",
+      "img-src 'self' data: blob: https://lh3.googleusercontent.com https://account-id.r2.cloudflarestorage.com",
     );
     expect(policy).not.toContain("*.r2.cloudflarestorage.com");
   });

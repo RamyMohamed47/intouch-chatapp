@@ -84,7 +84,7 @@ export default async function RootLayout({
         <Providers>
           <TooltipProvider>{children}</TooltipProvider>
         </Providers>
-        {process.env.NODE_ENV === "production" && <Analytics />}
+        {process.env.VERCEL === "1" && <Analytics />}
       </body>
     </html>
   );

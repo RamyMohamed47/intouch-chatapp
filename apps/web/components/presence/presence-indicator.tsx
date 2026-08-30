@@ -98,7 +98,7 @@ export function PresenceIndicator({
           render={
             <AvatarBadge
               aria-label={presentation.accessibleLabel}
-              className={cn(dotClassName, className)}
+              className={cn("size-2.5", dotClassName, className)}
               role="status"
             />
           }

@@ -38,6 +38,7 @@ export const buildContentSecurityPolicy = ({
     "'self'",
     "data:",
     "blob:",
+    "https://lh3.googleusercontent.com",
     ...(normalizedStorageOrigin ? [normalizedStorageOrigin] : []),
   ];
   const directives = [

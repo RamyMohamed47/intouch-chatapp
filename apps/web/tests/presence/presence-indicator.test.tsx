@@ -79,6 +79,7 @@ describe("PresenceIndicator", () => {
     );
 
     const indicator = screen.getByRole("status", { name: "Lina is online" });
+    expect(indicator).toHaveClass("size-2.5", "bg-status");
     await user.hover(indicator);
     expect(await screen.findByText("Online")).toBeInTheDocument();
   });
