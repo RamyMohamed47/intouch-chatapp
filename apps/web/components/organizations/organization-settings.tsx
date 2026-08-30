@@ -4,17 +4,19 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
+  Camera,
   Hash,
   Lock,
   MailPlus,
   Plus,
+  RefreshCw,
   Save,
   Trash2,
   UserMinus,
   UserPlus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type SubmitEvent } from "react";
+import { useRef, useState, type SubmitEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   createCategorySchema,
@@ -27,8 +29,10 @@ import {
   type ChannelConversationDto,
 } from "@intouch/shared/conversations";
 import { updateOrganizationSchema } from "@intouch/shared/organizations";
+import { UploadPurpose } from "@intouch/shared/uploads";
 
 import { InviteMemberForm } from "@/components/memberships/invite-member-form";
+import { OrganizationAvatar } from "@/components/organizations/organization-avatar";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
@@ -52,8 +56,13 @@ import {
   useOrganization,
   useParticipants,
 } from "@/lib/query/hooks";
-import { invalidateOrganizationNavigation } from "@/lib/query/invalidate";
+import {
+  invalidateOrganizationBranding,
+  invalidateOrganizationNavigation,
+} from "@/lib/query/invalidate";
 import { queryKeys } from "@/lib/query/keys";
+import { prepareSquareImage } from "@/lib/uploads/square-image";
+import { useUploadQueue } from "@/lib/uploads/use-upload-queue";
 import { getFormString } from "@/lib/utils";
 
 const firstIssue = (error: { issues: { message: string }[] }) =>
@@ -65,6 +74,155 @@ function Notice({ message }: { message: string | null }) {
       <FormError>{message}</FormError>
     </div>
   ) : null;
+}
+
+function OrganizationLogoSettings({
+  organizationId,
+  name,
+  logoAssetId,
+}: {
+  organizationId: string;
+  name: string;
+  logoAssetId: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [processingError, setProcessingError] = useState<string | null>(null);
+  const queue = useUploadQueue({
+    purpose: UploadPurpose.ORGANIZATION_LOGO,
+    maximumFiles: 1,
+  });
+  const item = queue.items[0];
+  const apply = useMutation({
+    mutationFn: (uploadId: string) =>
+      organizationsApi.setLogo(organizationId, uploadId),
+    onSuccess: async () => {
+      queue.clear();
+      await invalidateOrganizationBranding(queryClient, organizationId);
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => organizationsApi.removeLogo(organizationId),
+    onSuccess: () =>
+      invalidateOrganizationBranding(queryClient, organizationId),
+  });
+
+  const selectFile = async (file?: File) => {
+    if (!file) return;
+    setProcessingError(null);
+    queue.clear({ cancelUploads: true });
+    try {
+      queue.addFiles([await prepareSquareImage(file, "organization.webp")]);
+    } catch (error) {
+      setProcessingError(
+        error instanceof Error ? error.message : "Logo processing failed",
+      );
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-border bg-background/30 p-5">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        onChange={(event) => void selectFile(event.target.files?.[0])}
+      />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        {item?.previewUrl ? (
+          <img
+            src={item.previewUrl}
+            alt="New organization logo preview"
+            className="size-20 rounded-2xl object-cover"
+          />
+        ) : (
+          <OrganizationAvatar
+            name={name}
+            logoAssetId={logoAssetId}
+            className="size-20"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Organization logo</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Private 512 by 512 WebP, visible through short-lived authorized
+            links.
+          </p>
+          {item && (
+            <div className="mt-3">
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-[width]"
+                  style={{ width: `${item.progress}%` }}
+                />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {item.completed
+                  ? "Ready to apply"
+                  : `${item.progress}% uploaded`}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => inputRef.current?.click()}
+        >
+          <Camera aria-hidden /> {logoAssetId ? "Replace logo" : "Choose logo"}
+        </Button>
+        {item?.status === "error" && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => queue.retry(item.localId)}
+          >
+            <RefreshCw aria-hidden /> Retry upload
+          </Button>
+        )}
+        {item?.completed && (
+          <Button
+            type="button"
+            disabled={apply.isPending}
+            onClick={() => apply.mutate(item.completed!.uploadId)}
+          >
+            {apply.isPending ? "Applying..." : "Apply logo"}
+          </Button>
+        )}
+        {item && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => queue.remove(item.localId)}
+          >
+            Cancel selection
+          </Button>
+        )}
+        {logoAssetId && !item && (
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate()}
+          >
+            <Trash2 aria-hidden />
+            {remove.isPending ? "Removing..." : "Remove logo"}
+          </Button>
+        )}
+      </div>
+      {(processingError || item?.error || apply.error || remove.error) && (
+        <FormError className="mt-4">
+          {processingError ??
+            item?.error ??
+            apply.error?.message ??
+            remove.error?.message}
+        </FormError>
+      )}
+    </section>
+  );
 }
 
 function GeneralSettings({ organizationId }: { organizationId: string }) {
@@ -96,10 +254,8 @@ function GeneralSettings({ organizationId }: { organizationId: string }) {
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const logoUrl = getFormString(data, "logoUrl").trim();
     const parsed = updateOrganizationSchema.safeParse({
       name: getFormString(data, "name"),
-      logoUrl: logoUrl || null,
       visibility: getFormString(data, "visibility"),
     });
     if (!parsed.success) {
@@ -117,21 +273,17 @@ function GeneralSettings({ organizationId }: { organizationId: string }) {
       >
         <h2 className="text-lg font-semibold">Organization identity</h2>
         <div className="mt-6 grid gap-5">
+          <OrganizationLogoSettings
+            organizationId={organizationId}
+            name={organization.data.name}
+            logoAssetId={organization.data.logoAssetId}
+          />
           <div className="grid gap-2">
             <Label htmlFor="organization-name">Name</Label>
             <Input
               id="organization-name"
               name="name"
               defaultValue={organization.data.name}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="organization-logo">Logo URL</Label>
-            <Input
-              id="organization-logo"
-              name="logoUrl"
-              type="url"
-              defaultValue={organization.data.logoUrl ?? ""}
             />
           </div>
           <div className="grid gap-2">

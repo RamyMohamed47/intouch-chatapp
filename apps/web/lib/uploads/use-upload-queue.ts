@@ -62,13 +62,13 @@ export function useUploadQueue({
       size: item.file.size,
     };
     const request =
-      purpose === UploadPurpose.AVATAR
-        ? { purpose, files: [descriptor] as [typeof descriptor] }
-        : {
+      purpose === UploadPurpose.MESSAGE_ATTACHMENT
+        ? {
             purpose,
             conversationId: conversationId ?? "",
             files: [descriptor],
-          };
+          }
+        : { purpose, files: [descriptor] as [typeof descriptor] };
     const parsed = createUploadSchema.safeParse(request);
     if (!parsed.success) {
       update(item.localId, {

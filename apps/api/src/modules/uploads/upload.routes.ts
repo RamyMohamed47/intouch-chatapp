@@ -1,6 +1,8 @@
 import express, { type RequestHandler } from "express";
 import {
   MAX_UPLOAD_FILE_BYTES,
+  MAX_SQUARE_IMAGE_UPLOAD_BYTES,
+  UploadPurpose,
   assetParamsSchema,
   createUploadSchema,
   uploadParamsSchema,
@@ -20,17 +22,28 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const rejectOversizedUploads: RequestHandler = (req, _res, next) => {
   const body: unknown = req.body;
   const files = isRecord(body) ? body.files : undefined;
+  const purpose = isRecord(body) ? body.purpose : undefined;
+  const maximumBytes =
+    purpose === UploadPurpose.AVATAR ||
+    purpose === UploadPurpose.ORGANIZATION_LOGO
+      ? MAX_SQUARE_IMAGE_UPLOAD_BYTES
+      : MAX_UPLOAD_FILE_BYTES;
   const oversized =
     Array.isArray(files) &&
     files.some(
       (file) =>
         isRecord(file) &&
         typeof file.size === "number" &&
-        file.size > MAX_UPLOAD_FILE_BYTES,
+        file.size > maximumBytes,
     );
   next(
     oversized
-      ? new UploadValidationError("File must not exceed 25 MB", 413)
+      ? new UploadValidationError(
+          maximumBytes === MAX_SQUARE_IMAGE_UPLOAD_BYTES
+            ? "Image must not exceed 5 MB"
+            : "File must not exceed 25 MB",
+          413,
+        )
       : undefined,
   );
 };

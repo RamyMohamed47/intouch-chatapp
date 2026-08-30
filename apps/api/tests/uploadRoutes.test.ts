@@ -106,4 +106,48 @@ describe("upload routes", () => {
     assert.equal(valid.status, 201);
     assert.equal(createCalls, 1);
   });
+
+  test("enforces the 5 MB organization-logo limit before controller work", async () => {
+    const before = createCalls;
+    const oversized = await fetch(`${baseUrl}/api/v1/uploads`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        purpose: UploadPurpose.ORGANIZATION_LOGO,
+        files: [
+          {
+            fileName: "organization.webp",
+            contentType: "image/webp",
+            size: 5 * 1024 * 1024 + 1,
+          },
+        ],
+      }),
+    });
+    assert.equal(oversized.status, 413);
+    assert.deepEqual(await oversized.json(), {
+      success: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Image must not exceed 5 MB",
+      },
+    });
+    assert.equal(createCalls, before);
+
+    const valid = await fetch(`${baseUrl}/api/v1/uploads`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        purpose: UploadPurpose.ORGANIZATION_LOGO,
+        files: [
+          {
+            fileName: "organization.webp",
+            contentType: "image/webp",
+            size: 1024,
+          },
+        ],
+      }),
+    });
+    assert.equal(valid.status, 201);
+    assert.equal(createCalls, before + 1);
+  });
 });

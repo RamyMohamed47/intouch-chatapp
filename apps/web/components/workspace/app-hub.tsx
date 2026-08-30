@@ -14,7 +14,7 @@ import type { MessageCoreDto } from "@intouch/shared/messages";
 
 import { BrandLockup } from "@/components/brand/brand";
 import { PageHeader } from "@/components/workspace/page-header";
-import { initials } from "@/components/workspace/app-shell";
+import { OrganizationAvatar } from "@/components/organizations/organization-avatar";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -147,9 +147,11 @@ export function AppHub() {
                       className="group relative overflow-hidden rounded-[1.75rem] border border-border bg-background/35 p-5 shadow-lg transition hover:-translate-y-0.5 hover:border-primary/35"
                     >
                       <div className="relative flex items-start gap-3">
-                        <span className="grid size-12 place-items-center rounded-2xl border border-border bg-card text-sm font-bold">
-                          {initials(organization.name)}
-                        </span>
+                        <OrganizationAvatar
+                          name={organization.name}
+                          logoAssetId={organization.logoAssetId}
+                          className="size-12"
+                        />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
                             <strong className="truncate">

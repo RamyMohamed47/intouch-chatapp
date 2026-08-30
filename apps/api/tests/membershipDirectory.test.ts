@@ -45,6 +45,7 @@ describe("membershipDirectoryService", () => {
         findByIds: async () => [],
         lockForMutation: async () => true,
         updateById: async () => null,
+        replaceLogoAsset: async () => null,
         deleteById: async () => false,
       },
       policy: createOrganizationPolicy(),

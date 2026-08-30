@@ -29,6 +29,13 @@ export interface OrganizationRepository {
     organizationId: string,
     input: UpdateOrganizationRecordInput,
   ): Promise<OrganizationRecord | null>;
+  replaceLogoAsset(
+    organizationId: string,
+    logoAssetId: string | null,
+  ): Promise<{
+    organization: OrganizationRecord;
+    previousLogoAssetId: string | null;
+  } | null>;
   deleteById(organizationId: string): Promise<boolean>;
 }
 
@@ -50,8 +57,8 @@ const toOrganizationRecord = (
     updatedAt: organization.updatedAt,
   };
 
-  if (organization.logoUrl) {
-    record.logoUrl = organization.logoUrl;
+  if (organization.logoAssetId) {
+    record.logoAssetId = organization.logoAssetId.toString();
   }
 
   return record;
@@ -129,17 +136,11 @@ const createMongooseOrganizationRepository = (
     if (input.name !== undefined) {
       set.name = input.name;
     }
-    if (input.logoUrl !== undefined && input.logoUrl !== null) {
-      set.logoUrl = input.logoUrl;
-    }
     if (input.visibility !== undefined) {
       set.visibility = input.visibility;
     }
 
-    const update = {
-      ...(Object.keys(set).length > 0 ? { $set: set } : {}),
-      ...(input.logoUrl === null ? { $unset: { logoUrl: 1 } } : {}),
-    };
+    const update = { $set: set };
     const query = OrganizationModel.findByIdAndUpdate(organizationId, update, {
       new: true,
       runValidators: true,
@@ -151,6 +152,30 @@ const createMongooseOrganizationRepository = (
 
     const organization = await query.exec();
     return organization ? toOrganizationRecord(organization) : null;
+  },
+
+  async replaceLogoAsset(organizationId, logoAssetId) {
+    const existingQuery =
+      OrganizationModel.findById(organizationId).lean<OrganizationDocument>();
+    if (session) existingQuery.session(session);
+    const existing = await existingQuery.exec();
+    if (!existing) return null;
+
+    const update = logoAssetId
+      ? { $set: { logoAssetId } }
+      : { $unset: { logoAssetId: 1 } };
+    const query = OrganizationModel.findByIdAndUpdate(organizationId, update, {
+      new: true,
+      runValidators: true,
+    }).lean<OrganizationDocument>();
+    if (session) query.session(session);
+    const organization = await query.exec();
+    if (!organization) return null;
+
+    return {
+      organization: toOrganizationRecord(organization),
+      previousLogoAssetId: existing.logoAssetId?.toString() ?? null,
+    };
   },
 
   async deleteById(organizationId) {

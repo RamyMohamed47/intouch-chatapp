@@ -75,14 +75,17 @@ export const validateDeclaredFile = (
   if (!allowedForExtension?.includes(contentType)) {
     throw new UploadValidationError("File type is not supported");
   }
-  if (purpose === UploadPurpose.AVATAR) {
+  if (
+    purpose === UploadPurpose.AVATAR ||
+    purpose === UploadPurpose.ORGANIZATION_LOGO
+  ) {
     if (!avatarTypes.has(contentType)) {
       throw new UploadValidationError(
-        "Avatar must be a JPEG, PNG, or WebP image",
+        "Image must be a JPEG, PNG, or WebP image",
       );
     }
     if (size > 5 * 1024 * 1024) {
-      throw new UploadValidationError("Avatar must not exceed 5 MB", 413);
+      throw new UploadValidationError("Image must not exceed 5 MB", 413);
     }
   }
 };

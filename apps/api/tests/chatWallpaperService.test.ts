@@ -110,6 +110,7 @@ const organizations: OrganizationRepository = {
   findByIds: async () => [],
   lockForMutation: async () => true,
   updateById: async () => null,
+  replaceLogoAsset: async () => null,
   deleteById: async () => false,
 };
 

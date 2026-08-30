@@ -23,6 +23,7 @@ import type { ChannelConversationDto } from "@intouch/shared/conversations";
 import { BrandMark, BrandSignature } from "@/components/brand/brand";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { OrganizationAvatar } from "@/components/organizations/organization-avatar";
 import { OrganizationSearchDialog } from "@/components/search/organization-search-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { UserAvatar } from "@/components/users/user-avatar";
@@ -247,7 +248,11 @@ function WorkspaceNavigation({
                 />
               }
             >
-              {initials(organization.name)}
+              <OrganizationAvatar
+                name={organization.name}
+                logoAssetId={organization.logoAssetId}
+                className="size-9"
+              />
             </TooltipTrigger>
             <TooltipContent>{organization.name}</TooltipContent>
           </Tooltip>

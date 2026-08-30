@@ -39,6 +39,24 @@ export const organizationsApi = {
       )
     ).organization;
   },
+  async setLogo(organizationId: string, uploadId: string) {
+    return (
+      await apiRequest(
+        `/api/v1/organizations/${organizationId}/logo`,
+        organizationResponseSchema,
+        { method: "PUT", body: JSON.stringify({ uploadId }) },
+      )
+    ).organization;
+  },
+  async removeLogo(organizationId: string) {
+    return (
+      await apiRequest(
+        `/api/v1/organizations/${organizationId}/logo`,
+        organizationResponseSchema,
+        { method: "DELETE" },
+      )
+    ).organization;
+  },
   remove(organizationId: string) {
     return apiRequest(
       `/api/v1/organizations/${organizationId}`,

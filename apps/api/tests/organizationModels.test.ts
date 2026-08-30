@@ -21,6 +21,11 @@ describe("organization persistence indexes", () => {
 
     assert.ok(slugIndex);
     assert.equal(slugIndex[1].unique, true);
+    assert.equal(
+      OrganizationModel.schema.path("logoAssetId").options.ref,
+      "StoredAsset",
+    );
+    assert.equal(OrganizationModel.schema.path("logoUrl"), undefined);
   });
 
   test("enforces one membership per user and one owner per organization", () => {

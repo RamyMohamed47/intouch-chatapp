@@ -13,7 +13,7 @@ const conversationId = "507f1f77bcf86cd799439011";
 const uploadId = "507f1f77bcf86cd799439012";
 
 describe("shared upload contracts", () => {
-  test("accepts strict avatar and message upload requests", () => {
+  test("accepts strict avatar, organization logo, and message uploads", () => {
     assert.deepEqual(
       createUploadSchema.parse({
         purpose: UploadPurpose.AVATAR,
@@ -30,6 +30,19 @@ describe("shared upload contracts", () => {
     );
     assert.equal(
       createUploadSchema.safeParse({
+        purpose: UploadPurpose.ORGANIZATION_LOGO,
+        files: [
+          {
+            fileName: "organization.webp",
+            contentType: "image/webp",
+            size: 512,
+          },
+        ],
+      }).success,
+      true,
+    );
+    assert.equal(
+      createUploadSchema.safeParse({
         purpose: UploadPurpose.MESSAGE_ATTACHMENT,
         conversationId,
         files: [
@@ -42,6 +55,20 @@ describe("shared upload contracts", () => {
 
   test("enforces purpose-specific counts, size limits, IDs, and strictness", () => {
     const file = { fileName: "image.png", contentType: "image/png", size: 1 };
+    assert.equal(
+      createUploadSchema.safeParse({
+        purpose: UploadPurpose.ORGANIZATION_LOGO,
+        files: [file, file],
+      }).success,
+      false,
+    );
+    assert.equal(
+      createUploadSchema.safeParse({
+        purpose: UploadPurpose.ORGANIZATION_LOGO,
+        files: [{ ...file, size: 5 * 1024 * 1024 + 1 }],
+      }).success,
+      false,
+    );
     assert.equal(
       createUploadSchema.safeParse({
         purpose: UploadPurpose.AVATAR,

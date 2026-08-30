@@ -152,7 +152,9 @@ export const createUploadService = ({
             stagingKey: `staging/${userId}/${objectId}`,
             objectKey: conversation
               ? `organizations/${conversation.organizationId}/conversations/${conversation.id}/${objectId}`
-              : `avatars/${userId}/${objectId}`,
+              : input.purpose === UploadPurpose.ORGANIZATION_LOGO
+                ? `organization-logos/${objectId}`
+                : `avatars/${userId}/${objectId}`,
             fileName: file.fileName,
             contentType: file.contentType,
             size: file.size,

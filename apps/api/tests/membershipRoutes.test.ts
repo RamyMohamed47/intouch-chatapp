@@ -47,6 +47,7 @@ const invitation: PublicInvitation = {
     id: organizationId,
     name: "Product Team",
     slug: "product-team",
+    logoAssetId: null,
     visibility: OrganizationVisibility.PRIVATE,
   },
 };

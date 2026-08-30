@@ -308,7 +308,7 @@ paths:
     get:
       tags: [Uploads]
       summary: Create an authorized private-asset URL
-      description: Returns a ten-minute R2 GET URL. Message assets require current conversation access; avatars require authentication.
+      description: Returns a ten-minute R2 GET URL. Message assets require current conversation access; avatars and organization logos require authentication.
       parameters:
         - $ref: "#/components/parameters/AssetId"
       responses:
@@ -462,6 +462,45 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /organizations/{id}/logo:
+    put:
+      tags: [Organizations, Uploads]
+      summary: Set an uploaded organization logo
+      description: Owner-only. Atomically claims one completed ORGANIZATION_LOGO upload and schedules the previous logo for deletion.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationResourceId"
+      requestBody:
+        $ref: "#/components/requestBodies/UpdateOrganizationLogoRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/OrganizationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Organizations, Uploads]
+      summary: Remove the uploaded organization logo
+      description: Owner-only. Clears the logo reference and schedules the private asset for deletion.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationResourceId"
+      responses:
+        "200":
+          $ref: "#/components/responses/OrganizationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   #
   # Memberships
   #
@@ -1462,6 +1501,14 @@ components:
           schema:
             $ref: "#/components/schemas/UpdateOrganizationInput"
 
+    UpdateOrganizationLogoRequest:
+      description: Claim one completed organization-logo upload.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateOrganizationLogoInput"
+
     InviteMemberRequest:
       description: Defined by shared Zod contract.
       required: true
@@ -2418,6 +2465,23 @@ components:
           minimum: 1
           maximum: 26214400
 
+    SquareImageUploadFileDescriptor:
+      type: object
+      additionalProperties: false
+      required: [fileName, contentType, size]
+      properties:
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        size:
+          type: integer
+          minimum: 1
+          maximum: 5242880
+
     CreateUploadInput:
       oneOf:
         - type: object
@@ -2432,7 +2496,20 @@ components:
               minItems: 1
               maxItems: 1
               items:
-                $ref: "#/components/schemas/UploadFileDescriptor"
+                $ref: "#/components/schemas/SquareImageUploadFileDescriptor"
+        - type: object
+          additionalProperties: false
+          required: [purpose, files]
+          properties:
+            purpose:
+              type: string
+              const: ORGANIZATION_LOGO
+            files:
+              type: array
+              minItems: 1
+              maxItems: 1
+              items:
+                $ref: "#/components/schemas/SquareImageUploadFileDescriptor"
         - type: object
           additionalProperties: false
           required: [purpose, conversationId, files]
@@ -2453,6 +2530,15 @@ components:
         propertyName: purpose
 
     UpdateAvatarInput:
+      type: object
+      additionalProperties: false
+      required: [uploadId]
+      properties:
+        uploadId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+
+    UpdateOrganizationLogoInput:
       type: object
       additionalProperties: false
       required: [uploadId]
@@ -2877,7 +2963,7 @@ components:
 
     InvitationOrganizationSummary:
       type: object
-      required: [id, name, slug, visibility]
+      required: [id, name, slug, logoAssetId, visibility]
       properties:
         id:
           type: string
@@ -2885,9 +2971,9 @@ components:
           type: string
         slug:
           type: string
-        logoUrl:
-          type: string
-          format: uri
+        logoAssetId:
+          type: [string, "null"]
+          pattern: "^[a-fA-F0-9]{24}$"
         visibility:
           type: string
           enum: [PRIVATE, PUBLIC]
@@ -2923,15 +3009,15 @@ components:
     NotificationOrganizationSummary:
       type: object
       additionalProperties: false
-      required: [id, name]
+      required: [id, name, logoAssetId]
       properties:
         id:
           type: string
         name:
           type: string
-        logoUrl:
-          type: string
-          format: uri
+        logoAssetId:
+          type: [string, "null"]
+          pattern: "^[a-fA-F0-9]{24}$"
 
     NotificationBase:
       type: object
@@ -3030,10 +3116,9 @@ components:
           minLength: 1
           maxLength: 100
           pattern: ".*\\S.*"
-        logoUrl:
+        logoUploadId:
           type: string
-          format: uri
-          pattern: "^https?://"
+          pattern: "^[a-fA-F0-9]{24}$"
         visibility:
           type: string
           enum: [PRIVATE, PUBLIC]
@@ -3049,12 +3134,6 @@ components:
           minLength: 1
           maxLength: 100
           pattern: ".*\\S.*"
-        logoUrl:
-          oneOf:
-            - type: string
-              format: uri
-              pattern: "^https?://"
-            - type: "null"
         visibility:
           type: string
           enum: [PRIVATE, PUBLIC]
@@ -3062,7 +3141,7 @@ components:
     PublicOrganization:
       type: object
       required:
-        [id, name, slug, visibility, currentUserRole, createdAt, updatedAt]
+        [id, name, slug, logoAssetId, visibility, currentUserRole, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -3070,9 +3149,9 @@ components:
           type: string
         slug:
           type: string
-        logoUrl:
-          type: string
-          format: uri
+        logoAssetId:
+          type: [string, "null"]
+          pattern: "^[a-fA-F0-9]{24}$"
         visibility:
           type: string
           enum: [PRIVATE, PUBLIC]

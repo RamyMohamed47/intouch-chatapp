@@ -1,6 +1,7 @@
 import type {
   CreateOrganizationInput,
   OrganizationVisibilityType,
+  UpdateOrganizationLogoInput,
   UpdateOrganizationInput,
 } from "@intouch/shared/organizations";
 
@@ -9,7 +10,7 @@ import type { MembershipRole } from "../memberships/index.js";
 export interface Organization {
   name: string;
   slug: string;
-  logoUrl?: string;
+  logoAssetId?: string;
   visibility: OrganizationVisibilityType;
   mutationVersion?: number;
   createdAt: Date;
@@ -20,21 +21,27 @@ export interface OrganizationRecord extends Organization {
   id: string;
 }
 
-export interface PublicOrganization extends OrganizationRecord {
+export interface PublicOrganization extends Omit<
+  OrganizationRecord,
+  "logoAssetId"
+> {
+  logoAssetId: string | null;
   currentUserRole: MembershipRole | null;
 }
 
 export interface CreateOrganizationRecordInput {
   name: string;
   slug: string;
-  logoUrl?: string;
   visibility: OrganizationVisibilityType;
 }
 
 export interface UpdateOrganizationRecordInput {
   name?: string | undefined;
-  logoUrl?: string | null | undefined;
   visibility?: OrganizationVisibilityType | undefined;
 }
 
-export type { CreateOrganizationInput, UpdateOrganizationInput };
+export type {
+  CreateOrganizationInput,
+  UpdateOrganizationInput,
+  UpdateOrganizationLogoInput,
+};

@@ -75,14 +75,15 @@ Single Database + organizationId
 
 ## Private Assets
 
-- Profile avatars and message attachments are stored in a private Cloudflare
-  R2 bucket; MongoDB stores ownership and lifecycle metadata only.
+- Profile avatars, organization logos, and message attachments are stored in a
+  private Cloudflare R2 bucket; MongoDB stores ownership and lifecycle metadata
+  only.
 - Browsers upload with short-lived presigned `PUT` URLs. The API verifies file
   signatures before conditional promotion and authorizes every short-lived
   read URL.
-- Message creation and avatar replacement claim completed uploads inside
-  MongoDB transactions. Asynchronous cleanup removes canceled, abandoned,
-  replaced, and deleted objects.
+- Message creation, avatar replacement, and organization-logo assignment claim
+  completed uploads inside MongoDB transactions. Asynchronous cleanup removes
+  canceled, abandoned, replaced, and deleted objects.
 - Public DTOs and Socket.IO events expose opaque asset IDs and safe metadata,
   never bucket keys, credentials, ETags, or presigned URLs.
 

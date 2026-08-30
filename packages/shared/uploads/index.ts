@@ -1,5 +1,6 @@
 export {
   MAX_UPLOAD_FILE_BYTES,
+  MAX_SQUARE_IMAGE_UPLOAD_BYTES,
   assetParamsSchema,
   createUploadSchema,
   updateAvatarSchema,

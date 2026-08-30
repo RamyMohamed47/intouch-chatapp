@@ -44,6 +44,7 @@ describe("InviteMemberForm", () => {
                 name: "InTouch",
                 slug: "intouch",
                 visibility: "PRIVATE",
+                logoAssetId: null,
               },
             },
           });

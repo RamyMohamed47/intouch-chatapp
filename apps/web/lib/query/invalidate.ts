@@ -25,6 +25,19 @@ export const invalidateOrganizationNavigation = (
     }),
   ]);
 
+export const invalidateOrganizationBranding = (
+  queryClient: QueryClient,
+  organizationId: string,
+) =>
+  Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.organizations.all }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.organizations.detail(organizationId),
+    }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.invitations.all }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all }),
+  ]);
+
 export const invalidateConversation = (
   queryClient: QueryClient,
   conversationId: string,

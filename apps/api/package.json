@@ -14,6 +14,7 @@
     "search:index:sync": "tsx src/migrations/syncSearchIndexes.ts",
     "storage:cors:sync": "tsx src/migrations/syncStorageCors.ts",
     "migrate:remove-user-status": "tsx src/migrations/removeLegacyUserStatus.ts",
+    "migrate:remove-organization-logo-urls": "tsx src/migrations/removeLegacyOrganizationLogoUrls.ts",
     "migrate:verify-existing-users": "tsx src/migrations/verifyExistingUsers.ts"
   },
   "dependencies": {

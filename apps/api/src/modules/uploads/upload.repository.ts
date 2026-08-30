@@ -92,6 +92,12 @@ export interface StoredAssetRepository {
     ownerUserId: string,
     now: Date,
   ): Promise<StoredAssetRecord | null>;
+  claimOrganizationLogo(input: {
+    assetId: string;
+    ownerUserId: string;
+    organizationId: string;
+    now: Date;
+  }): Promise<StoredAssetRecord | null>;
   markMessageAssetsForDeletion(messageId: string): Promise<number>;
   markConversationAssetsForDeletion(conversationId: string): Promise<number>;
   markOrganizationAssetsForDeletion(organizationId: string): Promise<number>;
@@ -187,6 +193,7 @@ export const createMongooseStoredAssetRepository = (
       {
         $match: {
           organizationId,
+          purpose: "MESSAGE_ATTACHMENT" satisfies UploadPurposeValue,
           status: { $in: activeStatuses },
         },
       },
@@ -341,6 +348,29 @@ export const createMongooseStoredAssetRepository = (
       },
       {
         $set: { status: StoredAssetStatus.READY },
+        $unset: { expiresAt: 1 },
+      },
+      { new: true },
+    ).lean<StoredAssetDocument>();
+    if (session) query.session(session);
+    const asset = await query.exec();
+    return asset ? toRecord(asset) : null;
+  },
+
+  async claimOrganizationLogo(input) {
+    const query = StoredAssetModel.findOneAndUpdate(
+      {
+        _id: input.assetId,
+        ownerUserId: input.ownerUserId,
+        purpose: "ORGANIZATION_LOGO" satisfies UploadPurposeValue,
+        status: StoredAssetStatus.PROMOTED,
+        expiresAt: { $gt: input.now },
+      },
+      {
+        $set: {
+          status: StoredAssetStatus.READY,
+          organizationId: input.organizationId,
+        },
         $unset: { expiresAt: 1 },
       },
       { new: true },

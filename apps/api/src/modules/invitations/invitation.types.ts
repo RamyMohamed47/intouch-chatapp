@@ -29,7 +29,7 @@ export interface InvitationOrganizationSummary {
   id: string;
   name: string;
   slug: string;
-  logoUrl?: string;
+  logoAssetId: string | null;
   visibility: OrganizationVisibilityType;
 }
 

@@ -77,6 +77,7 @@ const createAssetRepository = (
   markClaimedForDeletion: async () => false,
   claimForMessage: async () => [],
   claimAvatar: async () => null,
+  claimOrganizationLogo: async () => null,
   markMessageAssetsForDeletion: async () => 0,
   markConversationAssetsForDeletion: async () => 0,
   markOrganizationAssetsForDeletion: async () => 0,
@@ -96,6 +97,7 @@ const createOrganizationRepository = (): OrganizationRepository => ({
   findByIds: async () => [],
   lockForMutation: async () => true,
   updateById: async () => null,
+  replaceLogoAsset: async () => null,
   deleteById: async () => false,
 });
 
@@ -256,6 +258,47 @@ describe("upload service", () => {
       }),
       UploadQuotaExceededError,
     );
+  });
+
+  test("issues organization logo uploads under immutable private keys", async () => {
+    let objectKey = "";
+    const assets = createAssetRepository({
+      createMany: async (inputs) =>
+        inputs.map((input) => {
+          objectKey = input.objectKey;
+          return {
+            id: uploadId,
+            ownerUserId: input.ownerUserId,
+            purpose: input.purpose,
+            status: StoredAssetStatus.PENDING,
+            stagingKey: input.stagingKey,
+            objectKey: input.objectKey,
+            fileName: input.fileName,
+            declaredContentType: input.contentType,
+            declaredSize: input.size,
+            expiresAt: input.expiresAt,
+            cleanupAttempts: 0,
+            cleanupAvailableAt: fixedNow,
+            createdAt: fixedNow,
+            updatedAt: fixedNow,
+          };
+        }),
+    });
+
+    const result = await createService({ assets }).create(userId, {
+      purpose: UploadPurpose.ORGANIZATION_LOGO,
+      files: [
+        {
+          fileName: "organization.webp",
+          contentType: "image/webp",
+          size: 1024,
+        },
+      ],
+    });
+
+    assert.match(objectKey, /^organization-logos\/[0-9a-f-]+$/i);
+    assert.equal(objectKey.includes(userId), false);
+    assert.equal(result.uploadTickets.length, 1);
   });
 
   test("verifies, conditionally promotes, and idempotently completes uploads", async () => {

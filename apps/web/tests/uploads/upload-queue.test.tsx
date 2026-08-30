@@ -86,4 +86,31 @@ describe("useUploadQueue", () => {
     expect(result.current.items).toHaveLength(0);
     expect(cancel).toHaveBeenCalledWith("507f1f77bcf86cd799439011");
   });
+
+  it("creates organization-logo tickets without conversation fields", async () => {
+    const { result } = renderHook(() =>
+      useUploadQueue({
+        purpose: UploadPurpose.ORGANIZATION_LOGO,
+        maximumFiles: 1,
+      }),
+    );
+
+    act(() => {
+      result.current.addFiles([
+        new File(["logo"], "organization.webp", { type: "image/webp" }),
+      ]);
+    });
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create).toHaveBeenCalledWith({
+      purpose: UploadPurpose.ORGANIZATION_LOGO,
+      files: [
+        {
+          fileName: "organization.webp",
+          contentType: "image/webp",
+          size: 4,
+        },
+      ],
+    });
+  });
 });

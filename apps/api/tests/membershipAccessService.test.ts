@@ -42,6 +42,10 @@ const createService = (
     findByIds: async () => [organization],
     lockForMutation: async () => true,
     updateById: async () => organization,
+    replaceLogoAsset: async () => ({
+      organization,
+      previousLogoAssetId: null,
+    }),
     deleteById: async () => true,
   };
   const memberships: MembershipService = {

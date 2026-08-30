@@ -201,6 +201,7 @@ const assets: StoredAssetRepository = {
   markClaimedForDeletion: async () => false,
   claimForMessage: async () => [],
   claimAvatar: async () => null,
+  claimOrganizationLogo: async () => null,
   markMessageAssetsForDeletion: async () => 0,
   markConversationAssetsForDeletion: async () => 0,
   markOrganizationAssetsForDeletion: async () => 0,
@@ -260,6 +261,7 @@ const organizations: OrganizationRepository = {
   findByIds: async () => [],
   lockForMutation: async () => true,
   updateById: async () => null,
+  replaceLogoAsset: async () => null,
   deleteById: async () => false,
 };
 

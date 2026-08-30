@@ -54,13 +54,10 @@ const toPublicInvitation = (
       id: organization.id,
       name: organization.name,
       slug: organization.slug,
+      logoAssetId: organization.logoAssetId ?? null,
       visibility: organization.visibility,
     },
   };
-
-  if (organization.logoUrl) {
-    result.organization.logoUrl = organization.logoUrl;
-  }
 
   return result;
 };

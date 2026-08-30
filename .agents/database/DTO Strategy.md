@@ -75,3 +75,5 @@ their intended ticket/access response. Message DTOs embed safe attachment
 metadata; clients resolve private bytes separately through the authorized
 asset-access resource. `avatarAssetId` is nullable in public-user DTOs and is
 resolved the same way, while `avatarUrl` remains an optional external fallback.
+Organization DTOs expose nullable `logoAssetId`; external organization logo
+URLs are not accepted or returned.

@@ -1,10 +1,20 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Building2, Globe2, Lock } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Camera,
+  Globe2,
+  Lock,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type SubmitEvent } from "react";
+import { useRef, useState, type SubmitEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createOrganizationSchema } from "@intouch/shared/organizations";
+import { UploadPurpose } from "@intouch/shared/uploads";
 
 import { PageHeader } from "@/components/workspace/page-header";
 import { Button } from "@/components/ui/button";
@@ -16,16 +26,26 @@ import { Select } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/client";
 import { organizationsApi } from "@/lib/api/organizations";
 import { queryKeys } from "@/lib/query/keys";
+import { prepareSquareImage } from "@/lib/uploads/square-image";
+import { useUploadQueue } from "@/lib/uploads/use-upload-queue";
 import { getFormString } from "@/lib/utils";
 
 export function NewOrganizationPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [processingError, setProcessingError] = useState<string | null>(null);
+  const logoQueue = useUploadQueue({
+    purpose: UploadPurpose.ORGANIZATION_LOGO,
+    maximumFiles: 1,
+  });
+  const logo = logoQueue.items[0];
   const createOrganization = useMutation({
     mutationFn: (input: Parameters<typeof organizationsApi.create>[0]) =>
       organizationsApi.create(input),
     onSuccess: async (organization) => {
+      logoQueue.clear();
       await queryClient.invalidateQueries({
         queryKey: queryKeys.organizations.all,
       });
@@ -36,10 +56,9 @@ export function NewOrganizationPage() {
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const logoUrl = getFormString(form, "logoUrl").trim();
     const parsed = createOrganizationSchema.safeParse({
       name: getFormString(form, "name"),
-      ...(logoUrl ? { logoUrl } : {}),
+      ...(logo?.completed ? { logoUploadId: logo.completed.uploadId } : {}),
       visibility: getFormString(form, "visibility") as "PRIVATE" | "PUBLIC",
     });
     if (!parsed.success) {
@@ -58,6 +77,23 @@ export function NewOrganizationPage() {
         ),
     });
   };
+
+  const selectLogo = async (file?: File) => {
+    if (!file) return;
+    setProcessingError(null);
+    logoQueue.clear({ cancelUploads: true });
+    try {
+      logoQueue.addFiles([await prepareSquareImage(file, "organization.webp")]);
+    } catch (processingFailure) {
+      setProcessingError(
+        processingFailure instanceof Error
+          ? processingFailure.message
+          : "Logo processing failed",
+      );
+    }
+  };
+
+  const logoIsNotReady = Boolean(logo && !logo.completed);
 
   return (
     <>
@@ -118,16 +154,75 @@ export function NewOrganizationPage() {
                   autoFocus
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="logoUrl">Logo URL</Label>
-                <Input
-                  id="logoUrl"
-                  name="logoUrl"
-                  type="url"
-                  placeholder="https://example.com/logo.png"
+              <div className="grid gap-3">
+                <Label htmlFor="organization-logo">Organization logo</Label>
+                <input
+                  ref={logoInputRef}
+                  id="organization-logo"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  onChange={(event) => void selectLogo(event.target.files?.[0])}
                 />
+                {!logo ? (
+                  <button
+                    type="button"
+                    className="flex min-h-28 items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/30 text-sm text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                    onClick={() => logoInputRef.current?.click()}
+                  >
+                    <Camera className="size-5 text-primary" aria-hidden />
+                    Choose an optional logo
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-4 rounded-2xl border border-border bg-background/30 p-4">
+                    {logo.previewUrl && (
+                      <img
+                        src={logo.previewUrl}
+                        alt="Organization logo preview"
+                        className="size-16 rounded-2xl object-cover"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {logo.file.name}
+                      </p>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full bg-primary transition-[width]"
+                          style={{ width: `${logo.progress}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {logo.completed
+                          ? "Ready to use"
+                          : `${logo.progress}% uploaded`}
+                      </p>
+                    </div>
+                    {logo.status === "error" && (
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Retry logo upload"
+                        onClick={() => logoQueue.retry(logo.localId)}
+                      >
+                        <RefreshCw aria-hidden />
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Remove selected logo"
+                      onClick={() => logoQueue.remove(logo.localId)}
+                    >
+                      <X aria-hidden />
+                    </Button>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  Optional. HTTP and HTTPS URLs are supported.
+                  JPEG, PNG, or WebP. The image is privately cropped to 512 by
+                  512 pixels before upload.
                 </p>
               </div>
               <div className="grid gap-2">
@@ -143,12 +238,14 @@ export function NewOrganizationPage() {
                   </option>
                 </Select>
               </div>
-              {error && <FormError>{error}</FormError>}
+              {(processingError || logo?.error || error) && (
+                <FormError>{processingError ?? logo?.error ?? error}</FormError>
+              )}
               <Button
                 type="submit"
                 size="lg"
                 className="mt-2 h-11 rounded-xl"
-                disabled={createOrganization.isPending}
+                disabled={createOrganization.isPending || logoIsNotReady}
               >
                 {createOrganization.isPending
                   ? "Creating..."

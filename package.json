@@ -44,6 +44,7 @@
     "search:index:sync": "npm run search:index:sync --workspace @intouch/api",
     "storage:cors:sync": "npm run storage:cors:sync --workspace @intouch/api",
     "migrate:remove-user-status": "npm run migrate:remove-user-status --workspace @intouch/api",
+    "migrate:remove-organization-logo-urls": "npm run migrate:remove-organization-logo-urls --workspace @intouch/api",
     "migrate:verify-existing-users": "npm run migrate:verify-existing-users --workspace @intouch/api",
     "format": "prettier . --write",
     "format:check": "prettier . --check",

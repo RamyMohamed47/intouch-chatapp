@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const MAX_UPLOAD_FILE_BYTES = 25 * 1024 * 1024;
+export const MAX_SQUARE_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 const mongoIdSchema = z
   .string()
@@ -9,6 +10,7 @@ const mongoIdSchema = z
 export const UploadPurpose = {
   AVATAR: "AVATAR",
   MESSAGE_ATTACHMENT: "MESSAGE_ATTACHMENT",
+  ORGANIZATION_LOGO: "ORGANIZATION_LOGO",
 } as const;
 
 export const uploadPurposeSchema = z.enum(UploadPurpose);
@@ -21,11 +23,22 @@ export const uploadFileDescriptorSchema = z
   })
   .strict();
 
+const squareImageFileDescriptorSchema = uploadFileDescriptorSchema.refine(
+  ({ size }) => size <= MAX_SQUARE_IMAGE_UPLOAD_BYTES,
+  "Image must not exceed 5 MB",
+);
+
 export const createUploadSchema = z.discriminatedUnion("purpose", [
   z
     .object({
       purpose: z.literal(UploadPurpose.AVATAR),
-      files: z.tuple([uploadFileDescriptorSchema]),
+      files: z.tuple([squareImageFileDescriptorSchema]),
+    })
+    .strict(),
+  z
+    .object({
+      purpose: z.literal(UploadPurpose.ORGANIZATION_LOGO),
+      files: z.tuple([squareImageFileDescriptorSchema]),
     })
     .strict(),
   z

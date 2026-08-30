@@ -264,7 +264,11 @@ describe("authenticated conversation sockets", () => {
           displayName: "Lina Hassan",
           avatarAssetId: null,
         },
-        organization: { id: organizationId, name: "Northstar" },
+        organization: {
+          id: organizationId,
+          name: "Northstar",
+          logoAssetId: null,
+        },
         conversationId: firstConversationId,
         latestMessageId: "507f1f77bcf86cd799439072",
         messageCount: 1,

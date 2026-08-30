@@ -14,19 +14,14 @@ const organizationNameSchema = z
   .min(1, "Organization name is required")
   .max(100, "Organization name must be at most 100 characters");
 
-const logoUrlSchema = z
+const mongoIdSchema = z
   .string()
-  .trim()
-  .url("Logo URL must be a valid URL")
-  .refine((value) => {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
-  }, "Logo URL must use HTTP or HTTPS");
+  .regex(/^[a-f\d]{24}$/i, "Must be a valid MongoDB ID");
 
 export const createOrganizationSchema = z
   .object({
     name: organizationNameSchema,
-    logoUrl: logoUrlSchema.optional(),
+    logoUploadId: mongoIdSchema.optional(),
     visibility: z
       .enum([OrganizationVisibility.PRIVATE, OrganizationVisibility.PUBLIC])
       .default(OrganizationVisibility.PRIVATE),
@@ -36,7 +31,6 @@ export const createOrganizationSchema = z
 export const updateOrganizationSchema = z
   .object({
     name: organizationNameSchema.optional(),
-    logoUrl: logoUrlSchema.nullable().optional(),
     visibility: z
       .enum([OrganizationVisibility.PRIVATE, OrganizationVisibility.PUBLIC])
       .optional(),
@@ -47,5 +41,12 @@ export const updateOrganizationSchema = z
     "At least one organization field is required",
   );
 
+export const updateOrganizationLogoSchema = z
+  .object({ uploadId: mongoIdSchema })
+  .strict();
+
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;
+export type UpdateOrganizationLogoInput = z.infer<
+  typeof updateOrganizationLogoSchema
+>;

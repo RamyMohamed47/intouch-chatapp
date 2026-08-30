@@ -8,6 +8,7 @@ import type { OrganizationController } from "./organization.controller.js";
 import {
   createOrganizationSchema,
   organizationIdParamsSchema,
+  updateOrganizationLogoSchema,
   updateOrganizationSchema,
 } from "./organization.schemas.js";
 
@@ -22,6 +23,14 @@ const createOrganizationRouter = (
     .route("/")
     .get(controller.list)
     .post(validateBody(createOrganizationSchema), controller.create);
+  router
+    .route("/:id/logo")
+    .put(
+      validateParams(organizationIdParamsSchema),
+      validateBody(updateOrganizationLogoSchema),
+      controller.setLogo,
+    )
+    .delete(validateParams(organizationIdParamsSchema), controller.removeLogo);
   router
     .route("/:id")
     .get(validateParams(organizationIdParamsSchema), controller.getById)

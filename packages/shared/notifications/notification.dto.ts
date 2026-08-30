@@ -17,7 +17,7 @@ const notificationOrganizationDtoSchema = z
   .object({
     id: identifierDtoSchema,
     name: z.string(),
-    logoUrl: z.string().url().optional(),
+    logoAssetId: identifierDtoSchema.nullable(),
   })
   .strict();
 

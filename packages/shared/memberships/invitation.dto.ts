@@ -7,7 +7,7 @@ export const invitationOrganizationSummaryDtoSchema = z.object({
   id: identifierDtoSchema,
   name: z.string(),
   slug: z.string(),
-  logoUrl: z.string().url().optional(),
+  logoAssetId: identifierDtoSchema.nullable(),
   visibility: z.enum(OrganizationVisibility),
 });
 

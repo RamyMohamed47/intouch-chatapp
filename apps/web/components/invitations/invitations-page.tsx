@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { membershipsApi } from "@/lib/api/memberships";
 import { useInvitations } from "@/lib/query/hooks";
 import { queryKeys } from "@/lib/query/keys";
-import { initials } from "@/components/workspace/app-shell";
+import { OrganizationAvatar } from "@/components/organizations/organization-avatar";
 
 export function InvitationsPage() {
   const queryClient = useQueryClient();
@@ -97,9 +97,11 @@ export function InvitationsPage() {
                     >
                       <div className="absolute -top-16 -right-16 size-48 rounded-full bg-primary/10 blur-3xl" />
                       <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start">
-                        <span className="grid size-14 shrink-0 place-items-center rounded-2xl border border-border bg-card text-sm font-bold">
-                          {initials(organization.name)}
-                        </span>
+                        <OrganizationAvatar
+                          name={organization.name}
+                          logoAssetId={organization.logoAssetId}
+                          className="size-14"
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h2 className="text-xl font-semibold">

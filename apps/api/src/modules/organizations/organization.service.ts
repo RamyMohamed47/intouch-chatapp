@@ -39,6 +39,7 @@ export interface OrganizationServiceDependencies {
   maxSlugAttempts?: number;
   realtime?: ConversationRealtime;
   notificationDelivery?: Pick<NotificationService, "publishDeleted">;
+  now?: () => Date;
 }
 
 const normalizeSlug = (name: string) => {
@@ -64,15 +65,12 @@ const withCurrentUserRole = (
     id: organization.id,
     name: organization.name,
     slug: organization.slug,
+    logoAssetId: organization.logoAssetId ?? null,
     visibility: organization.visibility,
     currentUserRole: membership?.role ?? null,
     createdAt: organization.createdAt,
     updatedAt: organization.updatedAt,
   };
-
-  if (organization.logoUrl) {
-    result.logoUrl = organization.logoUrl;
-  }
 
   return result;
 };
@@ -86,6 +84,7 @@ const createOrganizationService = ({
   maxSlugAttempts = DEFAULT_MAX_SLUG_ATTEMPTS,
   realtime,
   notificationDelivery = { publishDeleted: () => undefined },
+  now = () => new Date(),
 }: OrganizationServiceDependencies) => ({
   async create(userId: string, input: CreateOrganizationInput) {
     const baseSlug = normalizeSlug(input.name);
@@ -98,16 +97,35 @@ const createOrganizationService = ({
 
       try {
         return await unitOfWork.run(async (context) => {
-          const organization = await context.organizations.create({
+          let organization = await context.organizations.create({
             name: input.name,
             slug,
-            ...(input.logoUrl ? { logoUrl: input.logoUrl } : {}),
             visibility: input.visibility,
           });
           const membership = await context.memberships.createOwner(
             userId,
             organization.id,
           );
+
+          if (input.logoUploadId) {
+            const claimed = await context.assets.claimOrganizationLogo({
+              assetId: input.logoUploadId,
+              ownerUserId: userId,
+              organizationId: organization.id,
+              now: now(),
+            });
+            if (!claimed) {
+              throw new OrganizationConflictError(
+                "Organization logo upload is incomplete, expired, or already used",
+              );
+            }
+            const updated = await context.organizations.replaceLogoAsset(
+              organization.id,
+              claimed.id,
+            );
+            if (!updated) throw new OrganizationNotFoundError();
+            organization = updated.organization;
+          }
 
           return withCurrentUserRole(organization, membership);
         });
@@ -185,6 +203,72 @@ const createOrganizationService = ({
       }
 
       return withCurrentUserRole(updatedOrganization, membership);
+    });
+  },
+
+  async setLogo(userId: string, organizationId: string, uploadId: string) {
+    return unitOfWork.run(async (context) => {
+      const organization = await context.organizations.findById(organizationId);
+      const membership = await context.memberships.findForUser(
+        userId,
+        organizationId,
+      );
+      policy.assertOwner(organization, membership);
+      if (!(await context.organizations.lockForMutation(organizationId))) {
+        throw new OrganizationNotFoundError();
+      }
+
+      const claimed = await context.assets.claimOrganizationLogo({
+        assetId: uploadId,
+        ownerUserId: userId,
+        organizationId,
+        now: now(),
+      });
+      if (!claimed) {
+        throw new OrganizationConflictError(
+          "Organization logo upload is incomplete, expired, or already used",
+        );
+      }
+      const updated = await context.organizations.replaceLogoAsset(
+        organizationId,
+        claimed.id,
+      );
+      if (!updated) throw new OrganizationNotFoundError();
+      if (
+        updated.previousLogoAssetId &&
+        updated.previousLogoAssetId !== claimed.id
+      ) {
+        await context.assets.markClaimedForDeletion(
+          updated.previousLogoAssetId,
+        );
+      }
+      return withCurrentUserRole(updated.organization, membership);
+    });
+  },
+
+  async removeLogo(userId: string, organizationId: string) {
+    return unitOfWork.run(async (context) => {
+      const organization = await context.organizations.findById(organizationId);
+      const membership = await context.memberships.findForUser(
+        userId,
+        organizationId,
+      );
+      policy.assertOwner(organization, membership);
+      if (!(await context.organizations.lockForMutation(organizationId))) {
+        throw new OrganizationNotFoundError();
+      }
+
+      const updated = await context.organizations.replaceLogoAsset(
+        organizationId,
+        null,
+      );
+      if (!updated) throw new OrganizationNotFoundError();
+      if (updated.previousLogoAssetId) {
+        await context.assets.markClaimedForDeletion(
+          updated.previousLogoAssetId,
+        );
+      }
+      return withCurrentUserRole(updated.organization, membership);
     });
   },
 

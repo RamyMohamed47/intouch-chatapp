@@ -1,10 +1,15 @@
 import {
   createOrganizationSchema,
+  updateOrganizationLogoSchema,
   updateOrganizationSchema,
 } from "@intouch/shared/organizations";
 import { z } from "zod";
 
-export { createOrganizationSchema, updateOrganizationSchema };
+export {
+  createOrganizationSchema,
+  updateOrganizationLogoSchema,
+  updateOrganizationSchema,
+};
 
 export const organizationIdParamsSchema = z
   .object({

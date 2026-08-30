@@ -16,7 +16,10 @@ const organizationSchema = new Schema<Organization>(
       required: true,
       trim: true,
     },
-    logoUrl: String,
+    logoAssetId: {
+      type: Schema.Types.ObjectId,
+      ref: "StoredAsset",
+    },
     visibility: {
       type: String,
       enum: Object.values(OrganizationVisibility),

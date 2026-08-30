@@ -92,7 +92,8 @@ only stable preset IDs and dimming values.
 
 ## Private File Uploads
 
-Profile avatars and message attachments use a private Cloudflare R2 bucket.
+Profile avatars, organization logos, and message attachments use a private
+Cloudflare R2 bucket.
 The API reserves quota and returns five-minute, content-type-bound presigned
 `PUT` URLs; the browser uploads directly, then asks the API to verify and
 promote the object. Clients never receive R2 credentials or permanent public
@@ -101,9 +102,19 @@ URLs. Authorized reads use ten-minute presigned `GET` URLs.
 Messages accept up to five 25 MB attachments. Supported formats are JPEG, PNG,
 WebP, GIF, PDF, UTF-8 text, CSV, DOCX, XLSX, and PPTX. Archives, executables,
 SVG, macro-enabled Office files, and mismatched signatures are rejected.
-Attachment claims and avatar replacement participate in the same MongoDB
-transaction as their domain mutation. Deletions are asynchronous through the
-durable leased cleanup worker.
+Attachment claims, avatar replacement, and organization-logo assignment
+participate in the same MongoDB transaction as their domain mutation. Avatars
+and organization logos are cropped in the browser to metadata-free 512x512
+WebP images and limited to 5 MB. Deletions are asynchronous through the durable
+leased cleanup worker.
+
+Organization creation accepts an optional completed logo upload ID. Owners can
+replace or remove logos later through organization settings. External logo URLs
+are unsupported; after deploying this change, remove legacy fields once with:
+
+```bash
+npm run migrate:remove-organization-logo-urls
+```
 
 ## Runtime
 

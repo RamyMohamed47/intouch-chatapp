@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { OrganizationVisibility } from "@intouch/shared/organizations";
+import { UploadPurpose } from "@intouch/shared/uploads";
 
 import type { InvitationRepository } from "../src/modules/invitations/index.js";
 import {
@@ -21,11 +22,36 @@ import createOrganizationPolicy from "../src/modules/organizations/organization.
 import createOrganizationService from "../src/modules/organizations/organization.service.js";
 import type { OrganizationRecord } from "../src/modules/organizations/organization.types.js";
 import type { OrganizationUnitOfWork } from "../src/modules/organizations/organization.unit-of-work.js";
+import type { StoredAssetRepository } from "../src/modules/uploads/upload.repository.js";
+import {
+  StoredAssetStatus,
+  type StoredAssetRecord,
+} from "../src/modules/uploads/upload.types.js";
 import { emptyCommunicationContext } from "./unitOfWorkContext.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const organizationId = "507f1f77bcf86cd799439012";
 const now = new Date("2026-07-30T00:00:00.000Z");
+const logoUploadId = "507f1f77bcf86cd799439099";
+
+const logoAsset = (): StoredAssetRecord => ({
+  id: logoUploadId,
+  ownerUserId: userId,
+  organizationId,
+  purpose: UploadPurpose.ORGANIZATION_LOGO,
+  status: StoredAssetStatus.READY,
+  objectKey: "organization-logos/random",
+  fileName: "organization.webp",
+  declaredContentType: "image/webp",
+  declaredSize: 1024,
+  verifiedContentType: "image/webp",
+  verifiedSize: 1024,
+  kind: "IMAGE",
+  cleanupAttempts: 0,
+  cleanupAvailableAt: now,
+  createdAt: now,
+  updatedAt: now,
+});
 
 const organization = (
   overrides: Partial<OrganizationRecord> = {},
@@ -59,13 +85,16 @@ const createOrganizationRepository = (
   updateById: async (_id, input) =>
     organization({
       ...(input.name === undefined ? {} : { name: input.name }),
-      ...(input.logoUrl === undefined || input.logoUrl === null
-        ? {}
-        : { logoUrl: input.logoUrl }),
       ...(input.visibility === undefined
         ? {}
         : { visibility: input.visibility }),
     }),
+  replaceLogoAsset: async (_id, logoAssetId) => ({
+    organization: organization({
+      ...(logoAssetId ? { logoAssetId } : {}),
+    }),
+    previousLogoAssetId: null,
+  }),
   deleteById: async () => true,
   ...overrides,
 });
@@ -98,6 +127,7 @@ const invitations: InvitationRepository = {
 const createUnitOfWork = (
   organizations: OrganizationRepository,
   memberships: MembershipService,
+  assets: StoredAssetRepository = emptyCommunicationContext.assets,
 ): OrganizationUnitOfWork => ({
   run: (work) =>
     work({
@@ -105,6 +135,7 @@ const createUnitOfWork = (
       organizations,
       memberships,
       invitations,
+      assets,
     }),
 });
 
@@ -180,6 +211,43 @@ describe("organization service", () => {
     assert.equal(result.slug, "creme-brulee-deadbeef");
   });
 
+  test("claims an optional logo in the organization creation unit of work", async () => {
+    const events: string[] = [];
+    const organizations = createOrganizationRepository({
+      replaceLogoAsset: async (_id, assetId) => {
+        events.push(`logo:${assetId}`);
+        return {
+          organization: organization(assetId ? { logoAssetId: assetId } : {}),
+          previousLogoAssetId: null,
+        };
+      },
+    });
+    const memberships = createMemberships();
+    const assets: StoredAssetRepository = {
+      ...emptyCommunicationContext.assets,
+      claimOrganizationLogo: async (input) => {
+        events.push(`claim:${input.assetId}:${input.organizationId}`);
+        return logoAsset();
+      },
+    };
+
+    const result = await createService(
+      organizations,
+      memberships,
+      createUnitOfWork(organizations, memberships, assets),
+    ).create(userId, {
+      name: "Product Team",
+      visibility: OrganizationVisibility.PRIVATE,
+      logoUploadId,
+    });
+
+    assert.deepEqual(events, [
+      `claim:${logoUploadId}:${organizationId}`,
+      `logo:${logoUploadId}`,
+    ]);
+    assert.equal(result.logoAssetId, logoUploadId);
+  });
+
   test("lists only organizations represented by the user's memberships", async () => {
     const member = membership(MembershipRole.MEMBER);
     const organizations = createOrganizationRepository({
@@ -239,17 +307,70 @@ describe("organization service", () => {
       service.delete(userId, organizationId),
       OrganizationForbiddenError,
     );
+    await assert.rejects(
+      service.setLogo(userId, organizationId, logoUploadId),
+      OrganizationForbiddenError,
+    );
+    await assert.rejects(
+      service.removeLogo(userId, organizationId),
+      OrganizationForbiddenError,
+    );
   });
 
   test("updates organization fields without changing the slug", async () => {
     const result = await createService().update(userId, organizationId, {
       name: "Renamed Team",
-      logoUrl: null,
       visibility: OrganizationVisibility.PUBLIC,
     });
 
     assert.equal(result.name, "Renamed Team");
     assert.equal(result.slug, "product-team");
     assert.equal(result.visibility, OrganizationVisibility.PUBLIC);
+    assert.equal(result.logoAssetId, null);
+  });
+
+  test("replaces and removes logos while scheduling old assets for cleanup", async () => {
+    const oldLogoId = "507f1f77bcf86cd799439088";
+    const deletedAssets: string[] = [];
+    let activeLogoId: string | null = oldLogoId;
+    const organizations = createOrganizationRepository({
+      findById: async () =>
+        organization(activeLogoId ? { logoAssetId: activeLogoId } : {}),
+      replaceLogoAsset: async (_id, assetId) => {
+        const previousLogoAssetId = activeLogoId;
+        activeLogoId = assetId;
+        return {
+          organization: organization(
+            activeLogoId ? { logoAssetId: activeLogoId } : {},
+          ),
+          previousLogoAssetId,
+        };
+      },
+    });
+    const memberships = createMemberships();
+    const assets: StoredAssetRepository = {
+      ...emptyCommunicationContext.assets,
+      claimOrganizationLogo: async () => logoAsset(),
+      markClaimedForDeletion: async (assetId) => {
+        deletedAssets.push(assetId);
+        return true;
+      },
+    };
+    const service = createService(
+      organizations,
+      memberships,
+      createUnitOfWork(organizations, memberships, assets),
+    );
+
+    const replaced = await service.setLogo(
+      userId,
+      organizationId,
+      logoUploadId,
+    );
+    const removed = await service.removeLogo(userId, organizationId);
+
+    assert.equal(replaced.logoAssetId, logoUploadId);
+    assert.equal(removed.logoAssetId, null);
+    assert.deepEqual(deletedAssets, [oldLogoId, logoUploadId]);
   });
 });

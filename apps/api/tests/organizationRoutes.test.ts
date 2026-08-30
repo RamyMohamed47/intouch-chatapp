@@ -26,6 +26,7 @@ const organization: PublicOrganization = {
   id: organizationId,
   name: "Product Team",
   slug: "product-team",
+  logoAssetId: null,
   visibility: OrganizationVisibility.PRIVATE,
   currentUserRole: MembershipRole.OWNER,
   createdAt: new Date("2026-07-30T00:00:00.000Z"),
@@ -34,6 +35,7 @@ const organization: PublicOrganization = {
 
 let receivedCreateInput: unknown;
 let receivedUpdateInput: unknown;
+let receivedLogoUploadId: string | undefined;
 let deletedOrganizationId: string | undefined;
 let getByIdError: Error | undefined;
 let updateError: Error | undefined;
@@ -60,14 +62,16 @@ const service: OrganizationService = {
     return {
       ...organization,
       ...(input.name === undefined ? {} : { name: input.name }),
-      ...(input.logoUrl === undefined || input.logoUrl === null
-        ? {}
-        : { logoUrl: input.logoUrl }),
       ...(input.visibility === undefined
         ? {}
         : { visibility: input.visibility }),
     };
   },
+  setLogo: async (_userId, _organizationId, uploadId) => {
+    receivedLogoUploadId = uploadId;
+    return { ...organization, logoAssetId: uploadId };
+  },
+  removeLogo: async () => ({ ...organization, logoAssetId: null }),
   delete: async (_userId, id) => {
     deletedOrganizationId = id;
   },
@@ -122,10 +126,14 @@ describe("organization routes", () => {
   });
 
   test("creates an organization with normalized input", async () => {
+    const logoUploadId = "507f1f77bcf86cd799439099";
     const response = await fetch(`${baseUrl}/api/v1/organizations`, {
       method: "POST",
       headers: authenticatedHeaders,
-      body: JSON.stringify({ name: "  Product Team  " }),
+      body: JSON.stringify({
+        name: "  Product Team  ",
+        logoUploadId,
+      }),
     });
     const body = (await response.json()) as {
       organization: PublicOrganization;
@@ -134,6 +142,7 @@ describe("organization routes", () => {
     assert.equal(response.status, 201);
     assert.deepEqual(receivedCreateInput, {
       name: "Product Team",
+      logoUploadId,
       visibility: OrganizationVisibility.PRIVATE,
     });
     assert.equal(body.organization.slug, organization.slug);
@@ -207,7 +216,6 @@ describe("organization routes", () => {
         headers: authenticatedHeaders,
         body: JSON.stringify({
           name: "New Name",
-          logoUrl: null,
           visibility: OrganizationVisibility.PUBLIC,
         }),
       },
@@ -216,9 +224,36 @@ describe("organization routes", () => {
     assert.equal(response.status, 200);
     assert.deepEqual(receivedUpdateInput, {
       name: "New Name",
-      logoUrl: null,
       visibility: OrganizationVisibility.PUBLIC,
     });
+  });
+
+  test("sets and removes a completed organization logo", async () => {
+    const uploadId = "507f1f77bcf86cd799439099";
+    const setResponse = await fetch(
+      `${baseUrl}/api/v1/organizations/${organizationId}/logo`,
+      {
+        method: "PUT",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({ uploadId }),
+      },
+    );
+    const setBody = (await setResponse.json()) as {
+      organization: PublicOrganization;
+    };
+    assert.equal(setResponse.status, 200);
+    assert.equal(receivedLogoUploadId, uploadId);
+    assert.equal(setBody.organization.logoAssetId, uploadId);
+
+    const removeResponse = await fetch(
+      `${baseUrl}/api/v1/organizations/${organizationId}/logo`,
+      { method: "DELETE", headers: authenticatedHeaders },
+    );
+    const removeBody = (await removeResponse.json()) as {
+      organization: PublicOrganization;
+    };
+    assert.equal(removeResponse.status, 200);
+    assert.equal(removeBody.organization.logoAssetId, null);
   });
 
   test("returns forbidden when a visible organization cannot be modified", async () => {

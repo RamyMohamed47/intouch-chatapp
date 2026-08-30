@@ -65,7 +65,7 @@ erDiagram
         ObjectId id
         string name
         string slug
-        string logoUrl
+        ObjectId logoAssetId
         enum visibility
         int mutationVersion
         datetime createdAt
@@ -263,6 +263,8 @@ erDiagram
 
     User o|--o| StoredAsset : uses_avatar
 
+    Organization o|--o| StoredAsset : uses_logo
+
     Organization ||--o{ StoredAsset : accounts_storage
 
     Conversation ||--o{ StoredAsset : scopes
@@ -375,9 +377,10 @@ organization is deleted.
 `StoredAsset` is the authoritative metadata record for every private R2 object.
 `PENDING` objects use random staging keys; successful signature verification and
 an ETag-conditional copy produce immutable final keys and `PROMOTED` records.
-Message creation or avatar replacement claims promoted assets as `READY` in the
-same MongoDB transaction as the domain mutation. Message redaction,
-conversation deletion, organization deletion, and avatar replacement mark
+Message creation, avatar replacement, and organization-logo assignment claim
+promoted assets as `READY` in the same MongoDB transaction as the domain
+mutation. Message redaction, conversation deletion, organization deletion,
+avatar replacement, and logo replacement mark
 claimed assets `DELETE_PENDING`; a leased worker removes staging/final objects
 and then deletes their records with bounded retry backoff. Object keys and
 presigned URLs never enter public DTOs. Owner/status, organization/status,

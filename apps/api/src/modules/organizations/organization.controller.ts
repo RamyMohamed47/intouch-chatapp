@@ -11,6 +11,7 @@ import type { OrganizationIdParams } from "./organization.schemas.js";
 import type { OrganizationService } from "./organization.service.js";
 import type {
   CreateOrganizationInput,
+  UpdateOrganizationLogoInput,
   UpdateOrganizationInput,
 } from "./organization.types.js";
 
@@ -19,6 +20,8 @@ export interface OrganizationController {
   list: RequestHandler;
   getById: RequestHandler;
   update: RequestHandler;
+  setLogo: RequestHandler;
+  removeLogo: RequestHandler;
   delete: RequestHandler;
 }
 
@@ -68,6 +71,28 @@ const createOrganizationController = (
       getUserId(res.locals as AuthLocals),
       id,
       req.body as UpdateOrganizationInput,
+    );
+
+    res.status(200).json(organizationResponseSchema.parse({ organization }));
+  }),
+
+  setLogo: catchAsync(async (req, res) => {
+    const { id } = req.params as unknown as OrganizationIdParams;
+    const { uploadId } = req.body as UpdateOrganizationLogoInput;
+    const organization = await service.setLogo(
+      getUserId(res.locals as AuthLocals),
+      id,
+      uploadId,
+    );
+
+    res.status(200).json(organizationResponseSchema.parse({ organization }));
+  }),
+
+  removeLogo: catchAsync(async (req, res) => {
+    const { id } = req.params as unknown as OrganizationIdParams;
+    const organization = await service.removeLogo(
+      getUserId(res.locals as AuthLocals),
+      id,
     );
 
     res.status(200).json(organizationResponseSchema.parse({ organization }));

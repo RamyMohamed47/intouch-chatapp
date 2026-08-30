@@ -30,8 +30,9 @@ Implemented capabilities include:
 - Private-channel participant management.
 - Organization-scoped one-to-one direct messages.
 - Message history, sending, editing, redacted deletion, and pagination.
-- Private Cloudflare R2 profile avatars and message attachments with direct
-  uploads, authorized short-lived reads, progress, cancellation, and cleanup.
+- Private Cloudflare R2 profile avatars, organization logos, and message
+  attachments with direct uploads, authorized short-lived reads, progress,
+  cancellation, and cleanup.
 - Unread counts, durable read receipts, and durable emoji reactions.
 - Realtime message delivery, typing indicators, online presence, and access
   revocation.
@@ -181,25 +182,25 @@ Record each case as `Pass`, `Fail`, `Blocked`, or `Not Run`.
 
 ### Organizations and Memberships
 
-| ID      | Test                        | Steps                                                                                       | Expected result                                                                                                       |
-| ------- | --------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| ORG-01  | Create private organization | Create an organization with name only.                                                      | It is created as private, appears in the hub/rail, and creator is `OWNER`.                                            |
-| ORG-02  | Create public organization  | Create one with `PUBLIC` visibility and optional HTTP(S) logo URL.                          | Organization is created with the chosen visibility and logo.                                                          |
-| ORG-03  | Organization validation     | Submit blank/over-100-character name, invalid logo URL, and unsupported protocol.           | Submission fails with a useful validation message.                                                                    |
-| ORG-04  | Update organization         | As owner, change name, logo, and visibility.                                                | Updated values appear throughout the UI; the organization ID/slug route remains stable.                               |
-| ORG-05  | Member settings denial      | As `Member B`, directly open the organization settings URL.                                 | Access-denied UI appears and mutation controls are unavailable.                                                       |
-| ORG-06  | Private concealment         | As `Outsider D`, open a private organization URL and call its API by ID.                    | Resource is concealed as unavailable/`404`.                                                                           |
-| ORG-07  | Public view and join        | As `Outsider D`, open a known public organization URL and select Join.                      | Join CTA is shown; joining creates `MEMBER` access and updates the rail.                                              |
-| ORG-08  | Repeated public join        | Repeat the join request through an API client.                                              | Returns `409`; no duplicate membership is created.                                                                    |
-| ORG-09  | Invite registered user      | As owner, invite `Member B` by email from settings and from the conversation-header dialog. | Invitation succeeds, email resets, and confirmation text is green and announced as status.                            |
-| ORG-09A | Invitation email delivery   | Inspect `Member B`'s inbox after ORG-09 and open the message CTA.                           | Branded email identifies inviter and organization, links to `/app/invitations`, and does not expose a credential.     |
-| ORG-10  | Invitation failures         | Invite an unknown email, self, existing member, and duplicate pending recipient.            | Appropriate error is shown in red; no duplicate invitation is created.                                                |
-| ORG-11  | Invitation authorization    | As a member, confirm invite controls are absent; attempt the API directly.                  | UI hides owner action and API returns `403`.                                                                          |
-| ORG-12  | Invitation inbox            | Sign in as invited user and open `/app/invitations`.                                        | Pending invitation appears with organization, visibility, role, and expiration.                                       |
-| ORG-13  | Accept invitation           | Accept as the intended recipient.                                                           | Invitation disappears, organization enters the rail, membership is `MEMBER`, and repeat acceptance returns not found. |
-| ORG-14  | Decline invitation          | Create another invitation and decline it.                                                   | Invitation disappears, organization is not joined, and repeat decline returns not found.                              |
-| ORG-15  | Wrong invitation recipient  | Attempt to accept another user's invitation through the API.                                | Returns concealed `404`; no membership is created.                                                                    |
-| ORG-16  | Delete organization         | As owner, delete a disposable organization containing categories/channels/messages.         | Confirmation is required; organization disappears and copied resource URLs stop working.                              |
+| ID      | Test                        | Steps                                                                                        | Expected result                                                                                                       |
+| ------- | --------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| ORG-01  | Create private organization | Create an organization with name only.                                                       | It is created as private, appears in the hub/rail, and creator is `OWNER`.                                            |
+| ORG-02  | Create public organization  | Select `PUBLIC`, choose a JPEG/PNG/WebP logo, wait for completion, and create.               | Organization and owner membership commit with the private uploaded logo; it appears in the hub and rail.              |
+| ORG-03  | Organization validation     | Submit blank/over-100-character name, malformed upload ID, unsupported image, and over 5 MB. | Submission fails with a useful validation message and no partially created organization.                              |
+| ORG-04  | Update organization         | As owner, change name/visibility, then replace and remove the logo from settings.            | Metadata keeps the stable slug; logo changes appear throughout the UI and old assets are scheduled for deletion.      |
+| ORG-05  | Member settings denial      | As `Member B`, directly open the organization settings URL.                                  | Access-denied UI appears and mutation controls are unavailable.                                                       |
+| ORG-06  | Private concealment         | As `Outsider D`, open a private organization URL and call its API by ID.                     | Resource is concealed as unavailable/`404`.                                                                           |
+| ORG-07  | Public view and join        | As `Outsider D`, open a known public organization URL and select Join.                       | Join CTA is shown; joining creates `MEMBER` access and updates the rail.                                              |
+| ORG-08  | Repeated public join        | Repeat the join request through an API client.                                               | Returns `409`; no duplicate membership is created.                                                                    |
+| ORG-09  | Invite registered user      | As owner, invite `Member B` by email from settings and from the conversation-header dialog.  | Invitation succeeds, email resets, and confirmation text is green and announced as status.                            |
+| ORG-09A | Invitation email delivery   | Inspect `Member B`'s inbox after ORG-09 and open the message CTA.                            | Branded email identifies inviter and organization, links to `/app/invitations`, and does not expose a credential.     |
+| ORG-10  | Invitation failures         | Invite an unknown email, self, existing member, and duplicate pending recipient.             | Appropriate error is shown in red; no duplicate invitation is created.                                                |
+| ORG-11  | Invitation authorization    | As a member, confirm invite controls are absent; attempt the API directly.                   | UI hides owner action and API returns `403`.                                                                          |
+| ORG-12  | Invitation inbox            | Sign in as invited user and open `/app/invitations`.                                         | Pending invitation appears with organization, visibility, role, and expiration.                                       |
+| ORG-13  | Accept invitation           | Accept as the intended recipient.                                                            | Invitation disappears, organization enters the rail, membership is `MEMBER`, and repeat acceptance returns not found. |
+| ORG-14  | Decline invitation          | Create another invitation and decline it.                                                    | Invitation disappears, organization is not joined, and repeat decline returns not found.                              |
+| ORG-15  | Wrong invitation recipient  | Attempt to accept another user's invitation through the API.                                 | Returns concealed `404`; no membership is created.                                                                    |
+| ORG-16  | Delete organization         | As owner, delete a disposable organization containing categories/channels/messages.          | Confirmation is required; organization disappears and copied resource URLs stop working.                              |
 
 ### Categories, Channels, and Participants
 
@@ -253,16 +254,17 @@ Record each case as `Pass`, `Fail`, `Blocked`, or `Not Run`.
 
 ### Profile Avatars and Attachments
 
-| ID      | Test                      | Steps                                                                                                     | Expected result                                                                                                                             |
-| ------- | ------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| FILE-01 | Replace profile avatar    | Open `/app/profile`, choose an image, inspect the centered square preview, and save it.                   | A 512x512 WebP is uploaded with visible progress; the new avatar appears across user surfaces without exposing an object key.               |
-| FILE-02 | Remove profile avatar     | Remove the custom avatar from the profile page.                                                           | The user falls back to the Google avatar when available, otherwise initials; the old private asset is queued for asynchronous deletion.     |
-| FILE-03 | Attachment selection      | Add supported images/documents with the button, drag-and-drop, and pasted clipboard image.                | Up to five files show local previews or file cards, type/size metadata, independent progress, cancellation, errors, and retry controls.     |
-| FILE-04 | Attachment message forms  | Send one attachment without text, then send attachments with a caption.                                   | Both messages are created once; the attachment-only caption is `null`, and conversation previews show `Photo`, `Files`, or caption text.    |
-| FILE-05 | Image and document access | Open an image preview and download PDF, text, CSV, DOCX, XLSX, and PPTX samples.                          | Images open in an accessible preview; documents download through a short-lived authorized URL and retain safe filenames and types.          |
-| FILE-06 | Upload validation         | Try SVG, ZIP, executable, macro-enabled Office, wrong-extension, invalid UTF-8, oversized, and six files. | Unsupported or mismatched files are rejected; over-25 MB returns `413`; the message is not enabled until every accepted upload completes.   |
-| FILE-07 | Retry and message failure | Interrupt a direct upload, retry it, then simulate a message-create failure after successful completion.  | Retry replaces the failed ticket; completed uploads remain available for message retry and are not duplicated in the conversation.          |
-| FILE-08 | Lifecycle cleanup         | Cancel a pending upload, delete an attachment message, then delete a disposable channel/organization.     | Domain mutations commit immediately; private objects are marked for deletion and the cleanup worker removes them without restoring records. |
+| ID       | Test                        | Steps                                                                                                     | Expected result                                                                                                                             |
+| -------- | --------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| FILE-01  | Replace profile avatar      | Open `/app/profile`, choose an image, inspect the centered square preview, and save it.                   | A 512x512 WebP is uploaded with visible progress; the new avatar appears across user surfaces without exposing an object key.               |
+| FILE-02  | Remove profile avatar       | Remove the custom avatar from the profile page.                                                           | The user falls back to the Google avatar when available, otherwise initials; the old private asset is queued for asynchronous deletion.     |
+| FILE-02A | Organization logo lifecycle | Create an organization with a logo, replace it in settings, then remove it.                               | Each image is cropped to 512x512 WebP; signed reads refresh; replacement/removal queues the previous object for cleanup.                    |
+| FILE-03  | Attachment selection        | Add supported images/documents with the button, drag-and-drop, and pasted clipboard image.                | Up to five files show local previews or file cards, type/size metadata, independent progress, cancellation, errors, and retry controls.     |
+| FILE-04  | Attachment message forms    | Send one attachment without text, then send attachments with a caption.                                   | Both messages are created once; the attachment-only caption is `null`, and conversation previews show `Photo`, `Files`, or caption text.    |
+| FILE-05  | Image and document access   | Open an image preview and download PDF, text, CSV, DOCX, XLSX, and PPTX samples.                          | Images open in an accessible preview; documents download through a short-lived authorized URL and retain safe filenames and types.          |
+| FILE-06  | Upload validation           | Try SVG, ZIP, executable, macro-enabled Office, wrong-extension, invalid UTF-8, oversized, and six files. | Unsupported or mismatched files are rejected; over-25 MB returns `413`; the message is not enabled until every accepted upload completes.   |
+| FILE-07  | Retry and message failure   | Interrupt a direct upload, retry it, then simulate a message-create failure after successful completion.  | Retry replaces the failed ticket; completed uploads remain available for message retry and are not duplicated in the conversation.          |
+| FILE-08  | Lifecycle cleanup           | Cancel a pending upload, delete an attachment message, then delete a disposable channel/organization.     | Domain mutations commit immediately; private objects are marked for deletion and the cleanup worker removes them without restoring records. |
 
 ### Organization Search
 
@@ -403,10 +405,10 @@ deployment. Never reuse another real user's credentials.
 - Refresh clients must serialize refresh attempts because refresh credentials
   are single-use and rotate on success.
 - Message writes remain REST-based; Socket.IO is subscription/broadcast-only.
-- Upload intent, completion, cancellation, avatar changes, and message claims
-  use the API. File bytes travel directly to the private R2 bucket through a
-  five-minute content-type-bound presigned `PUT`; authorized reads use
-  ten-minute presigned `GET` URLs.
+- Upload intent, completion, cancellation, avatar/logo changes, and message
+  claims use the API. File bytes travel directly to the private R2 bucket
+  through a five-minute content-type-bound presigned `PUT`; authorized reads
+  use ten-minute presigned `GET` URLs.
 - Message and Socket.IO DTOs expose only attachment IDs and safe metadata.
   R2 credentials, bucket keys, ETags, and presigned URLs are never persisted in
   public DTOs or emitted through realtime events.

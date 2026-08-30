@@ -29,6 +29,7 @@ const notification: NotificationDto = {
   organization: {
     id: "507f1f77bcf86cd799439014",
     name: "Northstar",
+    logoAssetId: null,
   },
   type: NotificationType.DIRECT_MESSAGE_RECEIVED,
   conversationId: "507f1f77bcf86cd799439015",

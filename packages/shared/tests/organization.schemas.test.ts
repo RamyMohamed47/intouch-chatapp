@@ -4,6 +4,8 @@ import { describe, test } from "node:test";
 import {
   OrganizationVisibility,
   createOrganizationSchema,
+  publicOrganizationDtoSchema,
+  updateOrganizationLogoSchema,
   updateOrganizationSchema,
 } from "../organizations/index.js";
 
@@ -18,18 +20,18 @@ describe("shared organization schemas", () => {
     );
   });
 
-  test("accepts public organizations and HTTP(S) logos", () => {
+  test("accepts public organizations and completed logo upload IDs", () => {
     const input = createOrganizationSchema.parse({
       name: "Community",
-      logoUrl: "https://cdn.example.com/logo.png",
+      logoUploadId: "507f1f77bcf86cd799439011",
       visibility: OrganizationVisibility.PUBLIC,
     });
 
     assert.equal(input.visibility, OrganizationVisibility.PUBLIC);
-    assert.equal(input.logoUrl, "https://cdn.example.com/logo.png");
+    assert.equal(input.logoUploadId, "507f1f77bcf86cd799439011");
   });
 
-  test("rejects empty names, non-HTTP logos, and extra fields", () => {
+  test("rejects empty names, invalid logo uploads, URLs, and extra fields", () => {
     assert.equal(
       createOrganizationSchema.safeParse({ name: "  " }).success,
       false,
@@ -37,7 +39,14 @@ describe("shared organization schemas", () => {
     assert.equal(
       createOrganizationSchema.safeParse({
         name: "Team",
-        logoUrl: "ftp://example.com/logo.png",
+        logoUploadId: "invalid",
+      }).success,
+      false,
+    );
+    assert.equal(
+      createOrganizationSchema.safeParse({
+        name: "Team",
+        logoUrl: "https://example.com/logo.png",
       }).success,
       false,
     );
@@ -48,10 +57,39 @@ describe("shared organization schemas", () => {
     );
   });
 
-  test("requires a nonempty update and allows logo removal", () => {
+  test("requires a nonempty metadata update and validates logo mutation IDs", () => {
     assert.equal(updateOrganizationSchema.safeParse({}).success, false);
-    assert.deepEqual(updateOrganizationSchema.parse({ logoUrl: null }), {
-      logoUrl: null,
+    assert.equal(
+      updateOrganizationSchema.safeParse({ logoUrl: null }).success,
+      false,
+    );
+    assert.equal(
+      updateOrganizationLogoSchema.safeParse({
+        uploadId: "507f1f77bcf86cd799439011",
+      }).success,
+      true,
+    );
+  });
+
+  test("requires nullable asset identity in organization responses", () => {
+    const organization = {
+      id: "507f1f77bcf86cd799439011",
+      name: "Community",
+      slug: "community",
+      logoAssetId: null,
+      visibility: OrganizationVisibility.PRIVATE,
+      currentUserRole: "OWNER",
+      createdAt: "2026-08-30T00:00:00.000Z",
+      updatedAt: "2026-08-30T00:00:00.000Z",
+    };
+    assert.deepEqual(
+      publicOrganizationDtoSchema.parse(organization),
+      organization,
+    );
+    const sanitized = publicOrganizationDtoSchema.parse({
+      ...organization,
+      logoUrl: "https://example.com/logo.png",
     });
+    assert.equal("logoUrl" in sanitized, false);
   });
 });

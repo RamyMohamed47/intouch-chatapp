@@ -23,6 +23,7 @@ const notification = {
   organization: {
     id: "507f1f77bcf86cd799439013",
     name: "Northstar",
+    logoAssetId: null,
   },
   conversationId: "507f1f77bcf86cd799439014",
   latestMessageId: "507f1f77bcf86cd799439015",

@@ -115,7 +115,7 @@ const createNotificationService = ({
         organization: {
           id: organization.id,
           name: organization.name,
-          ...(organization.logoUrl ? { logoUrl: organization.logoUrl } : {}),
+          logoAssetId: organization.logoAssetId ?? null,
         },
         readAt: record.readAt,
         createdAt: record.createdAt,

@@ -1,11 +1,13 @@
 export {
   OrganizationVisibility,
   createOrganizationSchema,
+  updateOrganizationLogoSchema,
   updateOrganizationSchema,
 } from "./organization.schema.js";
 export type {
   CreateOrganizationInput,
   OrganizationVisibility as OrganizationVisibilityType,
+  UpdateOrganizationLogoInput,
   UpdateOrganizationInput,
 } from "./organization.schema.js";
 export {
