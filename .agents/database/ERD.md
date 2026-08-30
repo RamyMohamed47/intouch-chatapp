@@ -367,7 +367,9 @@ client assets rather than database content.
 
 Online presence and typing are runtime-only state. `User.lastSeenAt` is the only
 persisted presence field and is updated after the user's final socket has been
-offline for the disconnect grace period.
+offline for the disconnect grace period. Production runtime state is held in
+Redis with expiring socket leases; no Redis presence or typing keys are part of
+the durable MongoDB data model.
 
 Deleted messages remain as redacted timeline tombstones. `content` is also
 nullable for attachment messages whose optional caption is absent. Messages and

@@ -38,6 +38,7 @@ Health check:
 
 ```http
 GET /health
+GET /ready
 ```
 
 ## API Documentation
@@ -138,6 +139,10 @@ values are:
 - `MAIL_PROVIDER`; use `brevo` for HTTPS delivery or `smtp` for SMTP
 - `MAIL_FROM_NAME` and `MAIL_FROM_ADDRESS`
 - `SEARCH_PROVIDER`; use `atlas` in production and `native` for local MongoDB
+- `RUNTIME_STATE_PROVIDER`; production requires `redis`, while local
+  development defaults to `memory`
+- `REDIS_URL` when Redis runtime state is enabled
+- `REDIS_KEY_PREFIX`, optional and namespaced per environment
 - `STORAGE_PROVIDER`; production requires `r2`
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
   `R2_BUCKET_NAME` when R2 storage is enabled
@@ -162,6 +167,22 @@ Start `mongod` with `--replSet rs0`, then initialize it once from `mongosh`:
 ```javascript
 rs.initiate();
 ```
+
+Local development does not require Redis. To exercise the distributed runtime
+path locally, start the included Redis container and update the API environment:
+
+```bash
+npm run redis:up
+```
+
+```dotenv
+RUNTIME_STATE_PROVIDER=redis
+REDIS_URL=redis://127.0.0.1:6379
+REDIS_KEY_PREFIX=intouch:development:v2
+```
+
+Stop it with `npm run redis:down`. Use a different key prefix for every shared
+environment so development, staging, and production counters cannot collide.
 
 Optional:
 
@@ -357,8 +378,9 @@ Socket.IO clients authenticate with `auth: { accessToken }`, then emit
 `conversation:join` before receiving scoped message events. Organization
 subscriptions provide presence; joined conversation rooms support expiring
 typing indicators. REST remains the only durable write transport. Presence and
-typing are in-memory, so this version must run as one application instance. See
-`.agents/sockets/Socket Events.md` for event contracts.
+typing use in-memory stores in local development and Redis-backed leases in
+production. The Socket.IO Redis adapter propagates rooms and broadcasts across
+API replicas. See `.agents/sockets/Socket Events.md` for event contracts.
 
 After deploying the runtime-presence model, remove legacy persisted `status`
 fields idempotently with `npm run migrate:remove-user-status`. `lastSeenAt` is
@@ -387,15 +409,19 @@ browser then clears its query cache and Socket.IO lifecycle before returning to
 login.
 
 Socket.IO connects directly to `NEXT_PUBLIC_SOCKET_ORIGIN`. REST and Google
-OAuth continue through the frontend `/api` proxy. The current presence and
-typing stores are process-local, so realtime deployment remains single-instance
-until Redis-backed stores and the Socket.IO Redis adapter are introduced.
+OAuth continue through the frontend `/api` proxy. The browser uses WebSocket
+transport only; the Redis adapter distributes room events between API replicas.
 
 Authenticated messaging writes and realtime resource-acquiring events are
 protected by per-user token buckets. Active sockets are capped at five per
 user, and cleanup events remain unthrottled. These counters are process-local
-in the current single-instance deployment; horizontal scaling requires
-Redis-backed rate-limit and connection stores.
+in local memory mode and shared through Redis in production. Public auth IP
+limits also use Redis, while account-login attempt records remain durable in
+MongoDB.
+
+`GET /health` is a liveness endpoint and remains successful while the process
+is running. `GET /ready` returns `503` when MongoDB or Redis is unavailable and
+is the correct deployment readiness/health-check path for routing traffic.
 
 The Next.js frontend emits a per-request nonce Content Security Policy for page
 documents. Production scripts require the nonce, Socket.IO connections are
@@ -473,6 +499,21 @@ depends on `packages/shared`. Do not set the service Root Directory to
 API production output is written to `apps/api/dist`. Railway runtime variables
 come from the service environment; `apps/api/config.env` remains local and
 ignored by Git.
+
+Provision one private Railway Redis service and reference its private URL from
+every API replica:
+
+```dotenv
+RUNTIME_STATE_PROVIDER=redis
+REDIS_URL=${{Redis.REDIS_URL}}
+REDIS_KEY_PREFIX=intouch:production:v2
+```
+
+Set the API health-check path to `/ready`. All API replicas must use the same
+Redis URL and key prefix. Redis is mandatory in production; startup fails rather
+than silently falling back to process-local state. MongoDB remains authoritative
+for refresh sessions, login-attempt records, notifications, mail jobs, and file
+metadata.
 
 Railway plans that block outbound SMTP must configure `MAIL_PROVIDER=brevo`
 with `BREVO_API_KEY` and a Brevo-verified `MAIL_FROM_ADDRESS`. Upgrading to a

@@ -129,7 +129,7 @@ describe("presence and typing runtime state", () => {
     ]);
   });
 
-  test("emits idempotent heartbeats and stops after the final socket", () => {
+  test("emits idempotent heartbeats and stops after the final socket", async () => {
     const updates: TypingUpdate[] = [];
     const controlledScheduler = createControlledTypingScheduler();
     const typing = createTypingService({
@@ -141,21 +141,21 @@ describe("presence and typing runtime state", () => {
       scheduler: controlledScheduler.scheduler,
     });
 
-    typing.start(conversationId, userId, "socket-1");
-    typing.start(conversationId, userId, "socket-2");
-    typing.stop(conversationId, userId, "socket-1");
+    await typing.start(conversationId, userId, "socket-1");
+    await typing.start(conversationId, userId, "socket-2");
+    await typing.stop(conversationId, userId, "socket-1");
     assert.deepEqual(
       updates.map(({ isTyping }) => isTyping),
       [true, true],
     );
-    typing.stop(conversationId, userId, "socket-2");
+    await typing.stop(conversationId, userId, "socket-2");
     assert.deepEqual(
       updates.map(({ isTyping }) => isTyping),
       [true, true, false],
     );
   });
 
-  test("renews expiry on every heartbeat and emits one final stop", () => {
+  test("renews expiry on every heartbeat and emits one final stop", async () => {
     const updates: TypingUpdate[] = [];
     const controlledScheduler = createControlledTypingScheduler();
     const typing = createTypingService({
@@ -168,18 +168,19 @@ describe("presence and typing runtime state", () => {
     });
     const key = `${conversationId}:${userId}`;
 
-    typing.start(conversationId, userId, "socket-3");
-    typing.start(conversationId, userId, "socket-3");
+    await typing.start(conversationId, userId, "socket-3");
+    await typing.start(conversationId, userId, "socket-3");
     assert.equal(controlledScheduler.schedules, 2);
     controlledScheduler.expire(key);
     controlledScheduler.expire(key);
+    await wait(0);
     assert.deepEqual(
       updates.map(({ isTyping }) => isTyping),
       [true, true, false],
     );
   });
 
-  test("disconnects emit false only after the final typing socket leaves", () => {
+  test("disconnects emit false only after the final typing socket leaves", async () => {
     const updates: TypingUpdate[] = [];
     const typing = createTypingService({
       realtime: {
@@ -190,10 +191,10 @@ describe("presence and typing runtime state", () => {
       scheduler: createControlledTypingScheduler().scheduler,
     });
 
-    typing.start(conversationId, userId, "socket-1");
-    typing.start(conversationId, userId, "socket-2");
-    typing.disconnect("socket-1");
-    typing.disconnect("socket-2");
+    await typing.start(conversationId, userId, "socket-1");
+    await typing.start(conversationId, userId, "socket-2");
+    await typing.disconnect("socket-1");
+    await typing.disconnect("socket-2");
     assert.deepEqual(
       updates.map(({ isTyping }) => isTyping),
       [true, true, false],

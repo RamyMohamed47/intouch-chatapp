@@ -4,11 +4,12 @@ export interface TypingIdentity {
 }
 
 export interface TypingStore {
-  markTyping(identity: TypingIdentity, socketId: string): boolean;
-  markStopped(identity: TypingIdentity, socketId: string): boolean;
-  removeSocket(socketId: string): TypingIdentity[];
-  clearConversation(conversationId: string): TypingIdentity[];
-  clearUser(identity: TypingIdentity): boolean;
+  markTyping(identity: TypingIdentity, socketId: string): Promise<boolean>;
+  markStopped(identity: TypingIdentity, socketId: string): Promise<boolean>;
+  removeSocket(socketId: string): Promise<TypingIdentity[]>;
+  clearConversation(conversationId: string): Promise<TypingIdentity[]>;
+  clearUser(identity: TypingIdentity): Promise<boolean>;
+  claimExpired?(limit: number): Promise<TypingIdentity[]>;
 }
 
 interface TypingEntry extends TypingIdentity {
@@ -27,20 +28,20 @@ const createInMemoryTypingStore = (): TypingStore => {
       const entry = entries.get(key);
       if (entry) {
         entry.socketIds.add(socketId);
-        return false;
+        return Promise.resolve(false);
       }
       entries.set(key, { ...identity, socketIds: new Set([socketId]) });
-      return true;
+      return Promise.resolve(true);
     },
 
     markStopped(identity, socketId) {
       const key = keyFor(identity);
       const entry = entries.get(key);
-      if (!entry) return false;
+      if (!entry) return Promise.resolve(false);
       entry.socketIds.delete(socketId);
-      if (entry.socketIds.size > 0) return false;
+      if (entry.socketIds.size > 0) return Promise.resolve(false);
       entries.delete(key);
-      return true;
+      return Promise.resolve(true);
     },
 
     removeSocket(socketId) {
@@ -52,7 +53,7 @@ const createInMemoryTypingStore = (): TypingStore => {
           stopped.push(entry);
         }
       }
-      return stopped;
+      return Promise.resolve(stopped);
     },
 
     clearConversation(conversationId) {
@@ -63,11 +64,11 @@ const createInMemoryTypingStore = (): TypingStore => {
           stopped.push(entry);
         }
       }
-      return stopped;
+      return Promise.resolve(stopped);
     },
 
     clearUser(identity) {
-      return entries.delete(keyFor(identity));
+      return Promise.resolve(entries.delete(keyFor(identity)));
     },
   };
 };

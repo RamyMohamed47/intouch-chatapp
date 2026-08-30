@@ -118,13 +118,21 @@ disconnect, authentication loss, conversation leave, access revocation, and
 provider unmount. Typing indicators use a polite atomic status announcement,
 reserve their layout space, and avoid reannouncing repeated heartbeats.
 
-Presence and typing use replaceable in-memory stores in this iteration. The
-backend must run as one application instance. A multi-instance deployment needs
-Redis-backed stores plus the Socket.IO Redis adapter. Process restarts clear
-runtime presence and typing; clients reconnect and rebuild subscriptions.
-Authenticated abuse counters and active-socket accounting are also
-process-local and require Redis-backed implementations before horizontal API
-scaling.
+Presence and typing use replaceable stores. Local development defaults to
+in-memory state. Production uses Redis leases and the Socket.IO Redis adapter,
+so rooms, broadcasts, typing state, presence, authenticated abuse counters, and
+active-socket limits are shared across API replicas.
+
+Sockets renew their presence and connection leases every 15 seconds. A normal
+final disconnect keeps the five-second offline grace period. If a replica dies
+without disconnect cleanup, the 45-second socket lease expires and the same
+grace period runs before the user is persisted and broadcast as offline. Typing
+heartbeats remain three seconds with a five-second expiry. Expired transitions
+are atomically claimed so only one replica emits the final update.
+
+The browser uses WebSocket transport only. Redis unavailability makes the API
+unready and protected runtime operations fail closed; production never falls
+back to isolated memory state.
 
 Direct-conversation REST responses include `peerReadReceipt`, so read status
 survives reloads and missed socket events. Clients reconcile direct-message

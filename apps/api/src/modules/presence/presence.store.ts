@@ -3,6 +3,8 @@ export interface PresenceStore {
   markOffline(userId: string, socketId: string): Promise<boolean>;
   confirmOffline(userId: string): Promise<boolean>;
   isOnline(userId: string): Promise<boolean>;
+  refresh(userId: string, socketId: string): Promise<boolean>;
+  claimExpired?(limit: number): Promise<string[]>;
 }
 
 const createInMemoryPresenceStore = (): PresenceStore => {
@@ -36,6 +38,10 @@ const createInMemoryPresenceStore = (): PresenceStore => {
 
     isOnline(userId) {
       return Promise.resolve(socketsByUser.has(userId));
+    },
+
+    refresh() {
+      return Promise.resolve(false);
     },
   };
 };

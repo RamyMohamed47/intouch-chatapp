@@ -12,6 +12,8 @@ export interface TypingServiceDependencies {
   store?: TypingStore;
   timeoutMs?: number;
   scheduler?: TypingExpiryScheduler;
+  scheduleExpirations?: boolean;
+  onError?: (error: unknown) => void;
 }
 
 const keyFor = ({ conversationId, userId }: TypingIdentity) =>
@@ -22,6 +24,8 @@ const createTypingService = ({
   store = createInMemoryTypingStore(),
   timeoutMs = 5_000,
   scheduler = createInMemoryTypingExpiryScheduler(),
+  scheduleExpirations = true,
+  onError = () => undefined,
 }: TypingServiceDependencies) => {
   const emitStopped = (identity: TypingIdentity) => {
     scheduler.cancel(keyFor(identity));
@@ -31,34 +35,43 @@ const createTypingService = ({
   const scheduleExpiration = (identity: TypingIdentity) => {
     const key = keyFor(identity);
     scheduler.schedule(key, timeoutMs, () => {
-      if (store.clearUser(identity)) emitStopped(identity);
+      void store
+        .clearUser(identity)
+        .then((cleared) => {
+          if (cleared) emitStopped(identity);
+        })
+        .catch(onError);
     });
   };
 
   return {
-    start(conversationId: string, userId: string, socketId: string) {
+    async start(conversationId: string, userId: string, socketId: string) {
       const identity = { conversationId, userId };
-      store.markTyping(identity, socketId);
-      scheduleExpiration(identity);
+      await store.markTyping(identity, socketId);
+      if (scheduleExpirations) scheduleExpiration(identity);
       realtime.typingUpdated({ ...identity, isTyping: true });
     },
 
-    stop(conversationId: string, userId: string, socketId: string) {
+    async stop(conversationId: string, userId: string, socketId: string) {
       const identity = { conversationId, userId };
-      if (store.markStopped(identity, socketId)) emitStopped(identity);
+      if (await store.markStopped(identity, socketId)) emitStopped(identity);
     },
 
-    disconnect(socketId: string) {
-      store.removeSocket(socketId).forEach(emitStopped);
+    async disconnect(socketId: string) {
+      (await store.removeSocket(socketId)).forEach(emitStopped);
     },
 
-    clearConversation(conversationId: string) {
-      store.clearConversation(conversationId).forEach(emitStopped);
+    async clearConversation(conversationId: string) {
+      (await store.clearConversation(conversationId)).forEach(emitStopped);
     },
 
-    clearUserInConversation(conversationId: string, userId: string) {
+    async clearUserInConversation(conversationId: string, userId: string) {
       const identity = { conversationId, userId };
-      if (store.clearUser(identity)) emitStopped(identity);
+      if (await store.clearUser(identity)) emitStopped(identity);
+    },
+
+    publishExpired(identity: TypingIdentity) {
+      emitStopped(identity);
     },
   };
 };

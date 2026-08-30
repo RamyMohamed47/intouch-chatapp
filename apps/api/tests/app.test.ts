@@ -106,6 +106,32 @@ describe("app", () => {
     assert.doesNotThrow(() => new Date(body.timestamp).toISOString());
   });
 
+  test("returns readiness independently from liveness", async () => {
+    const readyResponse = await fetch(`${baseUrl}/ready`);
+    assert.equal(readyResponse.status, 200);
+    assert.equal(
+      ((await readyResponse.json()) as { status: string }).status,
+      "ready",
+    );
+
+    const unavailableServer = http.createServer(
+      createApp({ readiness: { isReady: () => false } }),
+    );
+    await listen(unavailableServer);
+    const address = unavailableServer.address();
+    assert.ok(address && typeof address !== "string");
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/ready`);
+      assert.equal(response.status, 503);
+      assert.equal(
+        ((await response.json()) as { status: string }).status,
+        "not_ready",
+      );
+    } finally {
+      await closeServer(unavailableServer);
+    }
+  });
+
   test("returns a centralized 404 response for the removed frontend root", async () => {
     const response = await fetch(`${baseUrl}/`);
     const body = await response.json();

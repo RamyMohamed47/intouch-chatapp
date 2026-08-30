@@ -42,6 +42,18 @@ const createPresenceService = ({
     );
   };
 
+  const publishOffline = async (userId: string) => {
+    if (await store.isOnline(userId)) return;
+    const lastSeenAt = now();
+    await users.updateLastSeen(userId, lastSeenAt);
+    if (await store.isOnline(userId)) return;
+    await broadcast({
+      userId,
+      status: PresenceStatus.OFFLINE,
+      lastSeenAt,
+    });
+  };
+
   return {
     async markOnline(userId: string, socketId: string) {
       scheduler.cancel(userId);
@@ -61,13 +73,7 @@ const createPresenceService = ({
           .confirmOffline(userId)
           .then(async (confirmed) => {
             if (!confirmed) return;
-            const lastSeenAt = now();
-            await users.updateLastSeen(userId, lastSeenAt);
-            await broadcast({
-              userId,
-              status: PresenceStatus.OFFLINE,
-              lastSeenAt,
-            });
+            await publishOffline(userId);
           })
           .catch(onError);
       });
@@ -75,6 +81,19 @@ const createPresenceService = ({
 
     isOnline(userId: string) {
       return store.isOnline(userId);
+    },
+
+    async refresh(userId: string, socketId: string) {
+      if (!(await store.refresh(userId, socketId))) return;
+      await broadcast({
+        userId,
+        status: PresenceStatus.ONLINE,
+        lastSeenAt: null,
+      });
+    },
+
+    async publishExpiredOffline(userId: string) {
+      await publishOffline(userId);
     },
 
     async getMany(userIds: readonly string[]): Promise<PresenceView[]> {

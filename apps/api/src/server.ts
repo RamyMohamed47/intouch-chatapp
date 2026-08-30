@@ -1,13 +1,21 @@
 import http from "node:http";
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
 
 import createApp from "./app.js";
 import createSocketRealtimeGateway from "./broadcasting/socketRealtimeGateway.js";
 import { loadConfig, loadEnvFile } from "./config/env.js";
-import connectDatabase, { disconnectDatabase } from "./config/database.js";
+import connectDatabase, {
+  disconnectDatabase,
+  isDatabaseReady,
+} from "./config/database.js";
 import { getLogger } from "./config/logger.js";
 import { createApiDocsRouter } from "./docs/api-docs.router.js";
 import { loadOpenApiContract } from "./docs/openapi.contract.js";
+import {
+  createRedisAuthRateLimitStoreFactory,
+  createRedisRuntime,
+} from "./infrastructure/redis/index.js";
 import type {
   ClientToServerEvents,
   InterServerEvents,
@@ -15,10 +23,21 @@ import type {
   SocketData,
 } from "./contracts/socket.js";
 import createAuthModule from "./modules/auth/index.js";
-import createAbuseProtectionModule from "./modules/abuse-protection/index.js";
+import createAbuseProtectionModule, {
+  createRedisRateLimitStore,
+  createRedisSocketConnectionStore,
+} from "./modules/abuse-protection/index.js";
 import createOrganizationModule from "./modules/organizations/index.js";
 import configureSocket from "./sockets/socket.js";
-import { createTypingService } from "./modules/typing/index.js";
+import {
+  createRedisTypingStore,
+  createTypingExpiryWorker,
+  createTypingService,
+} from "./modules/typing/index.js";
+import {
+  createPresenceExpiryWorker,
+  createRedisPresenceStore,
+} from "./modules/presence/index.js";
 import {
   createMailOutboxJobFactory,
   createMailOutboxWorker,
@@ -47,7 +66,10 @@ type InTouchServer = Server<
 const resources: {
   closeAbuseProtection?: () => void;
   closeMail?: () => Promise<void>;
+  closePresence?: () => void;
   closeStorage?: () => Promise<void>;
+  closeTyping?: () => void;
+  closeRuntimeState?: () => Promise<void>;
   server?: http.Server;
   io?: InTouchServer;
 } = {};
@@ -125,6 +147,9 @@ const shutdown = (
       resources.closeAbuseProtection?.();
       await resources.closeMail?.();
       await resources.closeStorage?.();
+      resources.closePresence?.();
+      resources.closeTyping?.();
+      await resources.closeRuntimeState?.();
       await disconnectDatabase(logger);
       clearTimeout(forceShutdownTimer);
       logger.info({ reason }, "Graceful shutdown complete");
@@ -157,6 +182,8 @@ process.once("SIGINT", () => {
 });
 
 const config = loadConfig();
+const runtimeState = createRedisRuntime(config.runtimeState, logger);
+resources.closeRuntimeState = () => runtimeState.close();
 const mailCipher = createMailPayloadCipher(config.mailOutboxEncryptionSecret);
 const mailJobs = createMailOutboxJobFactory(mailCipher);
 const mailTransport =
@@ -185,15 +212,44 @@ const mailWorker = createMailOutboxWorker({
 });
 resources.closeMail = () => mailWorker.close();
 const apiDocsRouter = createApiDocsRouter(loadOpenApiContract());
-const abuseProtection = createAbuseProtectionModule(logger);
+const abuseProtection = createAbuseProtectionModule(logger, {
+  ...(runtimeState.command
+    ? {
+        rateLimitStore: createRedisRateLimitStore(
+          runtimeState.command,
+          runtimeState.keyPrefix,
+        ),
+        socketConnectionStore: createRedisSocketConnectionStore(
+          runtimeState.command,
+          runtimeState.keyPrefix,
+        ),
+      }
+    : {}),
+});
 resources.closeAbuseProtection = abuseProtection.close;
 const realtimeGateway = createSocketRealtimeGateway();
-const typingService = createTypingService({ realtime: realtimeGateway });
+const typingStore = runtimeState.command
+  ? createRedisTypingStore(runtimeState.command, runtimeState.keyPrefix)
+  : undefined;
+const typingService = createTypingService({
+  realtime: realtimeGateway,
+  ...(typingStore ? { store: typingStore, scheduleExpirations: false } : {}),
+  onError: (error) => {
+    logger.error({ err: error }, "Typing expiry failed");
+  },
+});
+const typingExpiryWorker = typingStore
+  ? createTypingExpiryWorker(typingStore, typingService, logger)
+  : undefined;
+resources.closeTyping = () => typingExpiryWorker?.close();
 realtimeGateway.setTypingService(typingService);
 const storage =
   config.storage.provider === "r2"
     ? createR2ObjectStorage(config.storage)
     : createDisabledObjectStorage();
+const presenceStore = runtimeState.command
+  ? createRedisPresenceStore(runtimeState.command, runtimeState.keyPrefix)
+  : undefined;
 const auth = createAuthModule({
   actionTokenSecret: config.authActionTokenSecret,
   accessTokenSecret: config.accessTokenSecret,
@@ -223,6 +279,14 @@ const auth = createAuthModule({
     windowMs: config.loginAttemptWindowMs,
   },
   mail: mailJobs,
+  ...(runtimeState.command
+    ? {
+        rateLimitStoreFactory: createRedisAuthRateLimitStoreFactory(
+          runtimeState.command,
+          runtimeState.keyPrefix,
+        ),
+      }
+    : {}),
 });
 const organizations = createOrganizationModule({
   conversationActivityRealtime: realtimeGateway,
@@ -233,6 +297,7 @@ const organizations = createOrganizationModule({
   notificationRealtime: realtimeGateway,
   logger,
   presenceRealtime: realtimeGateway,
+  ...(presenceStore ? { presenceStore } : {}),
   rateLimits: abuseProtection.rateLimits,
   readReceiptRealtime: realtimeGateway,
   requireAccessToken: auth.requireAccessToken,
@@ -248,6 +313,14 @@ const assetCleanupWorker = createAssetCleanupWorker({
   logger,
 });
 resources.closeStorage = () => assetCleanupWorker.close();
+const presenceExpiryWorker = presenceStore
+  ? createPresenceExpiryWorker(
+      presenceStore,
+      organizations.presenceService,
+      logger,
+    )
+  : undefined;
+resources.closePresence = () => presenceExpiryWorker?.close();
 const app = createApp({
   allowedOrigins: config.clientOrigins,
   apiDocsRouter,
@@ -272,6 +345,9 @@ const app = createApp({
   uploadRouter: organizations.uploadRouter,
   userAvatarRouter: organizations.userAvatarRouter,
   trustProxy: config.trustProxy,
+  readiness: {
+    isReady: () => isDatabaseReady() && runtimeState.isReady(),
+  },
 });
 const server = http.createServer(app);
 const io = new Server<
@@ -289,6 +365,15 @@ const io = new Server<
 resources.server = server;
 resources.io = io;
 
+if (runtimeState.publisher && runtimeState.subscriber) {
+  io.adapter(
+    createAdapter(runtimeState.publisher, runtimeState.subscriber, {
+      key: `${runtimeState.keyPrefix}:socket.io`,
+      publishOnSpecificResponseChannel: true,
+    }),
+  );
+}
+
 realtimeGateway.setSocketServer(io);
 configureSocket(
   io,
@@ -305,13 +390,16 @@ configureSocket(
 );
 
 try {
+  await runtimeState.connect();
   await connectDatabase(config.databaseUri, logger);
   mailWorker.start();
   assetCleanupWorker.start();
+  presenceExpiryWorker?.start();
+  typingExpiryWorker?.start();
 
   server.listen(config.port, () => {
     logger.info({ port: config.port }, "Server running");
   });
 } catch (err) {
-  await shutdown("Database connection failed", 1, err);
+  await shutdown("Infrastructure connection failed", 1, err);
 }

@@ -3,6 +3,8 @@ export { createNoopTypingRealtime } from "./typing.realtime.js";
 export type { TypingRealtime, TypingUpdate } from "./typing.realtime.js";
 export type { TypingService } from "./typing.service.js";
 export { default as createInMemoryTypingStore } from "./typing.store.js";
+export { createRedisTypingStore } from "./redis-typing.store.js";
+export { createTypingExpiryWorker } from "./typing-expiry.worker.js";
 export { default as createInMemoryTypingExpiryScheduler } from "./typing.scheduler.js";
 export type { TypingStore } from "./typing.store.js";
 export type { TypingExpiryScheduler } from "./typing.scheduler.js";

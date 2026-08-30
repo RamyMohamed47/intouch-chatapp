@@ -87,6 +87,7 @@ import {
 import {
   createPresenceService,
   type PresenceRealtime,
+  type PresenceStore,
 } from "../presence/index.js";
 import { createMongooseUserRepository } from "../user/index.js";
 import {
@@ -123,6 +124,7 @@ export interface OrganizationModuleDependencies {
   notificationRealtime: NotificationRealtime;
   logger: Logger;
   presenceRealtime: PresenceRealtime;
+  presenceStore?: PresenceStore;
   readReceiptRealtime: ReadReceiptRealtime;
   rateLimits: AuthenticatedRateLimiter;
   requireAccessToken: RequestHandler;
@@ -142,6 +144,7 @@ const createOrganizationModule = ({
   notificationRealtime,
   logger,
   presenceRealtime,
+  presenceStore,
   rateLimits,
   readReceiptRealtime,
   requireAccessToken,
@@ -242,6 +245,10 @@ const createOrganizationModule = ({
     memberships,
     realtime: presenceRealtime,
     users,
+    ...(presenceStore ? { store: presenceStore } : {}),
+    onError: (error) => {
+      logger.error({ err: error }, "Presence transition failed");
+    },
   });
   const membershipDirectory = createMembershipDirectoryService({
     memberships,

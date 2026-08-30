@@ -17,6 +17,7 @@ import createAuthRouter from "./auth.routes.js";
 import createAuthService from "./auth.service.js";
 import createMongooseAuthUnitOfWork from "./auth.unit-of-work.js";
 import type { AuthCookieConfig } from "./auth.types.js";
+import type { Store } from "express-rate-limit";
 
 export interface AuthModuleConfig {
   accessTokenSecret: string;
@@ -40,6 +41,7 @@ export interface AuthModuleConfig {
   actionTokenSecret: string;
   mail: MailOutboxJobFactory;
   rateLimitsEnabled?: boolean;
+  rateLimitStoreFactory?: (prefix: string) => Store;
 }
 
 const createAuthModule = (config: AuthModuleConfig) => {
@@ -114,6 +116,9 @@ const createAuthModule = (config: AuthModuleConfig) => {
     ...(config.rateLimitsEnabled === undefined
       ? {}
       : { rateLimitsEnabled: config.rateLimitsEnabled }),
+    ...(config.rateLimitStoreFactory
+      ? { rateLimitStoreFactory: config.rateLimitStoreFactory }
+      : {}),
   });
 
   return {

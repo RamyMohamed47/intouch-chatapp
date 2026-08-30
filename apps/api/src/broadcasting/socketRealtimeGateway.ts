@@ -146,7 +146,7 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
     },
 
     async evictUser(conversationId, userId) {
-      typing?.clearUserInConversation(conversationId, userId);
+      await typing?.clearUserInConversation(conversationId, userId);
       if (!io) return;
       const sockets = await io.in(roomName(conversationId)).fetchSockets();
       for (const socket of sockets) {
@@ -165,7 +165,10 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       const sockets = await io.in(roomName(conversationId)).fetchSockets();
       for (const socket of sockets) {
         if (socket.data.userId !== userId) {
-          typing?.clearUserInConversation(conversationId, socket.data.userId);
+          await typing?.clearUserInConversation(
+            conversationId,
+            socket.data.userId,
+          );
           socket.emit(
             "conversation:access-revoked",
             conversationAccessRevokedEventSchema.parse({ conversationId }),
@@ -175,15 +178,14 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       }
     },
 
-    closeConversation(conversationId) {
-      typing?.clearConversation(conversationId);
+    async closeConversation(conversationId) {
+      await typing?.clearConversation(conversationId);
       if (!io) return Promise.resolve();
       io.to(roomName(conversationId)).emit(
         "conversation:access-revoked",
         conversationAccessRevokedEventSchema.parse({ conversationId }),
       );
       io.in(roomName(conversationId)).socketsLeave(roomName(conversationId));
-      return Promise.resolve();
     },
   };
 };

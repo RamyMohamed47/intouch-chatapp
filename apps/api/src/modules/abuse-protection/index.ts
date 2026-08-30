@@ -4,9 +4,19 @@ import createInMemoryRateLimitStore from "./rate-limit.store.js";
 import createRateLimitService from "./rate-limit.service.js";
 import createInMemorySocketConnectionStore from "./socket-connection.store.js";
 import createSocketConnectionService from "./socket-connection.service.js";
+import type { RateLimitStore } from "./rate-limit.types.js";
+import type { SocketConnectionStore } from "./socket-connection.store.js";
 
-const createAbuseProtectionModule = (logger: Logger) => {
-  const store = createInMemoryRateLimitStore();
+export interface AbuseProtectionModuleOptions {
+  rateLimitStore?: RateLimitStore;
+  socketConnectionStore?: SocketConnectionStore;
+}
+
+const createAbuseProtectionModule = (
+  logger: Logger,
+  options: AbuseProtectionModuleOptions = {},
+) => {
+  const store = options.rateLimitStore ?? createInMemoryRateLimitStore();
   const rateLimits = createRateLimitService({
     store,
     onLimited: ({ action, retryAfterMs, userId }) => {
@@ -18,7 +28,8 @@ const createAbuseProtectionModule = (logger: Logger) => {
   });
   const socketConnections = createSocketConnectionService({
     rateLimits,
-    store: createInMemorySocketConnectionStore(),
+    store:
+      options.socketConnectionStore ?? createInMemorySocketConnectionStore(),
   });
 
   return {
@@ -30,6 +41,8 @@ const createAbuseProtectionModule = (logger: Logger) => {
 
 export { default as createInMemoryRateLimitStore } from "./rate-limit.store.js";
 export { default as createRateLimitService } from "./rate-limit.service.js";
+export { createRedisRateLimitStore } from "./redis-rate-limit.store.js";
+export { createRedisSocketConnectionStore } from "./redis-socket-connection.store.js";
 export { default as createInMemorySocketConnectionStore } from "./socket-connection.store.js";
 export { default as createSocketConnectionService } from "./socket-connection.service.js";
 export { RateLimitAction } from "./rate-limit.types.js";

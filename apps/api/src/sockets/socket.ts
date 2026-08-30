@@ -31,7 +31,8 @@ import {
 export interface SocketDomainServices {
   connections?: SocketConnectionGuard;
   memberships?: Pick<MembershipDirectoryService, "assertMember">;
-  presence?: Pick<PresenceService, "markOffline" | "markOnline">;
+  presence?: Pick<PresenceService, "markOffline" | "markOnline"> &
+    Partial<Pick<PresenceService, "refresh">>;
   rateLimits?: AuthenticatedRateLimiter;
   typing?: Pick<TypingService, "disconnect" | "start" | "stop">;
 }
@@ -130,10 +131,12 @@ const configureSocket = (
           next();
         })().catch((error: unknown) => {
           logger.error({ err: error, userId }, "Socket admission failed");
+          const socketError = toSocketError(error);
           next(
             createConnectionError(
-              "INTERNAL_SERVER_ERROR",
-              "Something went wrong",
+              socketError.code,
+              socketError.message,
+              socketError.code === "SERVICE_UNAVAILABLE" ? 5_000 : undefined,
             ),
           );
         });
@@ -159,6 +162,31 @@ const configureSocket = (
           "Presence update failed",
         );
       });
+
+    const connectionHeartbeat = services.connections
+      ? setInterval(() => {
+          void services.connections
+            ?.refresh?.(socket.data.userId, socket.id)
+            .catch((error: unknown) => {
+              logger.error(
+                { err: error, userId: socket.data.userId },
+                "Realtime connection heartbeat failed",
+              );
+            });
+          void services.presence
+            ?.refresh?.(socket.data.userId, socket.id)
+            .catch((error: unknown) => {
+              logger.error(
+                { err: error, userId: socket.data.userId },
+                "Presence heartbeat failed",
+              );
+            });
+        }, 15_000)
+      : undefined;
+    connectionHeartbeat?.unref();
+    socket.once("disconnect", () => {
+      if (connectionHeartbeat) clearInterval(connectionHeartbeat);
+    });
 
     const enforceEventLimit = (
       action: RateLimitAction,
@@ -247,15 +275,20 @@ const configureSocket = (
         });
         return;
       }
-      services.typing?.stop(
-        parsed.data.conversationId,
-        socket.data.userId,
-        socket.id,
-      );
-      void Promise.resolve(
-        socket.leave(roomName(parsed.data.conversationId)),
-      ).then(() => {
+      void (async () => {
+        await services.typing?.stop(
+          parsed.data.conversationId,
+          socket.data.userId,
+          socket.id,
+        );
+        await socket.leave(roomName(parsed.data.conversationId));
         acknowledge({ success: true });
+      })().catch((error: unknown) => {
+        logger.error(
+          { err: error, userId: socket.data.userId },
+          "Conversation leave cleanup failed",
+        );
+        acknowledge({ success: false, error: toSocketError(error) });
       });
     });
 
@@ -341,20 +374,26 @@ const configureSocket = (
           });
           return;
         }
-        if (isTyping) {
-          services.typing?.start(
-            parsed.data.conversationId,
-            socket.data.userId,
-            socket.id,
-          );
-        } else {
-          services.typing?.stop(
-            parsed.data.conversationId,
-            socket.data.userId,
-            socket.id,
-          );
-        }
-        acknowledge({ success: true });
+        const update = isTyping
+          ? services.typing?.start(
+              parsed.data.conversationId,
+              socket.data.userId,
+              socket.id,
+            )
+          : services.typing?.stop(
+              parsed.data.conversationId,
+              socket.data.userId,
+              socket.id,
+            );
+        void Promise.resolve(update)
+          .then(() => acknowledge({ success: true }))
+          .catch((error: unknown) => {
+            logger.error(
+              { err: error, userId: socket.data.userId },
+              "Typing update failed",
+            );
+            acknowledge({ success: false, error: toSocketError(error) });
+          });
       };
       if (isTyping) {
         enforceEventLimit(RateLimitAction.SOCKET_TYPING, acknowledge, proceed);
@@ -371,7 +410,12 @@ const configureSocket = (
     });
 
     socket.on("disconnect", () => {
-      services.typing?.disconnect(socket.id);
+      void services.typing?.disconnect(socket.id).catch((error: unknown) => {
+        logger.error(
+          { err: error, userId: socket.data.userId },
+          "Typing disconnect cleanup failed",
+        );
+      });
       void services.presence
         ?.markOffline(socket.data.userId, socket.id)
         .catch((error: unknown) => {

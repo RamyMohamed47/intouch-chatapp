@@ -21,6 +21,8 @@ const validEnv: NodeJS.ProcessEnv = {
   MAIL_OUTBOX_ENCRYPTION_SECRET:
     "a-mail-outbox-encryption-secret-over-32-bytes",
   MAIL_PROVIDER: "smtp",
+  REDIS_URL: "redis://redis.internal:6379",
+  RUNTIME_STATE_PROVIDER: "redis",
   SEARCH_PROVIDER: "native",
   SMTP_HOST: "smtp.example.com",
   SMTP_PASSWORD: "smtp-password",
@@ -60,6 +62,66 @@ describe("auth environment configuration", () => {
     assert.equal(config.organizationStorageBytes, 5_368_709_120);
     assert.equal(config.trustProxy, "loopback");
     assert.equal(config.mailTransport.provider, "smtp");
+    assert.deepEqual(config.runtimeState, {
+      provider: "redis",
+      keyPrefix: "intouch:development:v2",
+      url: "redis://redis.internal:6379",
+    });
+  });
+
+  test("defaults to memory runtime state outside production", () => {
+    const config = loadConfig({
+      ...validEnv,
+      REDIS_URL: undefined,
+      RUNTIME_STATE_PROVIDER: undefined,
+    });
+
+    assert.deepEqual(config.runtimeState, {
+      provider: "memory",
+      keyPrefix: "intouch:development:v2",
+    });
+  });
+
+  test("requires Redis runtime state in production", () => {
+    const productionEnv = {
+      ...validEnv,
+      NODE_ENV: "production",
+      GOOGLE_OAUTH_CALLBACK_URL:
+        "https://app.example.com/api/v1/auth/oauth/google/callback",
+      STORAGE_PROVIDER: "r2",
+      R2_ACCOUNT_ID: "account-id",
+      R2_ACCESS_KEY_ID: "access-key-id",
+      R2_SECRET_ACCESS_KEY: "secret-access-key",
+      R2_BUCKET_NAME: "intouch-private",
+    };
+
+    assert.throws(
+      () =>
+        loadConfig({
+          ...productionEnv,
+          RUNTIME_STATE_PROVIDER: undefined,
+        }),
+      /RUNTIME_STATE_PROVIDER env var is required in production/,
+    );
+    assert.throws(
+      () =>
+        loadConfig({
+          ...productionEnv,
+          RUNTIME_STATE_PROVIDER: "memory",
+        }),
+      /RUNTIME_STATE_PROVIDER must be redis in production/,
+    );
+  });
+
+  test("validates Redis URLs and key prefixes", () => {
+    assert.throws(
+      () => loadConfig({ ...validEnv, REDIS_URL: "https://redis.test" }),
+      /REDIS_URL must use/,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnv, REDIS_KEY_PREFIX: "invalid prefix" }),
+      /REDIS_KEY_PREFIX/,
+    );
   });
 
   test("accepts bounded login-attempt configuration", () => {

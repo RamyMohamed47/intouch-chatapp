@@ -44,4 +44,7 @@ export const disconnectDatabase = async (logger: Logger = getLogger()) => {
   logger.info("DB connection closed");
 };
 
+export const isDatabaseReady = () =>
+  mongoose.connection.readyState === mongoose.ConnectionStates.connected;
+
 export default connectDatabase;

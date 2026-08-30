@@ -1,5 +1,6 @@
 export interface SocketConnectionStore {
   add(userId: string, socketId: string, maximum: number): Promise<boolean>;
+  refresh(userId: string, socketId: string): Promise<void>;
   remove(userId: string, socketId: string): Promise<void>;
 }
 
@@ -21,6 +22,10 @@ const createInMemorySocketConnectionStore = (): SocketConnectionStore => {
       if (!sockets) return Promise.resolve();
       sockets.delete(socketId);
       if (sockets.size === 0) socketsByUser.delete(userId);
+      return Promise.resolve();
+    },
+
+    refresh() {
       return Promise.resolve();
     },
   };

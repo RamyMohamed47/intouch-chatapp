@@ -26,6 +26,10 @@ export type StorageConfig =
       bucketName: string;
     };
 
+export type RuntimeStateConfig =
+  | { provider: "memory"; keyPrefix: string }
+  | { provider: "redis"; keyPrefix: string; url: string };
+
 export interface AppConfig {
   accessTokenAudience: string;
   accessTokenIssuer: string;
@@ -55,6 +59,7 @@ export interface AppConfig {
   storage: StorageConfig;
   uploadDailyUserBytes: number;
   organizationStorageBytes: number;
+  runtimeState: RuntimeStateConfig;
 }
 
 const requireEnv = (
@@ -81,7 +86,8 @@ const requireEnv = (
     | "R2_ACCOUNT_ID"
     | "R2_ACCESS_KEY_ID"
     | "R2_SECRET_ACCESS_KEY"
-    | "R2_BUCKET_NAME",
+    | "R2_BUCKET_NAME"
+    | "REDIS_URL",
 ) => {
   const value = env[name];
 
@@ -226,6 +232,40 @@ const parseStorage = (
     secretAccessKey: requireEnv(env, "R2_SECRET_ACCESS_KEY"),
     bucketName: requireEnv(env, "R2_BUCKET_NAME"),
   };
+};
+
+const parseRuntimeState = (
+  env: NodeJS.ProcessEnv,
+  isProduction: boolean,
+): RuntimeStateConfig => {
+  const provider =
+    env.RUNTIME_STATE_PROVIDER ?? (isProduction ? undefined : "memory");
+  const environment = env.NODE_ENV ?? "development";
+  const keyPrefix = env.REDIS_KEY_PREFIX ?? `intouch:${environment}:v2`;
+
+  if (!/^[a-zA-Z0-9:_-]{1,80}$/.test(keyPrefix)) {
+    throw new Error(
+      "REDIS_KEY_PREFIX must use only letters, numbers, colons, underscores, or hyphens",
+    );
+  }
+  if (provider === undefined) {
+    throw new Error("RUNTIME_STATE_PROVIDER env var is required in production");
+  }
+  if (provider === "memory") {
+    if (isProduction) {
+      throw new Error("RUNTIME_STATE_PROVIDER must be redis in production");
+    }
+    return { provider, keyPrefix };
+  }
+  if (provider !== "redis") {
+    throw new Error("RUNTIME_STATE_PROVIDER must be memory or redis");
+  }
+
+  const url = new URL(requireEnv(env, "REDIS_URL"));
+  if (!["redis:", "rediss:"].includes(url.protocol)) {
+    throw new Error("REDIS_URL must use redis:// or rediss://");
+  }
+  return { provider, keyPrefix, url: url.toString() };
 };
 
 const parseMailTransport = (
@@ -391,6 +431,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       "ORGANIZATION_STORAGE_BYTES",
       10_995_116_277_760,
     ),
+    runtimeState: parseRuntimeState(env, isProduction),
     trustProxy: isProduction ? 1 : "loopback",
     webAppUrl: parseWebAppUrl(
       requireEnv(env, "WEB_APP_URL"),

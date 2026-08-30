@@ -9,6 +9,7 @@ export interface SocketConnectionDecision {
 
 export interface SocketConnectionGuard {
   admit(userId: string, socketId: string): Promise<SocketConnectionDecision>;
+  refresh?(userId: string, socketId: string): Promise<void>;
   release(userId: string, socketId: string): Promise<void>;
 }
 
@@ -41,6 +42,9 @@ const createSocketConnectionService = ({
 
   release(userId, socketId) {
     return store.remove(userId, socketId);
+  },
+  refresh(userId, socketId) {
+    return store.refresh(userId, socketId);
   },
 });
 

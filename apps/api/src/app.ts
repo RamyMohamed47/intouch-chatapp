@@ -4,7 +4,10 @@ import cors from "cors";
 import express from "express";
 import type { Router } from "express";
 import helmet from "helmet";
-import { healthResponseSchema } from "@intouch/shared/common";
+import {
+  healthResponseSchema,
+  readinessResponseSchema,
+} from "@intouch/shared/common";
 
 import NotFoundError from "./errors/NotFoundError.js";
 import ForbiddenError from "./errors/ForbiddenError.js";
@@ -34,6 +37,7 @@ export interface AppDependencies {
   uploadRouter?: Router;
   userAvatarRouter?: Router;
   trustProxy?: boolean | number | string;
+  readiness?: { isReady(): boolean };
 }
 
 const createApp = ({
@@ -59,6 +63,7 @@ const createApp = ({
   uploadRouter,
   userAvatarRouter,
   trustProxy = false,
+  readiness = { isReady: () => true },
 }: AppDependencies = {}) => {
   const app = express();
 
@@ -89,6 +94,16 @@ const createApp = ({
       healthResponseSchema.parse({
         status: "ok",
         uptime: process.uptime(),
+        timestamp: new Date(),
+      }),
+    );
+  });
+
+  app.get("/ready", (_req, res) => {
+    const ready = readiness.isReady();
+    res.status(ready ? 200 : 503).json(
+      readinessResponseSchema.parse({
+        status: ready ? "ready" : "not_ready",
         timestamp: new Date(),
       }),
     );

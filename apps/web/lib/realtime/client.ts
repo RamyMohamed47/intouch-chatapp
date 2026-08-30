@@ -11,6 +11,7 @@ export type InTouchSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export const createRealtimeClient = (): InTouchSocket =>
   io(process.env.NEXT_PUBLIC_SOCKET_ORIGIN ?? "http://localhost:3000", {
     autoConnect: false,
+    transports: ["websocket"],
     auth: (setAuth) => {
       setAuth({ accessToken: getAccessToken() });
     },

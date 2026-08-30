@@ -41,7 +41,13 @@ export const healthResponseSchema = z.object({
   timestamp: dateTimeDtoSchema,
 });
 
+export const readinessResponseSchema = z.object({
+  status: z.enum(["ready", "not_ready"]),
+  timestamp: dateTimeDtoSchema,
+});
+
 export type ErrorCodeValue = z.infer<typeof errorCodeSchema>;
 export type ErrorDto = z.infer<typeof errorDtoSchema>;
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+export type ReadinessResponse = z.infer<typeof readinessResponseSchema>;

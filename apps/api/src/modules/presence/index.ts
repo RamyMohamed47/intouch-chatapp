@@ -2,6 +2,8 @@ export { default as createPresenceService } from "./presence.service.js";
 export { createNoopPresenceRealtime } from "./presence.realtime.js";
 export { PresenceStatus } from "./presence.types.js";
 export { default as createInMemoryPresenceStore } from "./presence.store.js";
+export { createRedisPresenceStore } from "./redis-presence.store.js";
+export { createPresenceExpiryWorker } from "./presence-expiry.worker.js";
 export { default as createInMemoryPresenceTransitionScheduler } from "./presence.scheduler.js";
 export type { PresenceRealtime } from "./presence.realtime.js";
 export type { PresenceService } from "./presence.service.js";

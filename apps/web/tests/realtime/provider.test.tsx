@@ -414,6 +414,17 @@ describe("RealtimeProvider", () => {
     await waitFor(() => expect(fakeSocket.connectCalls).toBe(2));
     expect(refreshCalls).toBe(1);
 
+    const unavailable = Object.assign(new Error("runtime unavailable"), {
+      data: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Runtime state is unavailable",
+        retryAfterMs: 10,
+      },
+    });
+    act(() => fakeSocket.trigger("connect_error", unavailable));
+    await waitFor(() => expect(fakeSocket.connectCalls).toBe(3));
+    expect(refreshCalls).toBe(1);
+
     const unauthorized = Object.assign(new Error("expired"), {
       data: { code: "UNAUTHORIZED", message: "Invalid access token" },
     });

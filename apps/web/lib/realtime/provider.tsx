@@ -247,6 +247,14 @@ export function RealtimeProvider({
           () => nextSocket.connect(),
           parsed.data.retryAfterMs ?? 15_000,
         );
+        return;
+      }
+      if (parsed.data.code === "SERVICE_UNAVAILABLE") {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(
+          () => nextSocket.connect(),
+          parsed.data.retryAfterMs ?? 5_000,
+        );
       }
     });
 
