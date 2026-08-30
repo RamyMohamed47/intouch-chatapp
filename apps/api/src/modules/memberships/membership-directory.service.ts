@@ -54,6 +54,7 @@ const createMembershipDirectoryService = ({
               id: user.id,
               username: user.username,
               displayName: user.displayName,
+              avatarAssetId: user.avatarAssetId ?? null,
               ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
               status: memberPresence.status,
               lastSeenAt: memberPresence.lastSeenAt,

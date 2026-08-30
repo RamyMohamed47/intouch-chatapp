@@ -37,6 +37,7 @@ export interface PersonSearchRecord {
   username: string;
   displayName: string;
   avatarUrl?: string;
+  avatarAssetId?: string | null;
 }
 
 export interface DirectConversationPair {

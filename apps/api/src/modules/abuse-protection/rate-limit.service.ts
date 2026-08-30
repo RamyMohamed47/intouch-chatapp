@@ -16,6 +16,8 @@ const balancedPolicies: Readonly<Record<RateLimitAction, TokenBucketPolicy>> = {
   [Action.READ_RECEIPT_UPDATE]: { capacity: 30, refillIntervalMs: 500 },
   [Action.SEARCH]: { capacity: 20, refillIntervalMs: 500 },
   [Action.WALLPAPER_MUTATE]: { capacity: 10, refillIntervalMs: 2_000 },
+  [Action.UPLOAD_MUTATE]: { capacity: 20, refillIntervalMs: 2_000 },
+  [Action.ASSET_ACCESS]: { capacity: 60, refillIntervalMs: 500 },
   [Action.SOCKET_CONNECT]: { capacity: 10, refillIntervalMs: 3_000 },
   [Action.SOCKET_SUBSCRIBE]: { capacity: 20, refillIntervalMs: 1_000 },
   [Action.SOCKET_TYPING]: { capacity: 10, refillIntervalMs: 2_000 },

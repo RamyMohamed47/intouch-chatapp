@@ -25,6 +25,7 @@ const conversation: DirectConversationDto = {
     id: peerUserId,
     username: "lina",
     displayName: "Lina Hassan",
+    avatarAssetId: null,
   },
   lastMessage: null,
   unreadCount: 0,

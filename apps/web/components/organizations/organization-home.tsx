@@ -15,8 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/workspace/page-header";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { ResourceState } from "@/components/workspace/resource-state";
-import { initials } from "@/components/workspace/app-shell";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/users/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
@@ -177,11 +176,11 @@ export function OrganizationHome({
                     href={`/app/${organizationId}/direct-messages/${conversation.id}`}
                     className="flex items-center gap-3 rounded-2xl border border-border p-3 hover:bg-card/50"
                   >
-                    <Avatar>
-                      <AvatarFallback>
-                        {initials(conversation.peer.displayName)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      displayName={conversation.peer.displayName}
+                      avatarAssetId={conversation.peer.avatarAssetId}
+                      avatarUrl={conversation.peer.avatarUrl}
+                    />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {conversation.peer.displayName}
                     </span>
@@ -205,17 +204,20 @@ export function OrganizationHome({
                   key={member.membershipId}
                   className="flex items-center gap-3"
                 >
-                  <Avatar size="sm">
-                    <AvatarFallback>
-                      {initials(member.user.displayName)}
-                    </AvatarFallback>
+                  <span className="relative shrink-0">
+                    <UserAvatar
+                      size="sm"
+                      displayName={member.user.displayName}
+                      avatarAssetId={member.user.avatarAssetId}
+                      avatarUrl={member.user.avatarUrl}
+                    />
                     <PresenceIndicator
                       displayName={member.user.displayName}
                       status={member.user.status}
                       lastSeenAt={member.user.lastSeenAt}
                       variant="compact"
                     />
-                  </Avatar>
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm">
                       {member.user.displayName}

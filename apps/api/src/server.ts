@@ -28,6 +28,11 @@ import {
   createBrevoMailTransport,
   createSmtpMailTransport,
 } from "./modules/mail/index.js";
+import {
+  createAssetCleanupWorker,
+  createDisabledObjectStorage,
+  createR2ObjectStorage,
+} from "./modules/uploads/index.js";
 
 loadEnvFile();
 
@@ -42,6 +47,7 @@ type InTouchServer = Server<
 const resources: {
   closeAbuseProtection?: () => void;
   closeMail?: () => Promise<void>;
+  closeStorage?: () => Promise<void>;
   server?: http.Server;
   io?: InTouchServer;
 } = {};
@@ -118,6 +124,7 @@ const shutdown = (
       await closeHttpServer();
       resources.closeAbuseProtection?.();
       await resources.closeMail?.();
+      await resources.closeStorage?.();
       await disconnectDatabase(logger);
       clearTimeout(forceShutdownTimer);
       logger.info({ reason }, "Graceful shutdown complete");
@@ -183,6 +190,10 @@ resources.closeAbuseProtection = abuseProtection.close;
 const realtimeGateway = createSocketRealtimeGateway();
 const typingService = createTypingService({ realtime: realtimeGateway });
 realtimeGateway.setTypingService(typingService);
+const storage =
+  config.storage.provider === "r2"
+    ? createR2ObjectStorage(config.storage)
+    : createDisabledObjectStorage();
 const auth = createAuthModule({
   actionTokenSecret: config.authActionTokenSecret,
   accessTokenSecret: config.accessTokenSecret,
@@ -227,10 +238,20 @@ const organizations = createOrganizationModule({
   requireAccessToken: auth.requireAccessToken,
   searchProvider: config.searchProvider,
   mail: mailJobs,
+  storage,
+  uploadDailyUserBytes: config.uploadDailyUserBytes,
+  organizationStorageBytes: config.organizationStorageBytes,
 });
+const assetCleanupWorker = createAssetCleanupWorker({
+  assets: organizations.assets,
+  storage,
+  logger,
+});
+resources.closeStorage = () => assetCleanupWorker.close();
 const app = createApp({
   allowedOrigins: config.clientOrigins,
   apiDocsRouter,
+  assetRouter: organizations.assetRouter,
   authRouter: auth.router,
   categoryRouter: organizations.categoryRouter,
   conversationMessageRouter: organizations.conversationMessageRouter,
@@ -248,6 +269,8 @@ const app = createApp({
   readReceiptRouter: organizations.readReceiptRouter,
   searchRouter: organizations.searchRouter,
   userChatWallpaperRouter: organizations.userChatWallpaperRouter,
+  uploadRouter: organizations.uploadRouter,
+  userAvatarRouter: organizations.userAvatarRouter,
   trustProxy: config.trustProxy,
 });
 const server = http.createServer(app);
@@ -284,6 +307,7 @@ configureSocket(
 try {
   await connectDatabase(config.databaseUri, logger);
   mailWorker.start();
+  assetCleanupWorker.start();
 
   server.listen(config.port, () => {
     logger.info({ port: config.port }, "Server running");

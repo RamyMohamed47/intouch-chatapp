@@ -12,10 +12,13 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "search:index:sync": "tsx src/migrations/syncSearchIndexes.ts",
+    "storage:cors:sync": "tsx src/migrations/syncStorageCors.ts",
     "migrate:remove-user-status": "tsx src/migrations/removeLegacyUserStatus.ts",
     "migrate:verify-existing-users": "tsx src/migrations/verifyExistingUsers.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.922.0",
+    "@aws-sdk/s3-request-presigner": "^3.922.0",
     "@intouch/shared": "*",
     "bcryptjs": "^3.0.2",
     "compression": "^1.8.1",
@@ -24,6 +27,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "file-type": "^21.0.0",
     "google-auth-library": "^10.9.1",
     "helmet": "^8.3.0",
     "jose": "^6.1.3",

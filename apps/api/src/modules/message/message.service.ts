@@ -13,7 +13,12 @@ import type { ConversationPolicy } from "../conversations/conversation.policy.js
 import type { MessageReactionService } from "../message-reactions/index.js";
 import type { NotificationService } from "../notifications/index.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
-import { MessageNotFoundError } from "./message.errors.js";
+import type { UploadService } from "../uploads/index.js";
+import { UploadConflictError } from "../uploads/upload.errors.js";
+import {
+  MessageNotFoundError,
+  MessageValidationError,
+} from "./message.errors.js";
 import type { MessageRepository } from "./message.repository.js";
 import { MessageType, type MessagePage } from "./message.types.js";
 
@@ -33,6 +38,7 @@ export interface MessageServiceDependencies {
   >;
   messages: MessageRepository;
   reactions: Pick<MessageReactionService, "decorate">;
+  uploads?: Pick<UploadService, "decorate">;
   unitOfWork: OrganizationUnitOfWork;
   notificationDelivery?: Pick<
     NotificationService,
@@ -49,6 +55,12 @@ const createMessageService = ({
   conversations,
   messages,
   reactions,
+  uploads = {
+    decorate: <T extends { id: string }>(records: readonly T[]) =>
+      Promise.resolve(
+        records.map((record) => ({ ...record, attachments: [] })),
+      ),
+  },
   unitOfWork,
   notificationDelivery = {
     publishDeleted: () => undefined,
@@ -71,8 +83,9 @@ const createMessageService = ({
     );
     const hasMore = records.length > query.limit;
     const page = hasMore ? records.slice(0, query.limit) : records;
+    const withAttachments = await uploads.decorate(page);
     return {
-      messages: await reactions.decorate(userId, conversation, page),
+      messages: await reactions.decorate(userId, conversation, withAttachments),
       nextCursor: hasMore ? (page.at(-1)?.id ?? null) : null,
     };
   },
@@ -95,12 +108,27 @@ const createMessageService = ({
       ) {
         throw new ConversationNotFoundError();
       }
+      const uploadIds = input.uploadIds ?? [];
       const created = await context.messages.create({
         conversationId,
         senderId: userId,
-        content: input.content,
-        messageType: MessageType.TEXT,
+        content: input.content ?? null,
+        messageType:
+          uploadIds.length > 0 ? MessageType.ATTACHMENT : MessageType.TEXT,
       });
+      const claimed = await context.assets.claimForMessage({
+        assetIds: uploadIds,
+        ownerUserId: userId,
+        conversationId,
+        messageId: created.id,
+        now: new Date(),
+      });
+      if (
+        claimed.length !== uploadIds.length ||
+        claimed.some((asset) => !uploadIds.includes(asset.id))
+      ) {
+        throw new UploadConflictError();
+      }
       if (
         !(await context.conversations.touchActivity(
           conversationId,
@@ -140,13 +168,15 @@ const createMessageService = ({
       }
       return { conversation, message: created, notification };
     });
-    broadcaster.messageCreated(result.message);
+    const [message] = await uploads.decorate([result.message]);
+    if (!message) throw new MessageNotFoundError();
+    broadcaster.messageCreated(message);
     await activity.messageCreated(result.conversation, userId);
     if (result.notification) {
       await notificationDelivery.publishUpsert(result.notification);
     }
     return {
-      ...result.message,
+      ...message,
       reactions: [],
       currentUserReaction: null,
     };
@@ -166,7 +196,7 @@ const createMessageService = ({
       messages: await reactions.decorate(
         userId,
         conversation,
-        context.messages,
+        await uploads.decorate(context.messages),
       ),
       hasEarlier: context.hasEarlier,
       hasLater: context.hasLater,
@@ -181,16 +211,28 @@ const createMessageService = ({
       existing.conversationId,
     );
     conversationPolicy.assertMessageEditable(existing, userId);
+    const [existingWithAttachments] = await uploads.decorate([existing]);
+    if (!existingWithAttachments) throw new MessageNotFoundError();
+    if (
+      input.content === null &&
+      existingWithAttachments.attachments.length === 0
+    ) {
+      throw new MessageValidationError(
+        "A text-only message cannot have an empty caption",
+      );
+    }
     const message = await messages.updateContent(
       messageId,
       input.content,
       new Date(),
     );
     if (!message) throw new MessageNotFoundError();
-    broadcaster.messageUpdated(message);
+    const [withAttachments] = await uploads.decorate([message]);
+    if (!withAttachments) throw new MessageNotFoundError();
+    broadcaster.messageUpdated(withAttachments);
     await activity.messageUpdated(conversation, userId);
     const [decorated] = await reactions.decorate(userId, conversation, [
-      message,
+      withAttachments,
     ]);
     if (!decorated) throw new MessageNotFoundError();
     return decorated;
@@ -226,12 +268,13 @@ const createMessageService = ({
       const message = await context.messages.redact(messageId, new Date());
       if (!message) throw new MessageNotFoundError();
       await context.messageReactions.deleteByMessageId(messageId);
+      await context.assets.markMessageAssetsForDeletion(messageId);
       const removedNotifications =
         await context.notifications.deleteByMessageId(messageId);
       return { conversation, message, removedNotifications };
     });
     if (!result) return;
-    broadcaster.messageDeleted(result.message);
+    broadcaster.messageDeleted({ ...result.message, attachments: [] });
     await activity.messageDeleted(result.conversation, userId);
     for (const notification of result.removedNotifications) {
       notificationDelivery.publishDeleted(notification);

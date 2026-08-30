@@ -115,6 +115,7 @@ describe("conversation policy", () => {
       deletedAt: null,
       createdAt: now,
       updatedAt: now,
+      attachments: [],
     };
     assert.equal(
       policy.assertMessageDeletable(message, conversation, userId, member),
@@ -158,6 +159,7 @@ describe("conversation policy", () => {
       deletedAt: null,
       createdAt: now,
       updatedAt: now,
+      attachments: [],
     };
     assert.throws(
       () => policy.assertAccessible(directConversation, member, null),

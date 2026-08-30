@@ -8,6 +8,8 @@ export const RateLimitAction = {
   READ_RECEIPT_UPDATE: "read-receipt:update",
   SEARCH: "search:query",
   WALLPAPER_MUTATE: "wallpaper:mutate",
+  UPLOAD_MUTATE: "upload:mutate",
+  ASSET_ACCESS: "asset:access",
   SOCKET_CONNECT: "socket:connect",
   SOCKET_SUBSCRIBE: "socket:subscribe",
   SOCKET_TYPING: "socket:typing",

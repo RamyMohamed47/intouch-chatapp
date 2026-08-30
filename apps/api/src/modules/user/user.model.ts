@@ -61,6 +61,10 @@ const userSchema = new Schema<User>(
       trim: true,
     },
     avatarUrl: String,
+    avatarAssetId: {
+      type: Schema.Types.ObjectId,
+      ref: "StoredAsset",
+    },
     lastSeenAt: Date,
     emailVerificationStatus: {
       type: String,

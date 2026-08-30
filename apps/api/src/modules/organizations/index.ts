@@ -103,6 +103,16 @@ import createOrganizationRouter from "./organization.routes.js";
 import createOrganizationService from "./organization.service.js";
 import createMongooseOrganizationUnitOfWork from "./organization.unit-of-work.js";
 import type { MailOutboxJobFactory } from "../mail/index.js";
+import {
+  createAssetRouter,
+  createMongooseStoredAssetRepository,
+  createMongooseUploadUnitOfWork,
+  createUploadController,
+  createUploadRouter,
+  createUploadService,
+  createUserAvatarRouter,
+  type ObjectStorage,
+} from "../uploads/index.js";
 
 export interface OrganizationModuleDependencies {
   conversationActivityRealtime: ConversationActivityRealtime;
@@ -118,6 +128,9 @@ export interface OrganizationModuleDependencies {
   requireAccessToken: RequestHandler;
   searchProvider: SearchProvider;
   mail: MailOutboxJobFactory;
+  storage: ObjectStorage;
+  uploadDailyUserBytes: number;
+  organizationStorageBytes: number;
 }
 
 const createOrganizationModule = ({
@@ -134,6 +147,9 @@ const createOrganizationModule = ({
   requireAccessToken,
   searchProvider,
   mail,
+  storage,
+  uploadDailyUserBytes,
+  organizationStorageBytes,
 }: OrganizationModuleDependencies) => {
   const createDirectMessageLimit = createAuthenticatedRateLimit(
     rateLimits,
@@ -179,6 +195,16 @@ const createOrganizationModule = ({
     rateLimits,
     RateLimitAction.WALLPAPER_MUTATE,
     "Too many wallpaper updates",
+  );
+  const mutateUploadLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.UPLOAD_MUTATE,
+    "Too many upload attempts",
+  );
+  const accessAssetLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.ASSET_ACCESS,
+    "Too many asset access attempts",
   );
   const categories = createMongooseCategoryRepository();
   const chatWallpapers = createMongooseChatWallpaperRepository();
@@ -265,6 +291,15 @@ const createOrganizationModule = ({
     users,
     notificationDelivery: notificationService,
   });
+  const assets = createMongooseStoredAssetRepository();
+  const uploadService = createUploadService({
+    assets,
+    conversations: conversationService,
+    storage,
+    unitOfWork: createMongooseUploadUnitOfWork(),
+    dailyUserBytes: uploadDailyUserBytes,
+    organizationStorageBytes,
+  });
   const chatWallpaperService = createChatWallpaperService({
     conversations,
     memberships,
@@ -293,6 +328,7 @@ const createOrganizationModule = ({
     messages,
     notificationDelivery: notificationService,
     reactions: messageReactionService,
+    uploads: uploadService,
     unitOfWork,
   });
   const directMessageService = createDirectMessageService({
@@ -348,6 +384,7 @@ const createOrganizationModule = ({
   const searchController = createSearchController(searchService);
   const notificationController =
     createNotificationController(notificationService);
+  const uploadController = createUploadController(uploadService);
   const router = createOrganizationRouter(controller, requireAccessToken);
   const accessRouter = createOrganizationAccessRouter(
     membershipController,
@@ -416,9 +453,26 @@ const createOrganizationModule = ({
     requireAccessToken,
     mutateNotificationLimit,
   );
+  const uploadRouter = createUploadRouter(
+    uploadController,
+    requireAccessToken,
+    mutateUploadLimit,
+  );
+  const assetRouter = createAssetRouter(
+    uploadController,
+    requireAccessToken,
+    accessAssetLimit,
+  );
+  const userAvatarRouter = createUserAvatarRouter(
+    uploadController,
+    requireAccessToken,
+    mutateUploadLimit,
+  );
 
   return {
     accessRouter,
+    assetRouter,
+    assets,
     categoryRouter,
     conversationMessageRouter,
     conversationChatWallpaperRouter,
@@ -436,6 +490,8 @@ const createOrganizationModule = ({
     router,
     searchRouter,
     userChatWallpaperRouter,
+    uploadRouter,
+    userAvatarRouter,
   };
 };
 

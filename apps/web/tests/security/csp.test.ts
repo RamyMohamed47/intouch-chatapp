@@ -51,6 +51,23 @@ describe("frontend content security policy", () => {
     expect(policy).not.toContain("upgrade-insecure-requests");
   });
 
+  it("allows only the configured private-storage origin for direct transfers", () => {
+    const policy = buildContentSecurityPolicy({
+      isDevelopment: false,
+      nonce: "storage-nonce",
+      socketOrigin: "https://api.intouch.example",
+      storageOrigin: "https://account-id.r2.cloudflarestorage.com/bucket/path",
+    });
+
+    expect(directive(policy, "connect-src")).toBe(
+      "connect-src 'self' https://api.intouch.example wss://api.intouch.example https://account-id.r2.cloudflarestorage.com",
+    );
+    expect(directive(policy, "img-src")).toBe(
+      "img-src 'self' data: blob: https://account-id.r2.cloudflarestorage.com",
+    );
+    expect(policy).not.toContain("*.r2.cloudflarestorage.com");
+  });
+
   it("adds a per-request nonce CSP and complementary security headers", () => {
     const response = proxy(new NextRequest("http://localhost:3001/login"));
     const policy = response.headers.get("content-security-policy");

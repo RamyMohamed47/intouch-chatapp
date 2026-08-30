@@ -29,8 +29,10 @@ npm run dev:web
 
 Frontend server settings are documented in `apps/web/.env.example`.
 `BACKEND_ORIGIN` is server-only and powers the same-origin API proxy;
-`NEXT_PUBLIC_SOCKET_ORIGIN` is the direct Socket.IO endpoint. The application
-uses the proxy for REST and OAuth while Socket.IO connects directly to the API.
+`NEXT_PUBLIC_SOCKET_ORIGIN` is the direct Socket.IO endpoint.
+`NEXT_PUBLIC_R2_ORIGIN` is the exact Cloudflare R2 S3 origin used only by
+browser presigned uploads and private asset reads. The application uses the
+proxy for REST and OAuth while Socket.IO and R2 transfers connect directly.
 
 Health check:
 
@@ -88,6 +90,21 @@ channel and direct-message overrides synchronize through MongoDB for future
 web and mobile clients. Wallpaper images remain client assets; the API stores
 only stable preset IDs and dimming values.
 
+## Private File Uploads
+
+Profile avatars and message attachments use a private Cloudflare R2 bucket.
+The API reserves quota and returns five-minute, content-type-bound presigned
+`PUT` URLs; the browser uploads directly, then asks the API to verify and
+promote the object. Clients never receive R2 credentials or permanent public
+URLs. Authorized reads use ten-minute presigned `GET` URLs.
+
+Messages accept up to five 25 MB attachments. Supported formats are JPEG, PNG,
+WebP, GIF, PDF, UTF-8 text, CSV, DOCX, XLSX, and PPTX. Archives, executables,
+SVG, macro-enabled Office files, and mismatched signatures are rejected.
+Attachment claims and avatar replacement participate in the same MongoDB
+transaction as their domain mutation. Deletions are asynchronous through the
+durable leased cleanup worker.
+
 ## Runtime
 
 The API reads `apps/api/config.env`. The path is resolved from the API package,
@@ -110,6 +127,9 @@ values are:
 - `MAIL_PROVIDER`; use `brevo` for HTTPS delivery or `smtp` for SMTP
 - `MAIL_FROM_NAME` and `MAIL_FROM_ADDRESS`
 - `SEARCH_PROVIDER`; use `atlas` in production and `native` for local MongoDB
+- `STORAGE_PROVIDER`; production requires `r2`
+- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
+  `R2_BUCKET_NAME` when R2 storage is enabled
 
 `MAIL_PROVIDER=brevo` requires `BREVO_API_KEY`. `MAIL_PROVIDER=smtp` requires
 `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASSWORD`.
@@ -145,6 +165,21 @@ Optional:
 - `SMTP_PORT`, defaults to `587`
 - `SMTP_SECURE`, defaults to `false` for STARTTLS
 - `SMTP_REQUIRE_TLS`, defaults to `true` and cannot be disabled in production
+- `UPLOAD_DAILY_USER_BYTES`, defaults to `524288000` (500 MB)
+- `ORGANIZATION_STORAGE_BYTES`, defaults to `5368709120` (5 GB)
+
+Development/test defaults to `STORAGE_PROVIDER=disabled`. To exercise uploads
+locally, set the R2 variables and `STORAGE_PROVIDER=r2` in
+`apps/api/config.env`, set `NEXT_PUBLIC_R2_ORIGIN` in `apps/web/.env.local`, and
+synchronize exact browser origins:
+
+```bash
+npm run storage:cors:sync
+```
+
+The CORS command permits only configured `CLIENT_ORIGINS`, `PUT/GET/HEAD`, the
+required content header, and exposed `ETag`. Do not enable `r2.dev` public
+access and never put R2 credentials in `NEXT_PUBLIC_*` variables.
 
 Example development auth configuration:
 
@@ -353,9 +388,10 @@ Redis-backed rate-limit and connection stores.
 
 The Next.js frontend emits a per-request nonce Content Security Policy for page
 documents. Production scripts require the nonce, Socket.IO connections are
-restricted to `NEXT_PUBLIC_SOCKET_ORIGIN`, framing and object embedding are
-disabled, and the theme bootstrap receives the request nonce. Inline styles
-remain permitted for runtime component positioning.
+restricted to `NEXT_PUBLIC_SOCKET_ORIGIN`, and private transfers are restricted
+to `NEXT_PUBLIC_R2_ORIGIN`. Framing and object embedding are disabled, and the
+theme bootstrap receives the request nonce. Inline styles remain permitted for
+runtime component positioning.
 
 Development logs are formatted for readability. Production logs are structured
 JSON written to stdout.
@@ -430,6 +466,13 @@ ignored by Git.
 Railway plans that block outbound SMTP must configure `MAIL_PROVIDER=brevo`
 with `BREVO_API_KEY` and a Brevo-verified `MAIL_FROM_ADDRESS`. Upgrading to a
 plan that permits SMTP is not required when the HTTPS provider is selected.
+
+Configure the API service with `STORAGE_PROVIDER=r2` and the four private R2
+credentials. Configure the web service with the exact public
+`NEXT_PUBLIC_R2_ORIGIN`, normally
+`https://<account-id>.r2.cloudflarestorage.com`. After both frontend origins are
+present in API `CLIENT_ORIGINS`, run `npm run storage:cors:sync` once using the
+production API variables. The bucket itself remains private.
 
 Build both applications from the workspace root:
 

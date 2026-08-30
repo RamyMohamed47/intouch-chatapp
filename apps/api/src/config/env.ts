@@ -16,6 +16,16 @@ export type MailTransportConfig =
       user: string;
     };
 
+export type StorageConfig =
+  | { provider: "disabled" }
+  | {
+      provider: "r2";
+      accountId: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      bucketName: string;
+    };
+
 export interface AppConfig {
   accessTokenAudience: string;
   accessTokenIssuer: string;
@@ -42,6 +52,9 @@ export interface AppConfig {
   port: number;
   searchProvider: "atlas" | "native";
   trustProxy: boolean | number | string;
+  storage: StorageConfig;
+  uploadDailyUserBytes: number;
+  organizationStorageBytes: number;
 }
 
 const requireEnv = (
@@ -64,7 +77,11 @@ const requireEnv = (
     | "SMTP_HOST"
     | "SMTP_PASSWORD"
     | "SMTP_USER"
-    | "WEB_APP_URL",
+    | "WEB_APP_URL"
+    | "R2_ACCOUNT_ID"
+    | "R2_ACCESS_KEY_ID"
+    | "R2_SECRET_ACCESS_KEY"
+    | "R2_BUCKET_NAME",
 ) => {
   const value = env[name];
 
@@ -182,6 +199,33 @@ const parseSearchProvider = (
     throw new Error("SEARCH_PROVIDER must be atlas or native");
   }
   return value;
+};
+
+const parseStorage = (
+  env: NodeJS.ProcessEnv,
+  isProduction: boolean,
+): StorageConfig => {
+  const provider =
+    env.STORAGE_PROVIDER ?? (isProduction ? undefined : "disabled");
+  if (provider === undefined) {
+    throw new Error("STORAGE_PROVIDER env var is required in production");
+  }
+  if (provider === "disabled") {
+    if (isProduction) {
+      throw new Error("STORAGE_PROVIDER must be r2 in production");
+    }
+    return { provider };
+  }
+  if (provider !== "r2") {
+    throw new Error("STORAGE_PROVIDER must be r2 or disabled");
+  }
+  return {
+    provider,
+    accountId: requireEnv(env, "R2_ACCOUNT_ID"),
+    accessKeyId: requireEnv(env, "R2_ACCESS_KEY_ID"),
+    secretAccessKey: requireEnv(env, "R2_SECRET_ACCESS_KEY"),
+    bucketName: requireEnv(env, "R2_BUCKET_NAME"),
+  };
 };
 
 const parseMailTransport = (
@@ -334,6 +378,19 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     mailTransport,
     port: parsePort(env.PORT),
     searchProvider: parseSearchProvider(env.SEARCH_PROVIDER, isProduction),
+    storage: parseStorage(env, isProduction),
+    uploadDailyUserBytes: parseBoundedInteger(
+      env.UPLOAD_DAILY_USER_BYTES,
+      524_288_000,
+      "UPLOAD_DAILY_USER_BYTES",
+      10_995_116_277_760,
+    ),
+    organizationStorageBytes: parseBoundedInteger(
+      env.ORGANIZATION_STORAGE_BYTES,
+      5_368_709_120,
+      "ORGANIZATION_STORAGE_BYTES",
+      10_995_116_277_760,
+    ),
     trustProxy: isProduction ? 1 : "loopback",
     webAppUrl: parseWebAppUrl(
       requireEnv(env, "WEB_APP_URL"),

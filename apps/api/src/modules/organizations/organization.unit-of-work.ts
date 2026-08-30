@@ -35,6 +35,10 @@ import createMongooseConversationReadStateRepository, {
 import createMongooseOrganizationRepository, {
   type OrganizationRepository,
 } from "./organization.repository.js";
+import {
+  createMongooseStoredAssetRepository,
+  type StoredAssetRepository,
+} from "../uploads/index.js";
 import { createMongooseMailOutboxRepository } from "../mail/index.js";
 import type { MailOutboxRepository } from "../mail/index.js";
 
@@ -51,6 +55,7 @@ export interface OrganizationWorkContext {
   conversationReadStates: ConversationReadStateRepository;
   mailOutbox: MailOutboxRepository;
   notifications: NotificationRepository;
+  assets: StoredAssetRepository;
 }
 
 export interface OrganizationUnitOfWork {
@@ -76,6 +81,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
         createMongooseConversationReadStateRepository(session);
       const mailOutbox = createMongooseMailOutboxRepository(session);
       const notifications = createMongooseNotificationRepository(session);
+      const assets = createMongooseStoredAssetRepository(session);
 
       return work({
         categories,
@@ -90,6 +96,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
         notifications,
         conversationReadStates,
         organizations,
+        assets,
       });
     });
   },

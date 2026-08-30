@@ -32,8 +32,7 @@ import { InviteMemberForm } from "@/components/memberships/invite-member-form";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
-import { initials } from "@/components/workspace/app-shell";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/users/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/form-error";
@@ -616,11 +615,11 @@ function MemberSettings({ organizationId }: { organizationId: string }) {
               key={member.membershipId}
               className="flex items-center gap-3 rounded-2xl border border-border bg-card/35 p-3"
             >
-              <Avatar>
-                <AvatarFallback>
-                  {initials(member.user.displayName)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                displayName={member.user.displayName}
+                avatarAssetId={member.user.avatarAssetId}
+                avatarUrl={member.user.avatarUrl}
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {member.user.displayName}

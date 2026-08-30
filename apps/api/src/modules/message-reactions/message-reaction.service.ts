@@ -22,10 +22,11 @@ import type {
   SetMessageReactionInput,
 } from "./message-reaction.types.js";
 
-export type MessageWithReactionState = MessageRecord & {
-  reactions: MessageReactionStateRecord["reactions"];
-  currentUserReaction: string | null;
-};
+export type MessageWithReactionState<T extends MessageRecord = MessageRecord> =
+  T & {
+    reactions: MessageReactionStateRecord["reactions"];
+    currentUserReaction: string | null;
+  };
 
 export interface MessageReactionServiceDependencies {
   conversations: Pick<
@@ -109,11 +110,11 @@ const createMessageReactionService = ({
     return repository.summarize(messageIds, userId, eligible);
   };
 
-  const decorate = async (
+  const decorate = async <T extends MessageRecord>(
     userId: string,
     conversation: ConversationRecord,
-    records: readonly MessageRecord[],
-  ): Promise<MessageWithReactionState[]> => {
+    records: readonly T[],
+  ): Promise<MessageWithReactionState<T>[]> => {
     const states = await summarize(
       userId,
       conversation,
@@ -336,6 +337,7 @@ const createMessageReactionService = ({
               id: user.id,
               username: user.username,
               displayName: user.displayName,
+              avatarAssetId: user.avatarAssetId ?? null,
               ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
             },
           ];

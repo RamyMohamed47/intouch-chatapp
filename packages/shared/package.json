@@ -16,6 +16,10 @@
       "types": "./dist/users/index.d.ts",
       "import": "./dist/users/index.js"
     },
+    "./uploads": {
+      "types": "./dist/uploads/index.d.ts",
+      "import": "./dist/uploads/index.js"
+    },
     "./organizations": {
       "types": "./dist/organizations/index.d.ts",
       "import": "./dist/organizations/index.js"

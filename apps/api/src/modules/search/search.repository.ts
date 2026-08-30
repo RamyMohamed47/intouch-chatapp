@@ -49,6 +49,7 @@ interface PersonSearchDocument extends RankedDocument {
   username: string;
   displayName: string;
   avatarUrl?: string;
+  avatarAssetId?: Types.ObjectId;
 }
 
 interface DirectConversationDocument {
@@ -375,6 +376,7 @@ const createMongooseSearchRepository = (
             id: document._id.toString(),
             username: document.username,
             displayName: document.displayName,
+            avatarAssetId: document.avatarAssetId?.toString() ?? null,
             ...(document.avatarUrl ? { avatarUrl: document.avatarUrl } : {}),
           }),
         );

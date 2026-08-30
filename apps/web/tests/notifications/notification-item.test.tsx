@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -15,6 +16,7 @@ const notification: NotificationDto = {
     id: "507f1f77bcf86cd799439012",
     username: "lina",
     displayName: "Lina Hassan",
+    avatarAssetId: null,
   },
   organization: {
     id: "507f1f77bcf86cd799439013",
@@ -31,8 +33,13 @@ const notification: NotificationDto = {
 describe("NotificationItem", () => {
   it("renders grouped DM copy and exposes unread state", async () => {
     const onSelect = vi.fn();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     render(
-      <NotificationItem notification={notification} onSelect={onSelect} />,
+      <QueryClientProvider client={queryClient}>
+        <NotificationItem notification={notification} onSelect={onSelect} />
+      </QueryClientProvider>,
     );
     expect(
       screen.getByText("Lina Hassan sent 3 direct messages"),

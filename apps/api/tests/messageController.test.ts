@@ -21,6 +21,7 @@ const message: MessageRecord = {
   deletedAt: null,
   createdAt: now,
   updatedAt: now,
+  attachments: [],
 };
 const messageView = {
   ...message,

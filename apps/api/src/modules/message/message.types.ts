@@ -5,6 +5,7 @@ import type {
   UpdateMessageInput,
 } from "@intouch/shared/messages";
 import { MessageType, type MessageTypeValue } from "@intouch/shared/messages";
+import type { AttachmentDto } from "@intouch/shared/uploads";
 import type { Types } from "mongoose";
 
 export { MessageType };
@@ -31,12 +32,13 @@ export interface MessageRecord {
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  attachments: AttachmentDto[];
 }
 
 export interface CreateMessageRecordInput {
   conversationId: string;
   senderId: string;
-  content: string;
+  content: string | null;
   messageType: MessageTypeValue;
 }
 

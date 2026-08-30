@@ -70,6 +70,7 @@ const message = {
   deletedAt: null,
   createdAt: now,
   updatedAt: now,
+  attachments: [],
   reactions: [],
   currentUserReaction: null,
 };
@@ -153,7 +154,14 @@ const messageReactions: MessageReactionService = {
       messageId,
       emoji: query.emoji,
       total: 1,
-      users: [{ id: userId, username: "ramy", displayName: "Ramy Mohamed" }],
+      users: [
+        {
+          id: userId,
+          username: "ramy",
+          displayName: "Ramy Mohamed",
+          avatarAssetId: null,
+        },
+      ],
       nextCursor: null,
     };
   },

@@ -18,6 +18,7 @@ const notification = {
     id: "507f1f77bcf86cd799439012",
     username: "alex",
     displayName: "Alex Rivera",
+    avatarAssetId: null,
   },
   organization: {
     id: "507f1f77bcf86cd799439013",

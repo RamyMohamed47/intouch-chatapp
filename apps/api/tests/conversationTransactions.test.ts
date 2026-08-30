@@ -40,6 +40,7 @@ import createOrganizationService from "../src/modules/organizations/organization
 import createMongooseOrganizationUnitOfWork, {
   type OrganizationUnitOfWork,
 } from "../src/modules/organizations/organization.unit-of-work.js";
+import { createMongooseStoredAssetRepository } from "../src/modules/uploads/index.js";
 import createMongooseUserRepository from "../src/modules/user/user.repository.js";
 import { UserModel } from "../src/modules/user/user.model.js";
 import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
@@ -526,6 +527,7 @@ describe("category and conversation transactions", () => {
             conversationReadStates:
               createMongooseConversationReadStateRepository(session),
             organizations: createMongooseOrganizationRepository(session),
+            assets: createMongooseStoredAssetRepository(session),
           });
         }),
     };

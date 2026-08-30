@@ -74,9 +74,12 @@ the next heartbeat within approximately three seconds.
 
 ## Server Events
 
-- `message:created` carries the non-personalized message core DTO.
-- `message:updated` carries the non-personalized updated message core DTO.
-- `message:deleted` carries the non-personalized redacted message tombstone.
+- `message:created` carries the non-personalized message core DTO, including
+  safe attachment metadata when present.
+- `message:updated` carries the non-personalized updated message core DTO;
+  attachment metadata remains immutable while the caption may change.
+- `message:deleted` carries the non-personalized redacted message tombstone and
+  an empty attachment list after private objects are queued for deletion.
 - `membership:joined` carries `{ organizationId, userId }` after an invitation acceptance or public join commits. Organization subscribers invalidate that organization's safe member roster; the event is an invalidation signal and does not duplicate user profile data.
 - `conversation:access-revoked` carries `{ conversationId }` before the socket is removed from that room.
 - `presence:updated` carries `{ userId, status, lastSeenAt }` to subscribed organization rooms. Online updates always use `lastSeenAt: null`; confirmed offline updates carry the persisted final-disconnect timestamp.
@@ -89,6 +92,9 @@ the next heartbeat within approximately three seconds.
 
 Messages are written through REST. Socket.IO only manages authorized room
 subscriptions and scoped server events; no event is broadcast globally.
+Attachment object keys, storage credentials, ETags, and presigned URLs are
+never emitted. Clients resolve each opaque attachment asset ID through the
+authorized REST access endpoint and refresh its short-lived URL when needed.
 
 Organization search has no Socket.IO event. Atlas and native indexes are
 eventually consistent read models; the frontend issues debounced REST searches

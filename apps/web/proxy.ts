@@ -16,6 +16,7 @@ export function proxy(request: NextRequest) {
     nonce,
     socketOrigin:
       process.env.NEXT_PUBLIC_SOCKET_ORIGIN ?? "http://localhost:3000",
+    storageOrigin: process.env.NEXT_PUBLIC_R2_ORIGIN,
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

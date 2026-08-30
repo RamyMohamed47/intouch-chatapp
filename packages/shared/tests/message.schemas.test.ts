@@ -60,6 +60,7 @@ describe("shared message schemas", () => {
         id: "507f1f77bcf86cd799439012",
         username: "lina",
         displayName: "Lina Hassan",
+        avatarAssetId: null,
       },
     ];
     assert.deepEqual(

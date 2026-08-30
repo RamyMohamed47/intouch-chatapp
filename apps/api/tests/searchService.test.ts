@@ -236,6 +236,7 @@ describe("organization search service", () => {
         id: memberId,
         username: "alex",
         displayName: "Alex",
+        avatarAssetId: null,
         status: "OFFLINE",
         lastSeenAt: now.toISOString(),
       },

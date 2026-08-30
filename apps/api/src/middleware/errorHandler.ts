@@ -9,6 +9,7 @@ interface OperationalError extends Error {
   code?: ErrorCode;
   statusCode?: number;
   isOperational?: boolean;
+  retryAfterSeconds?: number;
 }
 
 interface ValidationErrorLike extends Error {
@@ -45,6 +46,14 @@ const sendError = (err: OperationalError, res: Response) => {
   const isOperational = err.isOperational === true;
   const code = isOperational ? err.code : "INTERNAL_SERVER_ERROR";
   const message = isOperational ? err.message : "Something went wrong";
+
+  if (
+    isOperational &&
+    Number.isFinite(err.retryAfterSeconds) &&
+    (err.retryAfterSeconds ?? 0) > 0
+  ) {
+    res.set("Retry-After", String(Math.ceil(err.retryAfterSeconds ?? 1)));
+  }
 
   res.status(statusCode).json(
     errorResponseSchema.parse({

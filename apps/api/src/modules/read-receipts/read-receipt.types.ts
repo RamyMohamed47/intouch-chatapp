@@ -43,6 +43,9 @@ export interface MessageReadReceiptSummaryRecord {
   messageId: string;
   readByCount: number;
   readers: Array<
-    Pick<PublicUser, "id" | "username" | "displayName" | "avatarUrl">
+    Pick<
+      PublicUser,
+      "id" | "username" | "displayName" | "avatarUrl" | "avatarAssetId"
+    >
   >;
 }

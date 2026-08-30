@@ -7,6 +7,7 @@ export const publicUserSummaryDtoSchema = z.object({
   username: z.string(),
   displayName: z.string(),
   avatarUrl: z.string().url().optional(),
+  avatarAssetId: identifierDtoSchema.nullable().default(null),
 });
 
 export const publicUserDtoSchema = publicUserSummaryDtoSchema.extend({

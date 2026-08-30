@@ -44,6 +44,7 @@ const message: MessageRecord = {
   deletedAt: null,
   createdAt: now,
   updatedAt: now,
+  attachments: [],
 };
 
 const createReactionRepository = () => {
@@ -236,6 +237,7 @@ describe("messageReactionService", () => {
         id: otherUserId,
         username: "lina",
         displayName: "Lina Hassan",
+        avatarAssetId: null,
       },
     ]);
   });

@@ -14,6 +14,7 @@ import createHttpLogger from "./middleware/httpLogger.js";
 export interface AppDependencies {
   allowedOrigins?: readonly string[];
   apiDocsRouter?: Router;
+  assetRouter?: Router;
   authRouter?: Router;
   categoryRouter?: Router;
   conversationMessageRouter?: Router;
@@ -30,12 +31,15 @@ export interface AppDependencies {
   readReceiptRouter?: Router;
   searchRouter?: Router;
   userChatWallpaperRouter?: Router;
+  uploadRouter?: Router;
+  userAvatarRouter?: Router;
   trustProxy?: boolean | number | string;
 }
 
 const createApp = ({
   allowedOrigins = ["http://localhost:5173"],
   apiDocsRouter,
+  assetRouter,
   authRouter,
   categoryRouter,
   conversationMessageRouter,
@@ -52,6 +56,8 @@ const createApp = ({
   readReceiptRouter,
   searchRouter,
   userChatWallpaperRouter,
+  uploadRouter,
+  userAvatarRouter,
   trustProxy = false,
 }: AppDependencies = {}) => {
   const app = express();
@@ -94,6 +100,14 @@ const createApp = ({
 
   if (authRouter) {
     app.use("/api/v1/auth", authRouter);
+  }
+
+  if (uploadRouter) {
+    app.use("/api/v1/uploads", uploadRouter);
+  }
+
+  if (assetRouter) {
+    app.use("/api/v1/assets", assetRouter);
   }
 
   if (organizationRouter) {
@@ -154,6 +168,10 @@ const createApp = ({
 
   if (userChatWallpaperRouter) {
     app.use("/api/v1/users", userChatWallpaperRouter);
+  }
+
+  if (userAvatarRouter) {
+    app.use("/api/v1/users", userAvatarRouter);
   }
 
   app.use((req, _res, next) => {

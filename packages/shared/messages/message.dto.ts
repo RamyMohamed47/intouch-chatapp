@@ -2,9 +2,11 @@ import { z } from "zod";
 
 import { dateTimeDtoSchema, identifierDtoSchema } from "../common/index.js";
 import { publicUserSummaryDtoSchema } from "../users/index.js";
+import { attachmentDtoSchema } from "../uploads/index.js";
 
 export const MessageType = {
   TEXT: "TEXT",
+  ATTACHMENT: "ATTACHMENT",
 } as const;
 
 export const messageTypeSchema = z.enum(MessageType);
@@ -19,6 +21,7 @@ export const messageCoreDtoSchema = z.object({
   deletedAt: dateTimeDtoSchema.nullable(),
   createdAt: dateTimeDtoSchema,
   updatedAt: dateTimeDtoSchema,
+  attachments: z.array(attachmentDtoSchema).default([]),
 });
 
 export const messageReactionSummaryDtoSchema = z

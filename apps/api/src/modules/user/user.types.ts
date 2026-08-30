@@ -1,3 +1,5 @@
+import type { Types } from "mongoose";
+
 export enum AuthProvider {
   PASSWORD = "PASSWORD",
   GOOGLE = "GOOGLE",
@@ -23,6 +25,7 @@ export interface User {
   displayName: string;
   email: string;
   avatarUrl?: string;
+  avatarAssetId?: Types.ObjectId;
   lastSeenAt?: Date;
   emailVerificationStatus?: EmailVerificationStatus;
   emailVerifiedAt?: Date;
@@ -37,6 +40,7 @@ export interface PublicUser {
   displayName: string;
   email: string;
   avatarUrl?: string;
+  avatarAssetId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
     updatedAt: "2026-08-08T10:00:00.000Z",
     editedAt: null,
     deletedAt: null,
+    attachments: [],
     reactions: [],
     currentUserReaction: null,
   };

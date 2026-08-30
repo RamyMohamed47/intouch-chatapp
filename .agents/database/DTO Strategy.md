@@ -65,3 +65,13 @@ type source.
   and strict input rejection.
 - Never expose domain models, persistence-only fields, credentials, hashes, or
   provider metadata through a DTO.
+
+## Private Asset DTOs
+
+Upload contracts expose opaque asset/upload IDs, verified display metadata,
+and short-lived access URLs only. They never expose R2 credentials, bucket
+names, staging keys, final object keys, ETags, leases, or presigned URLs after
+their intended ticket/access response. Message DTOs embed safe attachment
+metadata; clients resolve private bytes separately through the authorized
+asset-access resource. `avatarAssetId` is nullable in public-user DTOs and is
+resolved the same way, while `avatarUrl` remains an optional external fallback.

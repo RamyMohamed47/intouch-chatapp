@@ -9,16 +9,8 @@ import {
   UserCheck,
 } from "lucide-react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/users/user-avatar";
 import { cn } from "@/lib/utils";
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
 
 export const notificationHref = (notification: NotificationDto) => {
   switch (notification.type) {
@@ -104,17 +96,12 @@ export function NotificationItem({
           : "border-transparent bg-transparent",
       )}
     >
-      <Avatar size="lg">
-        {notification.actor.avatarUrl && (
-          <AvatarImage
-            src={notification.actor.avatarUrl}
-            alt={notification.actor.displayName}
-          />
-        )}
-        <AvatarFallback>
-          {initials(notification.actor.displayName)}
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        size="lg"
+        displayName={notification.actor.displayName}
+        avatarAssetId={notification.actor.avatarAssetId}
+        avatarUrl={notification.actor.avatarUrl}
+      />
       <span className="min-w-0 flex-1">
         <span className="flex items-start gap-2">
           <span className="line-clamp-2 flex-1 text-sm font-medium">

@@ -16,6 +16,7 @@ import type {
   OrganizationWorkContext,
 } from "../src/modules/organizations/organization.unit-of-work.js";
 import type { MailOutboxRepository } from "../src/modules/mail/index.js";
+import type { StoredAssetRepository } from "../src/modules/uploads/index.js";
 import {
   MailKind,
   type MailOutboxJobFactory,
@@ -186,6 +187,30 @@ const notifications: NotificationRepository = {
   deleteByOrganizationId: async () => [],
 };
 
+const assets: StoredAssetRepository = {
+  createMany: async () => [],
+  findById: async () => null,
+  findReadyById: async () => null,
+  listReadyByMessageIds: async () => [],
+  countPendingByOwner: async () => 0,
+  sumActiveBytesByOrganization: async () => 0,
+  claimForPromotion: async () => null,
+  markPromoted: async () => null,
+  releasePromotion: async () => undefined,
+  markDeletePending: async () => false,
+  markClaimedForDeletion: async () => false,
+  claimForMessage: async () => [],
+  claimAvatar: async () => null,
+  markMessageAssetsForDeletion: async () => 0,
+  markConversationAssetsForDeletion: async () => 0,
+  markOrganizationAssetsForDeletion: async () => 0,
+  claimNextCleanup: async () => null,
+  claimNextStagingCleanup: async () => null,
+  completeCleanup: async () => undefined,
+  completeStagingCleanup: async () => undefined,
+  scheduleCleanupRetry: async () => undefined,
+};
+
 export const testMailFactory: MailOutboxJobFactory = {
   verification: (input) => ({
     aggregateKey: `auth-verification:${input.userId}`,
@@ -226,6 +251,7 @@ export const emptyCommunicationContext = {
   messages,
   mailOutbox,
   notifications,
+  assets,
 };
 
 const organizations: OrganizationRepository = {
@@ -266,6 +292,7 @@ export const createTestUnitOfWork = (
       invitations,
       memberships,
       organizations,
+      assets,
       ...overrides,
     }),
 });

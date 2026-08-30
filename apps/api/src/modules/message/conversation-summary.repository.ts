@@ -8,6 +8,9 @@ import type {
 } from "../read-receipts/read-receipt.types.js";
 import MessageModel from "./message.model.js";
 import type { Message, MessageRecord } from "./message.types.js";
+import { createMongooseStoredAssetRepository } from "../uploads/index.js";
+import type { StoredAssetRecord } from "../uploads/index.js";
+import type { AttachmentDto } from "@intouch/shared/uploads";
 
 interface MessageDocument extends Message {
   _id: Types.ObjectId;
@@ -58,6 +61,7 @@ const toMessageRecord = (message: MessageDocument): MessageRecord => ({
   deletedAt: message.deletedAt,
   createdAt: message.createdAt,
   updatedAt: message.updatedAt,
+  attachments: [],
 });
 
 const toReadStateRecord = (
@@ -70,6 +74,18 @@ const toReadStateRecord = (
   lastReadMessageId: state.lastReadMessageId.toString(),
   lastReadAt: state.lastReadAt,
 });
+
+const toAttachment = (asset: StoredAssetRecord): AttachmentDto | null =>
+  asset.kind && asset.verifiedContentType && asset.verifiedSize
+    ? {
+        id: asset.id,
+        fileName: asset.fileName,
+        contentType: asset.verifiedContentType,
+        size: asset.verifiedSize,
+        kind: asset.kind,
+        createdAt: asset.createdAt.toISOString(),
+      }
+    : null;
 
 const createMongooseConversationSummaryRepository = (
   session?: ClientSession,
@@ -119,10 +135,29 @@ const createMongooseConversationSummaryRepository = (
       MessageModel.aggregate<LatestMessageResult>(latestPipeline);
     if (session) latestAggregation.session(session);
     const latestMessages = await latestAggregation.exec();
+    const latestRecords = latestMessages.map((result) => ({
+      conversationId: result._id.toString(),
+      message: toMessageRecord(result.message),
+    }));
+    const latestAssets = await createMongooseStoredAssetRepository(
+      session,
+    ).listReadyByMessageIds(latestRecords.map(({ message }) => message.id));
+    const assetsByMessage = new Map<string, AttachmentDto[]>();
+    for (const asset of latestAssets) {
+      if (!asset.messageId) continue;
+      const attachment = toAttachment(asset);
+      if (!attachment) continue;
+      const current = assetsByMessage.get(asset.messageId) ?? [];
+      current.push(attachment);
+      assetsByMessage.set(asset.messageId, current);
+    }
     const latestByConversation = new Map(
-      latestMessages.map((result) => [
-        result._id.toString(),
-        toMessageRecord(result.message),
+      latestRecords.map(({ conversationId, message }) => [
+        conversationId,
+        {
+          ...message,
+          attachments: assetsByMessage.get(message.id) ?? [],
+        },
       ]),
     );
 

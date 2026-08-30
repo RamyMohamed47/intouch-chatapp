@@ -56,6 +56,16 @@ export interface UserRepository {
   updateLastSeen(userId: string, lastSeenAt: Date): Promise<void>;
 }
 
+export interface AvatarUserRepository {
+  replaceAvatarAsset(
+    userId: string,
+    avatarAssetId: string | null,
+  ): Promise<{
+    user: PublicUser;
+    previousAvatarAssetId: string | null;
+  } | null>;
+}
+
 export interface AuthUserRepository extends UserRepository {
   findAuthAccountByEmail(email: string): Promise<AuthAccount | null>;
   findVerifiedPublicByEmail(email: string): Promise<PublicUser | null>;
@@ -79,6 +89,7 @@ const toPublicUser = (user: UserRecord): PublicUser => {
     username: user.username,
     displayName: user.displayName,
     email: user.email,
+    avatarAssetId: user.avatarAssetId?.toString() ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -92,7 +103,7 @@ const toPublicUser = (user: UserRecord): PublicUser => {
 
 const createMongooseUserRepository = (
   session?: ClientSession,
-): AuthUserRepository => ({
+): AuthUserRepository & AvatarUserRepository => ({
   async hasIdentityConflict(email, username) {
     const query = UserModel.findOne({
       $or: [{ email }, { username }],
@@ -365,6 +376,29 @@ const createMongooseUserRepository = (
     );
     if (session) query.session(session);
     await query.exec();
+  },
+
+  async replaceAvatarAsset(userId, avatarAssetId) {
+    if (!Types.ObjectId.isValid(userId)) return null;
+    const existingQuery = UserModel.findById(userId).lean<UserRecord>();
+    if (session) existingQuery.session(session);
+    const existing = await existingQuery.exec();
+    if (!existing) return null;
+
+    const update = avatarAssetId
+      ? { $set: { avatarAssetId } }
+      : { $unset: { avatarAssetId: 1 } };
+    const query = UserModel.findByIdAndUpdate(userId, update, {
+      new: true,
+      runValidators: true,
+    }).lean<UserRecord>();
+    if (session) query.session(session);
+    const user = await query.exec();
+    if (!user) return null;
+    return {
+      user: toPublicUser(user),
+      previousAvatarAssetId: existing.avatarAssetId?.toString() ?? null,
+    };
   },
 
   async markEmailVerified(userId, verifiedAt) {

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useQueries } from "@tanstack/react-query";
+import type { MessageCoreDto } from "@intouch/shared/messages";
 
 import { BrandLockup } from "@/components/brand/brand";
 import { PageHeader } from "@/components/workspace/page-header";
@@ -27,6 +28,18 @@ const formatTime = (value: string) =>
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+
+const messagePreview = (message: MessageCoreDto) => {
+  if (message.deletedAt) return "Message deleted";
+  if (message.content) return message.content;
+  if (
+    message.attachments.length === 1 &&
+    message.attachments[0]?.kind === "IMAGE"
+  ) {
+    return "Photo";
+  }
+  return message.attachments.length > 0 ? "Files" : "Message";
+};
 
 export function AppHub() {
   const { user } = useAuth();
@@ -211,9 +224,7 @@ export function AppHub() {
                             : conversation.peer.displayName}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
-                          {message.deletedAt
-                            ? "Message deleted"
-                            : message.content}
+                          {messagePreview(message)}
                         </span>
                       </span>
                       <span className="font-mono text-[10px] text-muted-foreground">

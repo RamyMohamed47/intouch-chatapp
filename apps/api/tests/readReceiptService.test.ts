@@ -48,6 +48,7 @@ const message = (
   deletedAt: null,
   createdAt: now,
   updatedAt: now,
+  attachments: [],
 });
 
 const createHarness = (

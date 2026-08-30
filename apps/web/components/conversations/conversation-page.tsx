@@ -7,9 +7,12 @@ import {
   Lock,
   MessageCircle,
   Pencil,
+  Paperclip,
+  RefreshCw,
   Send,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 import {
   useEffect,
@@ -35,11 +38,12 @@ import {
   ChatWallpaperId,
   ChatWallpaperSource,
 } from "@intouch/shared/chat-wallpapers";
+import { UploadPurpose } from "@intouch/shared/uploads";
 
 import { PageHeader } from "@/components/workspace/page-header";
 import { ResourceState } from "@/components/workspace/resource-state";
-import { initials } from "@/components/workspace/app-shell";
 import { InviteMemberDialog } from "@/components/memberships/invite-member-dialog";
+import { UserAvatar } from "@/components/users/user-avatar";
 import {
   isNearConversationBottom,
   insertEmojiAtSelection,
@@ -50,12 +54,12 @@ import { TypingIndicator } from "@/components/conversations/typing-indicator";
 import { ChatWallpaperSurface } from "@/components/conversations/chat-wallpaper";
 import { ChatWallpaperDialog } from "@/components/conversations/chat-wallpaper-dialog";
 import { ComposerEmojiPicker } from "@/components/conversations/composer-emoji-picker";
+import { MessageAttachments } from "@/components/conversations/message-attachments";
 import {
   MessageReactionPicker,
   MessageReactionSummaries,
 } from "@/components/conversations/message-reactions";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -94,6 +98,7 @@ import { useRealtime } from "@/lib/realtime/provider";
 import { hasReadMessage } from "@/lib/realtime/read-receipt-cache";
 import { mergeReactionState } from "@/lib/reactions/message-reaction-cache";
 import { cn } from "@/lib/utils";
+import { useUploadQueue } from "@/lib/uploads/use-upload-queue";
 
 const formatTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, {
@@ -162,11 +167,12 @@ function ChannelReadReceiptStatus({
         <div className="grid gap-2">
           {summary.readers.map((reader) => (
             <div key={reader.id} className="flex items-center gap-2">
-              <Avatar className="size-7">
-                <AvatarFallback className="text-[10px]">
-                  {initials(reader.displayName)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                className="size-7"
+                displayName={reader.displayName}
+                avatarAssetId={reader.avatarAssetId}
+                avatarUrl={reader.avatarUrl}
+              />
               <span className="min-w-0 truncate text-sm">
                 {reader.displayName}
               </span>
@@ -223,6 +229,12 @@ export function ConversationPage({
   const messageEndRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const uploads = useUploadQueue({
+    purpose: UploadPurpose.MESSAGE_ATTACHMENT,
+    conversationId,
+    maximumFiles: 5,
+  });
   const isNearBottomRef = useRef(true);
   const failedReceiptMessageIdRef = useRef<string | null>(null);
   const pendingReceiptMessageIdRef = useRef<string | null>(null);
@@ -443,14 +455,15 @@ export function ConversationPage({
   ]);
 
   const sendMessage = useMutation({
-    mutationFn: (messageContent: string) =>
-      messagesApi.create(conversationId, { content: messageContent }),
+    mutationFn: (input: { content?: string; uploadIds?: string[] }) =>
+      messagesApi.create(conversationId, input),
     onSuccess: (message) => {
       queryClient.setQueryData<InfiniteData<MessageListResponse>>(
         queryKeys.conversations.messages(conversationId),
         (current) => upsertCachedMessage(current, message),
       );
       setContent("");
+      uploads.clear();
       stopTyping(conversationId);
       if (anchorMessageId) {
         const segment =
@@ -466,7 +479,7 @@ export function ConversationPage({
       messageContent,
     }: {
       messageId: string;
-      messageContent: string;
+      messageContent: string | null;
     }) => messagesApi.update(messageId, { content: messageContent }),
     onSuccess: (message) => {
       queryClient.setQueryData<InfiniteData<MessageListResponse>>(
@@ -549,14 +562,19 @@ export function ConversationPage({
 
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const parsed = createMessageSchema.safeParse({ content });
+    const parsed = createMessageSchema.safeParse({
+      ...(content.trim() ? { content } : {}),
+      ...(uploads.completedUploadIds.length > 0
+        ? { uploadIds: uploads.completedUploadIds }
+        : {}),
+    });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Message is invalid");
       return;
     }
     setError(null);
     forceBottomScrollRef.current = true;
-    sendMessage.mutate(parsed.data.content, {
+    sendMessage.mutate(parsed.data, {
       onError: (requestError) => {
         forceBottomScrollRef.current = false;
         setError(requestError.message);
@@ -784,11 +802,11 @@ export function ConversationPage({
                           "bg-brand-orange/10 ring-2 ring-brand-orange/40 ring-offset-4 ring-offset-background",
                       )}
                     >
-                      <Avatar>
-                        <AvatarFallback>
-                          {initials(sender?.displayName ?? "User")}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        displayName={sender?.displayName ?? "User"}
+                        avatarAssetId={sender?.avatarAssetId}
+                        avatarUrl={sender?.avatarUrl}
+                      />
                       <div className="min-w-0 flex-1 rounded-2xl border border-border bg-card/82 p-4 shadow-sm backdrop-blur-md">
                         <div className="flex items-center gap-2">
                           <strong className="truncate text-sm">
@@ -882,7 +900,7 @@ export function ConversationPage({
                               Save
                             </Button>
                           </form>
-                        ) : (
+                        ) : message.content || message.deletedAt ? (
                           <p
                             className={
                               message.deletedAt
@@ -894,6 +912,11 @@ export function ConversationPage({
                               ? "Message deleted"
                               : message.content}
                           </p>
+                        ) : null}
+                        {!message.deletedAt && (
+                          <MessageAttachments
+                            attachments={message.attachments}
+                          />
                         )}
                         <MessageReactionSummaries
                           message={message}
@@ -965,8 +988,70 @@ export function ConversationPage({
         </div>
 
         <div className="shrink-0 border-t border-border bg-card/80 p-4">
-          <form onSubmit={submit} className="mx-auto max-w-4xl">
+          <form
+            onSubmit={submit}
+            className="mx-auto max-w-4xl"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              uploads.addFiles([...event.dataTransfer.files]);
+            }}
+          >
             <TypingIndicator names={typingNames} />
+            {uploads.items.length > 0 && (
+              <div className="mb-2 grid gap-2 sm:grid-cols-2">
+                {uploads.items.map((item) => (
+                  <div
+                    key={item.localId}
+                    className="flex items-center gap-3 rounded-xl border border-border bg-background/70 p-2"
+                  >
+                    {item.previewUrl ? (
+                      <img
+                        src={item.previewUrl}
+                        alt=""
+                        className="size-12 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <span className="grid size-12 place-items-center rounded-lg bg-muted">
+                        <Paperclip className="size-4" aria-hidden />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium">
+                        {item.file.name}
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        {item.status === "completed"
+                          ? "Ready"
+                          : item.status === "error"
+                            ? item.error
+                            : `${item.progress}%`}
+                      </span>
+                    </span>
+                    {item.status === "error" && (
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label={`Retry ${item.file.name}`}
+                        onClick={() => uploads.retry(item.localId)}
+                      >
+                        <RefreshCw aria-hidden />
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      aria-label={`Remove ${item.file.name}`}
+                      onClick={() => uploads.remove(item.localId)}
+                    >
+                      <X aria-hidden />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2 rounded-2xl border border-border bg-background/50 p-2 focus-within:border-primary/40">
               <span className="mb-2 grid size-8 place-items-center text-muted-foreground">
                 {conversation.data.type === "CHANNEL" ? (
@@ -983,6 +1068,15 @@ export function ConversationPage({
                 ref={composerRef}
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
+                onPaste={(event) => {
+                  const images = [...event.clipboardData.files].filter((file) =>
+                    file.type.startsWith("image/"),
+                  );
+                  if (images.length > 0) {
+                    event.preventDefault();
+                    uploads.addFiles(images);
+                  }
+                }}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 onKeyDown={(event) => {
@@ -997,7 +1091,11 @@ export function ConversationPage({
                   }
 
                   event.preventDefault();
-                  if (!sendMessage.isPending && content.trim()) {
+                  if (
+                    !sendMessage.isPending &&
+                    !uploads.isUploading &&
+                    (content.trim() || uploads.completedUploadIds.length > 0)
+                  ) {
                     event.currentTarget.form?.requestSubmit();
                   }
                 }}
@@ -1005,6 +1103,27 @@ export function ConversationPage({
                 className="min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
                 maxLength={4000}
               />
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                className="sr-only"
+                accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                onChange={(event) => {
+                  uploads.addFiles([...(event.target.files ?? [])]);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Attach files"
+                disabled={sendMessage.isPending || uploads.items.length >= 5}
+                onClick={() => attachmentInputRef.current?.click()}
+              >
+                <Paperclip aria-hidden />
+              </Button>
               <ComposerEmojiPicker
                 disabled={sendMessage.isPending}
                 onSelect={insertEmoji}
@@ -1013,7 +1132,11 @@ export function ConversationPage({
                 type="submit"
                 size="icon"
                 aria-label="Send message"
-                disabled={sendMessage.isPending || !content.trim()}
+                disabled={
+                  sendMessage.isPending ||
+                  uploads.isUploading ||
+                  (!content.trim() && uploads.completedUploadIds.length === 0)
+                }
               >
                 <Send />
               </Button>

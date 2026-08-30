@@ -201,6 +201,7 @@ describe("authenticated conversation sockets", () => {
       deletedAt: null,
       createdAt: now,
       updatedAt: now,
+      attachments: [],
     };
     gateway.messageCreated(message);
     assert.deepEqual(await received, {
@@ -261,6 +262,7 @@ describe("authenticated conversation sockets", () => {
           id: secondUserId,
           username: "lina",
           displayName: "Lina Hassan",
+          avatarAssetId: null,
         },
         organization: { id: organizationId, name: "Northstar" },
         conversationId: firstConversationId,
@@ -344,6 +346,7 @@ describe("authenticated conversation sockets", () => {
       deletedAt: null,
       createdAt: now,
       updatedAt: now,
+      attachments: [],
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(received, false);

@@ -27,6 +27,7 @@ tags:
   - name: Categories
   - name: Conversations
   - name: Messages
+  - name: Uploads
   - name: Notifications
   - name: Search
 
@@ -236,6 +237,125 @@ paths:
           $ref: "#/components/responses/UserResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /uploads:
+    post:
+      tags: [Uploads]
+      summary: Create private direct-upload tickets
+      description: Reserves quota and returns five-minute, content-type-bound R2 PUT URLs. Objects remain private and must be completed before use.
+      requestBody:
+        $ref: "#/components/requestBodies/CreateUploadRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/CreateUploadResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+
+  /uploads/{uploadId}:
+    delete:
+      tags: [Uploads]
+      summary: Cancel an unclaimed upload
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+      responses:
+        "204":
+          description: Upload canceled or already absent
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /uploads/{uploadId}/complete:
+    post:
+      tags: [Uploads]
+      summary: Verify and promote an uploaded object
+      description: Verifies object metadata and content signatures before conditionally promoting it to an immutable private key. Repeating a completed request is idempotent.
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CompleteUploadResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+
+  /assets/{assetId}/access:
+    get:
+      tags: [Uploads]
+      summary: Create an authorized private-asset URL
+      description: Returns a ten-minute R2 GET URL. Message assets require current conversation access; avatars require authentication.
+      parameters:
+        - $ref: "#/components/parameters/AssetId"
+      responses:
+        "200":
+          $ref: "#/components/responses/AssetAccessResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+
+  /users/me/avatar:
+    put:
+      tags: [Users, Uploads]
+      summary: Set the caller's uploaded avatar
+      requestBody:
+        $ref: "#/components/requestBodies/UpdateAvatarRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [Users, Uploads]
+      summary: Remove the caller's uploaded avatar
+      responses:
+        "200":
+          $ref: "#/components/responses/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /users/me/chat-wallpaper:
     get:
@@ -1268,6 +1388,22 @@ components:
         type: string
         pattern: "^[a-fA-F0-9]{24}$"
 
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-fA-F0-9]{24}$"
+
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-fA-F0-9]{24}$"
+
   requestBodies:
 
     RegisterRequest:
@@ -1388,7 +1524,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/MessageContentInput"
+            $ref: "#/components/schemas/CreateMessageInput"
 
     UpdateMessageRequest:
       description: Defined by the shared message contract.
@@ -1396,7 +1532,23 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/MessageContentInput"
+            $ref: "#/components/schemas/UpdateMessageInput"
+
+    CreateUploadRequest:
+      description: Strict avatar or message-attachment upload intent.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateUploadInput"
+
+    UpdateAvatarRequest:
+      description: Claim one completed avatar upload.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateAvatarInput"
 
     SetMessageReactionRequest:
       description: Defined by the shared message-reaction contract.
@@ -1484,6 +1636,50 @@ components:
             properties:
               user:
                 $ref: "#/components/schemas/PublicUser"
+
+    CreateUploadResponse:
+      description: Private direct-upload tickets issued successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [uploadTickets]
+            properties:
+              uploadTickets:
+                type: array
+                minItems: 1
+                maxItems: 5
+                items:
+                  $ref: "#/components/schemas/UploadTicket"
+
+    CompleteUploadResponse:
+      description: Upload verified and promoted successfully.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [upload]
+            properties:
+              upload:
+                $ref: "#/components/schemas/CompletedUpload"
+
+    AssetAccessResponse:
+      description: Short-lived authorized asset URL.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [accessUrl, expiresAt]
+            properties:
+              accessUrl:
+                type: string
+                format: uri
+              expiresAt:
+                type: string
+                format: date-time
 
     LoginResponse:
       $ref: "#/components/responses/AuthResponse"
@@ -1808,6 +2004,13 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
 
+    PayloadTooLarge:
+      description: An uploaded file descriptor exceeds the 25 MB per-file limit.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
     TooManyRequests:
       description: A request limit was exceeded.
       headers:
@@ -1837,6 +2040,13 @@ components:
 
     SearchUnavailable:
       description: The configured search provider or its indexes are unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    StorageUnavailable:
+      description: Private object storage is temporarily unavailable.
       content:
         application/json:
           schema:
@@ -2112,7 +2322,7 @@ components:
 
     ParticipantUser:
       type: object
-      required: [id, username, displayName]
+      required: [id, username, displayName, avatarAssetId]
       properties:
         id:
           type: string
@@ -2123,10 +2333,15 @@ components:
         avatarUrl:
           type: string
           format: uri
+        avatarAssetId:
+          oneOf:
+            - type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            - type: "null"
 
     MemberUser:
       type: object
-      required: [id, username, displayName, status, lastSeenAt]
+      required: [id, username, displayName, avatarAssetId, status, lastSeenAt]
       properties:
         id:
           type: string
@@ -2137,6 +2352,11 @@ components:
         avatarUrl:
           type: string
           format: uri
+        avatarAssetId:
+          oneOf:
+            - type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            - type: "null"
         status:
           type: string
           enum: [ONLINE, OFFLINE]
@@ -2148,7 +2368,7 @@ components:
 
     PeerUser:
       type: object
-      required: [id, username, displayName]
+      required: [id, username, displayName, avatarAssetId]
       properties:
         id:
           type: string
@@ -2159,6 +2379,11 @@ components:
         avatarUrl:
           type: string
           format: uri
+        avatarAssetId:
+          oneOf:
+            - type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            - type: "null"
 
     OrganizationMember:
       type: object
@@ -2175,16 +2400,166 @@ components:
         user:
           $ref: "#/components/schemas/MemberUser"
 
-    MessageContentInput:
+    UploadFileDescriptor:
       type: object
       additionalProperties: false
-      required: [content]
+      required: [fileName, contentType, size]
+      properties:
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        contentType:
+          type: string
+          minLength: 1
+          maxLength: 127
+        size:
+          type: integer
+          minimum: 1
+          maximum: 26214400
+
+    CreateUploadInput:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [purpose, files]
+          properties:
+            purpose:
+              type: string
+              const: AVATAR
+            files:
+              type: array
+              minItems: 1
+              maxItems: 1
+              items:
+                $ref: "#/components/schemas/UploadFileDescriptor"
+        - type: object
+          additionalProperties: false
+          required: [purpose, conversationId, files]
+          properties:
+            purpose:
+              type: string
+              const: MESSAGE_ATTACHMENT
+            conversationId:
+              type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            files:
+              type: array
+              minItems: 1
+              maxItems: 5
+              items:
+                $ref: "#/components/schemas/UploadFileDescriptor"
+      discriminator:
+        propertyName: purpose
+
+    UpdateAvatarInput:
+      type: object
+      additionalProperties: false
+      required: [uploadId]
+      properties:
+        uploadId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+
+    CreateMessageInput:
+      type: object
+      additionalProperties: false
+      anyOf:
+        - required: [content]
+        - required: [uploadIds]
       properties:
         content:
           type: string
           minLength: 1
           maxLength: 4000
           pattern: ".*\\S.*"
+        uploadIds:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            pattern: "^[a-fA-F0-9]{24}$"
+
+    UpdateMessageInput:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          oneOf:
+            - type: string
+              minLength: 1
+              maxLength: 4000
+              pattern: ".*\\S.*"
+            - type: "null"
+
+    Attachment:
+      type: object
+      additionalProperties: false
+      required: [id, fileName, contentType, size, kind, createdAt]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        fileName:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum: [IMAGE, FILE]
+        createdAt:
+          type: string
+          format: date-time
+
+    UploadTicket:
+      type: object
+      additionalProperties: false
+      required: [uploadId, uploadUrl, headers, expiresAt]
+      properties:
+        uploadId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        uploadUrl:
+          type: string
+          format: uri
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    CompletedUpload:
+      type: object
+      additionalProperties: false
+      required: [id, uploadId, fileName, contentType, size, kind, createdAt]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        uploadId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        fileName:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum: [IMAGE, FILE]
+        createdAt:
+          type: string
+          format: date-time
 
     SetMessageReactionInput:
       type: object
@@ -2200,7 +2575,7 @@ components:
     MessageCore:
       type: object
       required:
-        [id, conversationId, senderId, content, messageType, editedAt, deletedAt, createdAt, updatedAt]
+        [id, conversationId, senderId, content, messageType, editedAt, deletedAt, createdAt, updatedAt, attachments]
       properties:
         id:
           type: string
@@ -2214,7 +2589,7 @@ components:
             - type: "null"
         messageType:
           type: string
-          const: TEXT
+          enum: [TEXT, ATTACHMENT]
         editedAt:
           oneOf:
             - type: string
@@ -2231,6 +2606,11 @@ components:
         updatedAt:
           type: string
           format: date-time
+        attachments:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/Attachment"
 
     MessageReactionSummary:
       type: object
@@ -2785,7 +3165,7 @@ components:
     PublicUserSummary:
       type: object
       additionalProperties: false
-      required: [id, username, displayName]
+      required: [id, username, displayName, avatarAssetId]
       properties:
         id:
           type: string
@@ -2796,10 +3176,15 @@ components:
         avatarUrl:
           type: string
           format: uri
+        avatarAssetId:
+          oneOf:
+            - type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            - type: "null"
 
     PublicUser:
       type: object
-      required: [id, username, displayName, email, createdAt, updatedAt]
+      required: [id, username, displayName, avatarAssetId, email, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2813,6 +3198,11 @@ components:
         avatarUrl:
           type: string
           format: uri
+        avatarAssetId:
+          oneOf:
+            - type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -2881,6 +3271,7 @@ components:
                 - TOO_MANY_REQUESTS
                 - SERVICE_UNAVAILABLE
                 - SEARCH_UNAVAILABLE
+                - STORAGE_UNAVAILABLE
                 - EMAIL_VERIFICATION_REQUIRED
                 - INVALID_OR_EXPIRED_TOKEN
                 - INTERNAL_SERVER_ERROR

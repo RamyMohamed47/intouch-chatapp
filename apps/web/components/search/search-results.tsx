@@ -12,18 +12,10 @@ import {
 import { useRouter } from "next/navigation";
 
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/users/user-avatar";
 import { conversationsApi } from "@/lib/api/conversations";
 import { queryKeys } from "@/lib/query/keys";
 import { cn } from "@/lib/utils";
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
 const resultHref = (
   organizationId: string,
@@ -100,17 +92,19 @@ export function SearchResults({
             )}
           >
             {result.kind === "PERSON" ? (
-              <Avatar className="mt-0.5">
-                <AvatarFallback>
-                  {initials(result.user.displayName)}
-                </AvatarFallback>
+              <span className="relative mt-0.5 shrink-0">
+                <UserAvatar
+                  displayName={result.user.displayName}
+                  avatarAssetId={result.user.avatarAssetId}
+                  avatarUrl={result.user.avatarUrl}
+                />
                 <PresenceIndicator
                   displayName={result.user.displayName}
                   status={result.user.status}
                   lastSeenAt={result.user.lastSeenAt}
                   variant="compact"
                 />
-              </Avatar>
+              </span>
             ) : (
               <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
                 {result.kind === "MESSAGE" ? (

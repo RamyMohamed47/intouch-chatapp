@@ -7,6 +7,7 @@ erDiagram
         string displayName
         string email
         string avatarUrl
+        ObjectId avatarAssetId
         enum emailVerificationStatus
         datetime emailVerifiedAt
         datetime lastSeenAt
@@ -165,11 +166,38 @@ erDiagram
         datetime updatedAt
     }
 
-    Attachment {
+    StoredAsset {
         ObjectId id
+        ObjectId ownerUserId
+        ObjectId organizationId
+        ObjectId conversationId
         ObjectId messageId
-        string url
-        string mimeType
+        enum purpose
+        enum status
+        string stagingKey
+        string objectKey
+        string fileName
+        string declaredContentType
+        int declaredSize
+        string verifiedContentType
+        int verifiedSize
+        enum kind
+        string etag
+        datetime expiresAt
+        datetime promotionLeaseUntil
+        datetime cleanupLeaseUntil
+        int cleanupAttempts
+        datetime cleanupAvailableAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    UploadDailyUsage {
+        ObjectId id
+        ObjectId userId
+        string dayKey
+        int bytes
+        datetime expiresAt
     }
 
     Notification {
@@ -231,7 +259,17 @@ erDiagram
 
     Conversation ||--o{ ChatWallpaperPreference : overrides
 
-    Message ||--o{ Attachment : has
+    User ||--o{ StoredAsset : owns
+
+    User o|--o| StoredAsset : uses_avatar
+
+    Organization ||--o{ StoredAsset : accounts_storage
+
+    Conversation ||--o{ StoredAsset : scopes
+
+    Message ||--o{ StoredAsset : attaches
+
+    User ||--o{ UploadDailyUsage : reserves
 
     User ||--o{ Notification : receives
 
@@ -329,9 +367,24 @@ Online presence and typing are runtime-only state. `User.lastSeenAt` is the only
 persisted presence field and is updated after the user's final socket has been
 offline for the disconnect grace period.
 
-Deleted messages remain as redacted timeline tombstones: `content` is nullable
-only when `deletedAt` is set. Messages and conversation participants are removed
-transactionally when their channel or organization is deleted.
+Deleted messages remain as redacted timeline tombstones. `content` is also
+nullable for attachment messages whose optional caption is absent. Messages and
+conversation participants are removed transactionally when their channel or
+organization is deleted.
+
+`StoredAsset` is the authoritative metadata record for every private R2 object.
+`PENDING` objects use random staging keys; successful signature verification and
+an ETag-conditional copy produce immutable final keys and `PROMOTED` records.
+Message creation or avatar replacement claims promoted assets as `READY` in the
+same MongoDB transaction as the domain mutation. Message redaction,
+conversation deletion, organization deletion, and avatar replacement mark
+claimed assets `DELETE_PENDING`; a leased worker removes staging/final objects
+and then deletes their records with bounded retry backoff. Object keys and
+presigned URLs never enter public DTOs. Owner/status, organization/status,
+message, and cleanup indexes support limits, hydration, and lifecycle work.
+`UploadDailyUsage` atomically reserves issued bytes per `(userId, UTC day)` and
+expires through a TTL index. Pending and promoted message assets count against
+organization storage until claimed or purged.
 
 `MessageReaction` stores one normalized Unicode emoji sequence per user and
 message. A unique `(messageId, userId)` index enforces the one-reaction rule;

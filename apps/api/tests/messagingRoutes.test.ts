@@ -167,6 +167,7 @@ describe("direct-message and read-receipt routes", () => {
             id: recipientUserId,
             username: "recipient",
             displayName: "Recipient User",
+            avatarAssetId: null,
           },
         ],
       },

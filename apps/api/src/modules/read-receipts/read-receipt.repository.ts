@@ -44,6 +44,7 @@ interface MessageReaderAggregationResult {
     username: string;
     displayName: string;
     avatarUrl?: string;
+    avatarAssetId?: Types.ObjectId;
   }>;
 }
 
@@ -234,6 +235,7 @@ const createMongooseConversationReadStateRepository = (
                     username: "$user.username",
                     displayName: "$user.displayName",
                     avatarUrl: "$user.avatarUrl",
+                    avatarAssetId: "$user.avatarAssetId",
                   },
                 },
               ],
@@ -250,6 +252,7 @@ const createMongooseConversationReadStateRepository = (
             id: reader.id.toString(),
             username: reader.username,
             displayName: reader.displayName,
+            avatarAssetId: reader.avatarAssetId?.toString() ?? null,
             ...(reader.avatarUrl ? { avatarUrl: reader.avatarUrl } : {}),
           })) ?? [],
       };

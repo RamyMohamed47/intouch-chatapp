@@ -30,6 +30,8 @@ Implemented capabilities include:
 - Private-channel participant management.
 - Organization-scoped one-to-one direct messages.
 - Message history, sending, editing, redacted deletion, and pagination.
+- Private Cloudflare R2 profile avatars and message attachments with direct
+  uploads, authorized short-lived reads, progress, cancellation, and cleanup.
 - Unread counts, durable read receipts, and durable emoji reactions.
 - Realtime message delivery, typing indicators, online presence, and access
   revocation.
@@ -68,9 +70,9 @@ Treat these as known limitations unless behavior differs from the description:
   and adding a password to a Google-only account are not implemented.
 - Public organization discovery is not implemented. Public organizations are
   joinable only through a known organization URL.
-- Group DMs, attachments, custom emoji, threads, mentions, push notifications,
-  notification preferences, meetings, and message delivery receipts are not
-  implemented.
+- Group DMs, custom emoji, threads, mentions, push notifications, notification
+  preferences, meetings, chat video/audio, and message delivery receipts are
+  not implemented.
 - Organization deletion is permanent. Deleted messages remain as redacted
   tombstones, but deleted organizations/channels are hard-deleted.
 
@@ -249,6 +251,19 @@ Record each case as `Pass`, `Fail`, `Blocked`, or `Not Run`.
 | MSG-23 | Deleted-message reaction rule   | Delete a reacted message, then attempt to react through the API.                                 | Existing reactions are removed atomically; the new attempt returns `409`, and the tombstone has no controls.                         |
 | MSG-24 | Reaction access isolation       | Attempt reaction APIs for an inaccessible private channel or DM.                                 | The message is concealed as `404`, and no realtime invalidation reaches unauthorized sockets.                                        |
 
+### Profile Avatars and Attachments
+
+| ID      | Test                      | Steps                                                                                                     | Expected result                                                                                                                             |
+| ------- | ------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| FILE-01 | Replace profile avatar    | Open `/app/profile`, choose an image, inspect the centered square preview, and save it.                   | A 512x512 WebP is uploaded with visible progress; the new avatar appears across user surfaces without exposing an object key.               |
+| FILE-02 | Remove profile avatar     | Remove the custom avatar from the profile page.                                                           | The user falls back to the Google avatar when available, otherwise initials; the old private asset is queued for asynchronous deletion.     |
+| FILE-03 | Attachment selection      | Add supported images/documents with the button, drag-and-drop, and pasted clipboard image.                | Up to five files show local previews or file cards, type/size metadata, independent progress, cancellation, errors, and retry controls.     |
+| FILE-04 | Attachment message forms  | Send one attachment without text, then send attachments with a caption.                                   | Both messages are created once; the attachment-only caption is `null`, and conversation previews show `Photo`, `Files`, or caption text.    |
+| FILE-05 | Image and document access | Open an image preview and download PDF, text, CSV, DOCX, XLSX, and PPTX samples.                          | Images open in an accessible preview; documents download through a short-lived authorized URL and retain safe filenames and types.          |
+| FILE-06 | Upload validation         | Try SVG, ZIP, executable, macro-enabled Office, wrong-extension, invalid UTF-8, oversized, and six files. | Unsupported or mismatched files are rejected; over-25 MB returns `413`; the message is not enabled until every accepted upload completes.   |
+| FILE-07 | Retry and message failure | Interrupt a direct upload, retry it, then simulate a message-create failure after successful completion.  | Retry replaces the failed ticket; completed uploads remain available for message retry and are not duplicated in the conversation.          |
+| FILE-08 | Lifecycle cleanup         | Cancel a pending upload, delete an attachment message, then delete a disposable channel/organization.     | Domain mutations commit immediately; private objects are marked for deletion and the cleanup worker removes them without restoring records. |
+
 ### Organization Search
 
 | ID        | Test                        | Steps                                                                                                | Expected result                                                                                                                |
@@ -331,6 +346,10 @@ deployment. Never reuse another real user's credentials.
 | SEC-20 | Injection rendering             | Send HTML/script-like text in messages, names, and supported text fields.                                                                        | Text renders inertly; no script executes, markup is not interpreted, and other clients remain safe.                                                   |
 | SEC-21 | Clickjacking                    | Attempt to embed the frontend in an iframe from another local origin.                                                                            | Browser blocks framing due to CSP.                                                                                                                    |
 | SEC-22 | Request correlation/log hygiene | Inspect failed responses/logs if access is provided.                                                                                             | Request IDs are available; passwords, JWTs, refresh tokens, Google credentials, and raw throttle emails are not logged.                               |
+| SEC-23 | Private asset authorization     | Reuse an attachment asset ID from another conversation, organization, or unauthenticated client.                                                 | Access is concealed as `404` or rejected as `401`; no bucket URL, key, or object metadata leaks.                                                      |
+| SEC-24 | Upload integrity                | Upload bytes that do not match the declared MIME/extension, then call completion; repeat by overwriting a staging object after verification.     | Completion rejects mismatched signatures/text; conditional promotion prevents a post-verification overwrite race.                                     |
+| SEC-25 | Signed URL and bucket privacy   | Reuse an expired access URL and attempt direct anonymous R2 object access.                                                                       | Expired URL fails and the private bucket denies anonymous access; requesting access again issues a fresh authorized ten-minute URL.                   |
+| SEC-26 | Upload quotas and throttling    | In a disposable environment, exceed pending-upload, daily-byte, organization-storage, and upload mutation limits.                                | Requests fail with the documented `409`, `429`, or capacity response and `Retry-After` where applicable; another user's quota remains independent.    |
 
 ### Current Abuse Policies
 
@@ -350,6 +369,10 @@ deployment. Never reuse another real user's credentials.
 | Notification read mutations          | Burst 30; refill 1 every 500 ms per user                                 |
 | Create DM                            | Burst 5; refill 1 every 12 seconds per user                              |
 | Set/remove message reaction          | Burst 20; refill 1 per second per user                                   |
+| Upload create/complete/cancel/access | Burst 20; refill 1 every 2 seconds per user                              |
+| Concurrent pending uploads           | Maximum 10 per user                                                      |
+| Issued upload bytes                  | 500 MB per user per UTC day by default                                   |
+| Active organization attachment bytes | 5 GB per organization by default                                         |
 | Active sockets                       | Maximum 5 per user                                                       |
 | Socket connection attempts           | Burst 10; refill 1 every 3 seconds per user                              |
 | Join/organization subscribe combined | Burst 20; refill 1 per second per user                                   |
@@ -380,6 +403,13 @@ deployment. Never reuse another real user's credentials.
 - Refresh clients must serialize refresh attempts because refresh credentials
   are single-use and rotate on success.
 - Message writes remain REST-based; Socket.IO is subscription/broadcast-only.
+- Upload intent, completion, cancellation, avatar changes, and message claims
+  use the API. File bytes travel directly to the private R2 bucket through a
+  five-minute content-type-bound presigned `PUT`; authorized reads use
+  ten-minute presigned `GET` URLs.
+- Message and Socket.IO DTOs expose only attachment IDs and safe metadata.
+  R2 credentials, bucket keys, ETags, and presigned URLs are never persisted in
+  public DTOs or emitted through realtime events.
 - Channel history defaults to 50 messages with a maximum of 100. DM listing
   defaults to 30 with a maximum of 100.
 - A stale read-receipt update should return the current high-water receipt and

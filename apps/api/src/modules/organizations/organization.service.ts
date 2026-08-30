@@ -210,6 +210,7 @@ const createOrganizationService = ({
       await context.conversationReadStates.deleteByOrganizationId(
         organizationId,
       );
+      await context.assets.markOrganizationAssetsForDeletion(organizationId);
       await context.conversationParticipants.deleteByOrganizationId(
         organizationId,
       );

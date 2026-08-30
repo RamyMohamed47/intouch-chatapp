@@ -17,7 +17,7 @@ export const reactionEmojiSchema = z
   .transform((value) => value.normalize("NFC"))
   .refine(isSingleEmoji, "Reaction must be exactly one emoji");
 
-const messageContentSchema = z
+export const messageContentSchema = z
   .string()
   .min(1)
   .max(4_000)
@@ -27,13 +27,26 @@ const messageContentSchema = z
 
 export const createMessageSchema = z
   .object({
-    content: messageContentSchema,
+    content: messageContentSchema.optional(),
+    uploadIds: z.array(mongoIdSchema).max(5).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    ({ content, uploadIds }) =>
+      content !== undefined || (uploadIds?.length ?? 0) > 0,
+    { message: "A message requires content or an attachment" },
+  )
+  .refine(
+    ({ uploadIds }) =>
+      uploadIds === undefined || new Set(uploadIds).size === uploadIds.length,
+    {
+      message: "Upload IDs must be unique",
+    },
+  );
 
 export const updateMessageSchema = z
   .object({
-    content: messageContentSchema,
+    content: messageContentSchema.nullable(),
   })
   .strict();
 

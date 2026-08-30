@@ -55,6 +55,9 @@ describe("auth environment configuration", () => {
     assert.equal(config.loginAttemptWindowMs, 900_000);
     assert.equal(config.loginAttemptCooldownMs, 900_000);
     assert.equal(config.searchProvider, "native");
+    assert.deepEqual(config.storage, { provider: "disabled" });
+    assert.equal(config.uploadDailyUserBytes, 524_288_000);
+    assert.equal(config.organizationStorageBytes, 5_368_709_120);
     assert.equal(config.trustProxy, "loopback");
     assert.equal(config.mailTransport.provider, "smtp");
   });
@@ -77,6 +80,11 @@ describe("auth environment configuration", () => {
       ...validEnv,
       NODE_ENV: "production",
       SEARCH_PROVIDER: "atlas",
+      STORAGE_PROVIDER: "r2",
+      R2_ACCOUNT_ID: "account-id",
+      R2_ACCESS_KEY_ID: "access-key-id",
+      R2_SECRET_ACCESS_KEY: "secret-access-key",
+      R2_BUCKET_NAME: "intouch-private",
       GOOGLE_OAUTH_CALLBACK_URL:
         "https://app.example.com/api/v1/auth/oauth/google/callback",
     });
@@ -88,6 +96,7 @@ describe("auth environment configuration", () => {
       "__Secure-intouch_google_oauth_state",
     );
     assert.equal(config.trustProxy, 1);
+    assert.equal(config.storage.provider, "r2");
   });
 
   test("rejects short access-token secrets", () => {
@@ -141,6 +150,46 @@ describe("auth environment configuration", () => {
           SEARCH_PROVIDER: "atlas",
         }),
       /must use HTTPS in production/,
+    );
+  });
+
+  test("requires complete R2 configuration in production", () => {
+    const productionEnv = {
+      ...validEnv,
+      NODE_ENV: "production",
+      SEARCH_PROVIDER: "atlas",
+      GOOGLE_OAUTH_CALLBACK_URL:
+        "https://app.example.com/api/v1/auth/oauth/google/callback",
+    };
+
+    assert.throws(
+      () => loadConfig(productionEnv),
+      /STORAGE_PROVIDER env var is required in production/,
+    );
+    assert.throws(
+      () => loadConfig({ ...productionEnv, STORAGE_PROVIDER: "disabled" }),
+      /STORAGE_PROVIDER must be r2 in production/,
+    );
+    assert.throws(
+      () => loadConfig({ ...productionEnv, STORAGE_PROVIDER: "r2" }),
+      /R2_ACCOUNT_ID env var is required/,
+    );
+  });
+
+  test("accepts configurable upload quotas and rejects invalid bounds", () => {
+    const config = loadConfig({
+      ...validEnv,
+      UPLOAD_DAILY_USER_BYTES: "1048576",
+      ORGANIZATION_STORAGE_BYTES: "2097152",
+    });
+
+    assert.equal(config.uploadDailyUserBytes, 1_048_576);
+    assert.equal(config.organizationStorageBytes, 2_097_152);
+    assert.throws(() =>
+      loadConfig({ ...validEnv, UPLOAD_DAILY_USER_BYTES: "0" }),
+    );
+    assert.throws(() =>
+      loadConfig({ ...validEnv, ORGANIZATION_STORAGE_BYTES: "1.5" }),
     );
   });
 

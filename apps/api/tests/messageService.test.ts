@@ -12,11 +12,21 @@ import type { ConversationRecord } from "../src/modules/conversations/conversati
 import type { MessageRepository } from "../src/modules/message/message.repository.js";
 import { MessageNotFoundError } from "../src/modules/message/message.errors.js";
 import createMessageService from "../src/modules/message/message.service.js";
+import { UploadConflictError } from "../src/modules/uploads/upload.errors.js";
+import type {
+  StoredAssetRecord,
+  StoredAssetRepository,
+  UploadService,
+} from "../src/modules/uploads/index.js";
+import { StoredAssetStatus } from "../src/modules/uploads/index.js";
 import {
   MessageType,
   type MessageRecord,
 } from "../src/modules/message/message.types.js";
-import { createTestUnitOfWork } from "./unitOfWorkContext.js";
+import {
+  createTestUnitOfWork,
+  emptyCommunicationContext,
+} from "./unitOfWorkContext.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const conversationId = "507f1f77bcf86cd799439012";
@@ -42,6 +52,7 @@ const message: MessageRecord = {
   deletedAt: null,
   createdAt: now,
   updatedAt: now,
+  attachments: [],
 };
 
 const createRepository = (
@@ -94,6 +105,8 @@ const createService = (
     messageDeleted: async () => undefined,
     messageUpdated: async () => undefined,
   },
+  uploads?: Pick<UploadService, "decorate">,
+  assetOverrides: Partial<StoredAssetRepository> = {},
 ) =>
   createMessageService({
     activity,
@@ -112,6 +125,7 @@ const createService = (
           currentUserReaction: null,
         })),
     },
+    ...(uploads ? { uploads } : {}),
     unitOfWork: createTestUnitOfWork({
       conversations: {
         create: async () => {
@@ -131,6 +145,10 @@ const createService = (
         deleteByOrganizationId: async () => 0,
       },
       messages: repository,
+      assets: {
+        ...emptyCommunicationContext.assets,
+        ...assetOverrides,
+      },
     }),
   });
 
@@ -226,6 +244,94 @@ describe("messageService", () => {
       service.create(userId, conversationId, { content: "Hello" }),
       /forced persistence failure/,
     );
+    assert.equal(activityCalls, 0);
+  });
+
+  test("claims completed uploads with attachment-only messages", async () => {
+    const attachmentId = "507f1f77bcf86cd799439016";
+    const attachment = {
+      id: attachmentId,
+      fileName: "photo.png",
+      contentType: "image/png",
+      size: 128,
+      kind: "IMAGE" as const,
+      createdAt: now.toISOString(),
+    };
+    const claimed: StoredAssetRecord = {
+      id: attachmentId,
+      ownerUserId: userId,
+      organizationId: conversation.organizationId,
+      conversationId,
+      messageId: message.id,
+      purpose: "MESSAGE_ATTACHMENT",
+      status: StoredAssetStatus.READY,
+      objectKey: "organizations/org/conversations/conversation/photo",
+      fileName: attachment.fileName,
+      declaredContentType: attachment.contentType,
+      declaredSize: attachment.size,
+      verifiedContentType: attachment.contentType,
+      verifiedSize: attachment.size,
+      kind: attachment.kind,
+      cleanupAttempts: 0,
+      cleanupAvailableAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    let createInput: Parameters<MessageRepository["create"]>[0] | undefined;
+    const attachmentMessage = {
+      ...message,
+      content: null,
+      messageType: MessageType.ATTACHMENT,
+      attachments: [attachment],
+    };
+    const service = createService(
+      createRepository({
+        create: async (input) => {
+          createInput = input;
+          return { ...attachmentMessage, attachments: [] };
+        },
+      }),
+      createBroadcaster(),
+      undefined,
+      {
+        decorate: async (records) =>
+          records.map((record) => ({ ...record, attachments: [attachment] })),
+      },
+      { claimForMessage: async () => [claimed] },
+    );
+
+    const result = await service.create(userId, conversationId, {
+      uploadIds: [attachmentId],
+    });
+    assert.equal(createInput?.content, null);
+    assert.equal(createInput?.messageType, MessageType.ATTACHMENT);
+    assert.deepEqual(result.attachments, [attachment]);
+  });
+
+  test("does not publish a message when upload claiming fails", async () => {
+    const broadcaster = createBroadcaster();
+    let activityCalls = 0;
+    const service = createService(
+      createRepository(),
+      broadcaster,
+      {
+        messageCreated: async () => {
+          activityCalls += 1;
+        },
+        messageDeleted: async () => undefined,
+        messageUpdated: async () => undefined,
+      },
+      undefined,
+      { claimForMessage: async () => [] },
+    );
+
+    await assert.rejects(
+      service.create(userId, conversationId, {
+        uploadIds: ["507f1f77bcf86cd799439016"],
+      }),
+      UploadConflictError,
+    );
+    assert.deepEqual(broadcaster.created, []);
     assert.equal(activityCalls, 0);
   });
 

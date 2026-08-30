@@ -76,6 +76,7 @@ describe("membershipDirectoryService", () => {
       id: userId,
       username: "member",
       displayName: "Member",
+      avatarAssetId: null,
       status: PresenceStatus.ONLINE,
       lastSeenAt: null,
     });

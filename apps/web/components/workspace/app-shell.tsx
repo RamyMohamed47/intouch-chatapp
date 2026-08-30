@@ -25,7 +25,7 @@ import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { OrganizationSearchDialog } from "@/components/search/organization-search-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/users/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -134,17 +134,19 @@ function NewDirectMessageDialog({
                 onClick={() => createDirectMessage.mutate(member.user.id)}
                 className="flex items-center gap-3 rounded-2xl border border-transparent p-3 text-left hover:border-border hover:bg-muted/50 disabled:opacity-60"
               >
-                <Avatar>
-                  <AvatarFallback>
-                    {initials(member.user.displayName)}
-                  </AvatarFallback>
+                <span className="relative shrink-0">
+                  <UserAvatar
+                    displayName={member.user.displayName}
+                    avatarAssetId={member.user.avatarAssetId}
+                    avatarUrl={member.user.avatarUrl}
+                  />
                   <PresenceIndicator
                     displayName={member.user.displayName}
                     status={member.user.status}
                     lastSeenAt={member.user.lastSeenAt}
                     variant="compact"
                   />
-                </Avatar>
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">
                     {member.user.displayName}
@@ -388,11 +390,12 @@ function WorkspaceNavigation({
                           "bg-sidebar-accent text-foreground",
                       )}
                     >
-                      <Avatar size="sm">
-                        <AvatarFallback>
-                          {initials(conversation.peer.displayName)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        size="sm"
+                        displayName={conversation.peer.displayName}
+                        avatarAssetId={conversation.peer.avatarAssetId}
+                        avatarUrl={conversation.peer.avatarUrl}
+                      />
                       <span className="truncate">
                         {conversation.peer.displayName}
                       </span>
@@ -424,23 +427,34 @@ function WorkspaceNavigation({
         </Link>
       )}
       <div className="mt-2 flex items-center gap-2 rounded-2xl border border-sidebar-border bg-background/30 p-2">
-        <Avatar>
-          <AvatarFallback>
-            {initials(user?.displayName ?? "InTouch User")}
-          </AvatarFallback>
-          <PresenceIndicator
-            displayName={user?.displayName ?? "InTouch user"}
-            status={connected ? "ONLINE" : "OFFLINE"}
-            lastSeenAt={null}
-            variant="compact"
-          />
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold">{user?.displayName}</p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            @{user?.username}
-          </p>
-        </div>
+        <Link
+          href="/app/profile"
+          onClick={onNavigate}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Open your profile"
+        >
+          <span className="relative">
+            <UserAvatar
+              displayName={user?.displayName ?? "InTouch User"}
+              avatarAssetId={user?.avatarAssetId}
+              avatarUrl={user?.avatarUrl}
+            />
+            <PresenceIndicator
+              displayName={user?.displayName ?? "InTouch user"}
+              status={connected ? "ONLINE" : "OFFLINE"}
+              lastSeenAt={null}
+              variant="compact"
+            />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-semibold">
+              {user?.displayName}
+            </span>
+            <span className="block truncate text-[11px] text-muted-foreground">
+              @{user?.username}
+            </span>
+          </span>
+        </Link>
         <NotificationBell />
         <Button
           type="button"

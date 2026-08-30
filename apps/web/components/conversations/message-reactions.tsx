@@ -5,9 +5,8 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { SmilePlus } from "lucide-react";
 import { useState } from "react";
 
-import { initials } from "@/components/workspace/app-shell";
 import { EmojiPickerPanel } from "@/components/conversations/emoji-picker";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/users/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -121,11 +120,12 @@ function ReactionUsers({
         )}
         {reactors.map((user) => (
           <div key={user.id} className="flex items-center gap-2">
-            <Avatar className="size-7">
-              <AvatarFallback className="text-[10px]">
-                {initials(user.displayName)}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              className="size-7"
+              displayName={user.displayName}
+              avatarAssetId={user.avatarAssetId}
+              avatarUrl={user.avatarUrl}
+            />
             <span className="min-w-0 truncate text-sm">{user.displayName}</span>
           </div>
         ))}

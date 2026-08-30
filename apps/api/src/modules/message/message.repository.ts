@@ -31,7 +31,7 @@ export interface MessageRepository {
   }>;
   updateContent(
     messageId: string,
-    content: string,
+    content: string | null,
     editedAt: Date,
   ): Promise<MessageRecord | null>;
   redact(messageId: string, deletedAt: Date): Promise<MessageRecord | null>;
@@ -49,6 +49,7 @@ const toMessageRecord = (message: MessageDocument): MessageRecord => ({
   deletedAt: message.deletedAt,
   createdAt: message.createdAt,
   updatedAt: message.updatedAt,
+  attachments: [],
 });
 
 const createMongooseMessageRepository = (

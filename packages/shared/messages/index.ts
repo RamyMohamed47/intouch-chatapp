@@ -1,5 +1,6 @@
 export {
   createMessageSchema,
+  messageContentSchema,
   messageHistoryQuerySchema,
   messageReactionUsersQuerySchema,
   reactionEmojiSchema,

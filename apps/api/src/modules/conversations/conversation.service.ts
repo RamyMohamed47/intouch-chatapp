@@ -74,6 +74,7 @@ const toMemberUser = (user: PublicUser) => ({
   id: user.id,
   username: user.username,
   displayName: user.displayName,
+  avatarAssetId: user.avatarAssetId ?? null,
   ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
 });
 
@@ -489,6 +490,7 @@ const createConversationService = ({
         );
         await context.chatWallpapers.deleteByConversationId(conversationId);
         await context.messageReactions.deleteByConversationId(conversationId);
+        await context.assets.markConversationAssetsForDeletion(conversationId);
         await context.messages.deleteByConversationId(conversationId);
         await context.conversationReadStates.deleteByConversationId(
           conversationId,

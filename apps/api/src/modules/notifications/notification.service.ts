@@ -109,6 +109,7 @@ const createNotificationService = ({
           id: actor.id,
           username: actor.username,
           displayName: actor.displayName,
+          avatarAssetId: actor.avatarAssetId ?? null,
           ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
         },
         organization: {

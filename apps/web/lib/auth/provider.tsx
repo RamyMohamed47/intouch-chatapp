@@ -34,6 +34,7 @@ interface AuthContextValue {
   register: (input: RegisterInput) => Promise<RegistrationPendingResponse>;
   restore: () => Promise<PublicUser | null>;
   logout: () => Promise<void>;
+  updateUser: (user: PublicUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -93,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register: (input) => registerRequest(input),
         restore,
         logout,
+        updateUser: setUser,
       }}
     >
       {children}

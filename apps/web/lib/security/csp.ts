@@ -19,12 +19,27 @@ export const buildContentSecurityPolicy = ({
   isDevelopment,
   nonce,
   socketOrigin,
+  storageOrigin,
 }: {
   isDevelopment: boolean;
   nonce: string;
   socketOrigin: string;
+  storageOrigin?: string;
 }) => {
-  const connectSources = ["'self'", ...toConnectSources(socketOrigin)];
+  const normalizedStorageOrigin = storageOrigin
+    ? new URL(storageOrigin).origin
+    : undefined;
+  const connectSources = [
+    "'self'",
+    ...toConnectSources(socketOrigin),
+    ...(normalizedStorageOrigin ? [normalizedStorageOrigin] : []),
+  ];
+  const imageSources = [
+    "'self'",
+    "data:",
+    "blob:",
+    ...(normalizedStorageOrigin ? [normalizedStorageOrigin] : []),
+  ];
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDevelopment ? " 'unsafe-eval'" : ""}`,
@@ -32,7 +47,7 @@ export const buildContentSecurityPolicy = ({
     "style-src 'self' 'unsafe-inline'",
     "style-src-elem 'self' 'unsafe-inline'",
     "style-src-attr 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    `img-src ${imageSources.join(" ")}`,
     "font-src 'self' data:",
     `connect-src ${connectSources.join(" ")}`,
     "media-src 'self'",
