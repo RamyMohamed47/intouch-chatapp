@@ -109,6 +109,10 @@ const createApp = ({
     );
   });
 
+  app.get("/favicon.ico", (_req, res) => {
+    res.status(204).end();
+  });
+
   if (apiDocsRouter) {
     app.use("/api", apiDocsRouter);
   }

@@ -132,6 +132,13 @@ describe("app", () => {
     }
   });
 
+  test("handles browser favicon requests without logging a missing route", async () => {
+    const response = await fetch(`${baseUrl}/favicon.ico`);
+
+    assert.equal(response.status, 204);
+    assert.equal(await response.text(), "");
+  });
+
   test("returns a centralized 404 response for the removed frontend root", async () => {
     const response = await fetch(`${baseUrl}/`);
     const body = await response.json();

@@ -184,6 +184,13 @@ process.once("SIGINT", () => {
 const config = loadConfig();
 const runtimeState = createRedisRuntime(config.runtimeState, logger);
 resources.closeRuntimeState = () => runtimeState.close();
+
+try {
+  await runtimeState.connect();
+} catch (err) {
+  await shutdown("Runtime state connection failed", 1, err);
+}
+
 const mailCipher = createMailPayloadCipher(config.mailOutboxEncryptionSecret);
 const mailJobs = createMailOutboxJobFactory(mailCipher);
 const mailTransport =
@@ -390,7 +397,6 @@ configureSocket(
 );
 
 try {
-  await runtimeState.connect();
   await connectDatabase(config.databaseUri, logger);
   mailWorker.start();
   assetCleanupWorker.start();
