@@ -15,6 +15,14 @@ export const StoredAssetStatus = {
 export type StoredAssetStatusValue =
   (typeof StoredAssetStatus)[keyof typeof StoredAssetStatus];
 
+export const AssetCleanupMode = {
+  DELETE: "DELETE",
+  STAGING: "STAGING",
+} as const;
+
+export type AssetCleanupModeValue =
+  (typeof AssetCleanupMode)[keyof typeof AssetCleanupMode];
+
 export interface StoredAsset {
   ownerUserId: string;
   organizationId?: string;
@@ -42,6 +50,11 @@ export interface StoredAsset {
 
 export interface StoredAssetRecord extends StoredAsset {
   id: string;
+}
+
+export interface AssetCleanupCandidate {
+  asset: StoredAssetRecord;
+  mode: AssetCleanupModeValue;
 }
 
 export interface CreateStoredAssetInput extends UploadFileDescriptor {

@@ -143,6 +143,8 @@ values are:
   development defaults to `memory`
 - `REDIS_URL` when Redis runtime state is enabled
 - `REDIS_KEY_PREFIX`, optional and namespaced per environment
+- `BACKGROUND_JOBS_PROVIDER`; defaults to `bullmq` with Redis and `polling`
+  with memory runtime state
 - `STORAGE_PROVIDER`; production requires `r2`
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
   `R2_BUCKET_NAME` when R2 storage is enabled
@@ -179,6 +181,7 @@ npm run redis:up
 RUNTIME_STATE_PROVIDER=redis
 REDIS_URL=redis://127.0.0.1:6379
 REDIS_KEY_PREFIX=intouch:development:v2
+BACKGROUND_JOBS_PROVIDER=bullmq
 ```
 
 Stop it with `npm run redis:down`. Use a different key prefix for every shared
@@ -249,6 +252,13 @@ on `localhost:1025` with `SMTP_REQUIRE_TLS=false`; production SMTP must use TLS.
 The API retries failed delivery after the database transaction commits, so
 registration and invitation writes do not depend on a provider request
 succeeding synchronously.
+
+With Redis enabled, BullMQ dispatches committed outbox records with global
+concurrency `5`, a global `10/second` provider admission limit, and the existing
+five-attempt retry schedule. MongoDB remains authoritative: Redis jobs contain
+only opaque outbox IDs, and a two-second reconciler recovers records missed by
+process crashes. `BACKGROUND_JOBS_PROVIDER=polling` retains the original leased
+MongoDB worker for local development and emergency rollback.
 
 Railway Free, Trial, and Hobby deployments should use Brevo HTTPS:
 
@@ -507,13 +517,23 @@ every API replica:
 RUNTIME_STATE_PROVIDER=redis
 REDIS_URL=${{Redis.REDIS_URL}}
 REDIS_KEY_PREFIX=intouch:production:v2
+BACKGROUND_JOBS_PROVIDER=bullmq
 ```
 
 Set the API health-check path to `/ready`. All API replicas must use the same
 Redis URL and key prefix. Redis is mandatory in production; startup fails rather
-than silently falling back to process-local state. MongoDB remains authoritative
-for refresh sessions, login-attempt records, notifications, mail jobs, and file
-metadata.
+than silently falling back to process-local state. Configure Redis eviction as
+`noeviction`, as BullMQ must not lose queue keys under memory pressure. MongoDB
+remains authoritative for refresh sessions, login-attempt records,
+notifications, mail outbox state, and file metadata.
+
+BullMQ workers run inside every API replica. Its shared global concurrency
+limits prevent adding replicas from multiplying mail or cleanup throughput.
+Mail reconciliation runs every two seconds; private R2 asset cleanup
+reconciliation runs every five seconds with batches of 20 and three short
+provider retries before MongoDB schedules bounded backoff. `/ready` reports
+`503` when the selected queue runtime is not ready. No separate worker Railway
+service, migration, or queue dashboard is required.
 
 Railway plans that block outbound SMTP must configure `MAIL_PROVIDER=brevo`
 with `BREVO_API_KEY` and a Brevo-verified `MAIL_FROM_ADDRESS`. Upgrading to a

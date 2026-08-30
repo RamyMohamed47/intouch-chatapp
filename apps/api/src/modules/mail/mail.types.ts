@@ -43,6 +43,7 @@ export interface CreateMailOutboxInput extends EncryptedMailPayload {
 export interface MailOutboxRecord extends CreateMailOutboxInput {
   id: string;
   attempts: number;
+  dispatchedAt?: Date;
 }
 
 export interface RenderedMail {

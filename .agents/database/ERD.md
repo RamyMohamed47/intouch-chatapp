@@ -53,6 +53,7 @@ erDiagram
         enum status
         int attempts
         datetime availableAt
+        datetime dispatchedAt
         datetime leaseUntil
         datetime expiresAt
         datetime sentAt
@@ -303,10 +304,11 @@ deletes every refresh session for that user in the same transaction.
 `MailOutbox` is the transactional boundary between MongoDB changes and the
 configured mail provider.
 Sensitive recipient/token payloads are AES-256-GCM encrypted at rest. A unique
-aggregate key supersedes pending verification/reset jobs, while the worker uses
-leases, bounded retries, and TTL cleanup. Delivery happens after the surrounding
-database transaction commits; provider failure never leaves an orphaned account or
-invitation mutation.
+aggregate key supersedes pending verification/reset jobs. `dispatchedAt`
+supports idempotent BullMQ reconciliation while repository leases, bounded
+retries, and TTL cleanup preserve MongoDB as the durable source of truth.
+Delivery happens after the surrounding database transaction commits; provider
+failure never leaves an orphaned account or invitation mutation.
 
 Organization ownership is represented only by an `OWNER` membership. The
 organization document does not duplicate ownership with an `ownerId` field.
@@ -384,7 +386,9 @@ promoted assets as `READY` in the same MongoDB transaction as the domain
 mutation. Message redaction, conversation deletion, organization deletion,
 avatar replacement, and logo replacement mark
 claimed assets `DELETE_PENDING`; a leased worker removes staging/final objects
-and then deletes their records with bounded retry backoff. Object keys and
+and then deletes their records with bounded retry backoff. BullMQ schedules the
+cleanup by opaque asset ID in production; MongoDB leases and attempt counters
+remain authoritative and allow polling fallback. Object keys and
 presigned URLs never enter public DTOs. Owner/status, organization/status,
 message, and cleanup indexes support limits, hydration, and lifecycle work.
 `UploadDailyUsage` atomically reserves issued bytes per `(userId, UTC day)` and

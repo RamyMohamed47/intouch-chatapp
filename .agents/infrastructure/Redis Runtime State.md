@@ -11,9 +11,12 @@ remains the durable source of truth.
 - Authenticated per-user token buckets.
 - Active Socket.IO connection limits.
 - Public authentication endpoint IP limit windows.
+- BullMQ scheduling and delivery state for transactional mail and private-asset
+  cleanup. Queue payloads contain opaque MongoDB IDs only.
 
-Redis does not store refresh sessions, login-attempt records, notifications,
-mail outbox jobs, uploads, messages, memberships, or read receipts.
+Redis does not become the durable source of truth for refresh sessions,
+login-attempt records, notifications, mail outbox records, uploads, messages,
+memberships, or read receipts. MongoDB reconcilers can recreate BullMQ work.
 
 ## Runtime Policies
 
@@ -38,16 +41,24 @@ Production requires:
 RUNTIME_STATE_PROVIDER=redis
 REDIS_URL=redis://default:password@private-host:6379
 REDIS_KEY_PREFIX=intouch:production:v2
+BACKGROUND_JOBS_PROVIDER=bullmq
 ```
 
 Every replica in one environment must share the URL and key prefix. Separate
 environments must use separate prefixes.
 
+BullMQ keys use the `${REDIS_KEY_PREFIX}:bullmq` namespace. Redis must use the
+`noeviction` max-memory policy. Workers run in each API replica with shared
+global concurrency, and MongoDB remains authoritative for outbox and asset
+lifecycle state. Local memory mode defaults to
+`BACKGROUND_JOBS_PROVIDER=polling`; BullMQ cannot be selected without Redis.
+
 ## Failure Behavior
 
 The API does not fall back from Redis to memory in production. Startup fails if
 Redis cannot be reached. After startup, `/health` remains a process-liveness
-check while `/ready` returns `503` if MongoDB or Redis is unavailable.
+check while `/ready` returns `503` if MongoDB, Redis, or the selected background
+job runtime is unavailable.
 Protected runtime operations fail closed. Socket connection middleware returns
 `SERVICE_UNAVAILABLE`; the web client retries without rotating authentication
 tokens.

@@ -2,9 +2,14 @@ import type { Logger } from "pino";
 
 import type { StoredAssetRepository } from "./upload.repository.js";
 import type { ObjectStorage, StoredAssetRecord } from "./upload.types.js";
+import {
+  ASSET_CLEANUP_LEASE_MS,
+  getAssetCleanupErrorCode,
+  getAssetCleanupRetryDelay,
+  performClaimedAssetCleanup,
+} from "./upload.cleanup.js";
 
 const POLL_INTERVAL_MS = 5_000;
-const LEASE_MS = 60_000;
 
 export interface AssetCleanupWorker {
   start(): void;
@@ -23,17 +28,14 @@ export const createAssetCleanupWorker = (dependencies: {
   let running: Promise<void> | undefined;
 
   const retry = async (asset: StoredAssetRecord, error: unknown) => {
-    const delay = Math.min(
-      60 * 60 * 1000,
-      2 ** Math.min(asset.cleanupAttempts, 10) * 1000,
-    );
+    const delay = getAssetCleanupRetryDelay(asset.cleanupAttempts);
     await dependencies.assets.scheduleCleanupRetry(
       asset.id,
       new Date(now().getTime() + delay),
     );
     dependencies.logger.warn(
       {
-        err: error,
+        errorCode: getAssetCleanupErrorCode(error),
         assetId: asset.id,
         purpose: asset.purpose,
         attempt: asset.cleanupAttempts,
@@ -44,15 +46,14 @@ export const createAssetCleanupWorker = (dependencies: {
 
   const runOnce = async () => {
     const claimedAt = now();
-    const leaseUntil = new Date(claimedAt.getTime() + LEASE_MS);
+    const leaseUntil = new Date(claimedAt.getTime() + ASSET_CLEANUP_LEASE_MS);
     const staging = await dependencies.assets.claimNextStagingCleanup(
       claimedAt,
       leaseUntil,
     );
     if (staging?.stagingKey) {
       try {
-        await dependencies.storage.deleteObjects([staging.stagingKey]);
-        await dependencies.assets.completeStagingCleanup(staging.id);
+        await performClaimedAssetCleanup(dependencies, staging, "STAGING");
       } catch (error) {
         await retry(staging, error);
       }
@@ -65,12 +66,7 @@ export const createAssetCleanupWorker = (dependencies: {
     );
     if (!asset) return false;
     try {
-      await dependencies.storage.deleteObjects(
-        [asset.stagingKey, asset.objectKey].filter(
-          (key): key is string => key !== undefined,
-        ),
-      );
-      await dependencies.assets.completeCleanup(asset.id);
+      await performClaimedAssetCleanup(dependencies, asset, "DELETE");
     } catch (error) {
       await retry(asset, error);
     }

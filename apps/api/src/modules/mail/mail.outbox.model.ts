@@ -11,6 +11,7 @@ export interface MailOutboxDocument {
   status: "PENDING" | "PROCESSING" | "SENT" | "FAILED";
   attempts: number;
   availableAt: Date;
+  dispatchedAt?: Date;
   leaseUntil?: Date;
   expiresAt: Date;
   lastError?: string;
@@ -36,6 +37,7 @@ const mailOutboxSchema = new Schema<MailOutboxDocument>(
     },
     attempts: { type: Number, default: 0, min: 0, required: true },
     availableAt: { type: Date, required: true },
+    dispatchedAt: Date,
     leaseUntil: Date,
     expiresAt: { type: Date, required: true },
     lastError: String,
@@ -53,6 +55,10 @@ mailOutboxSchema.index(
 mailOutboxSchema.index(
   { status: 1, availableAt: 1, leaseUntil: 1 },
   { name: "claim_pending_mail" },
+);
+mailOutboxSchema.index(
+  { status: 1, availableAt: 1, dispatchedAt: 1 },
+  { name: "dispatch_pending_mail" },
 );
 mailOutboxSchema.index(
   { expiresAt: 1 },

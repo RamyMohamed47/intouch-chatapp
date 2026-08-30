@@ -62,6 +62,7 @@ describe("auth environment configuration", () => {
     assert.equal(config.organizationStorageBytes, 5_368_709_120);
     assert.equal(config.trustProxy, "loopback");
     assert.equal(config.mailTransport.provider, "smtp");
+    assert.equal(config.backgroundJobsProvider, "bullmq");
     assert.deepEqual(config.runtimeState, {
       provider: "redis",
       keyPrefix: "intouch:development:v2",
@@ -80,6 +81,30 @@ describe("auth environment configuration", () => {
       provider: "memory",
       keyPrefix: "intouch:development:v2",
     });
+    assert.equal(config.backgroundJobsProvider, "polling");
+  });
+
+  test("validates the background job provider against runtime state", () => {
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          BACKGROUND_JOBS_PROVIDER: "bullmq",
+          REDIS_URL: undefined,
+          RUNTIME_STATE_PROVIDER: "memory",
+        }),
+      /requires RUNTIME_STATE_PROVIDER=redis/,
+    );
+    assert.throws(
+      () =>
+        loadConfig({ ...validEnv, BACKGROUND_JOBS_PROVIDER: "unsupported" }),
+      /must be bullmq or polling/,
+    );
+    assert.equal(
+      loadConfig({ ...validEnv, BACKGROUND_JOBS_PROVIDER: "polling" })
+        .backgroundJobsProvider,
+      "polling",
+    );
   });
 
   test("requires Redis runtime state in production", () => {

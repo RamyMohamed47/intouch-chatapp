@@ -13,6 +13,12 @@ import { getLogger } from "./config/logger.js";
 import { createApiDocsRouter } from "./docs/api-docs.router.js";
 import { loadOpenApiContract } from "./docs/openapi.contract.js";
 import {
+  createBullMqBackgroundJobsRuntime,
+  createPollingBackgroundJobsRuntime,
+  type BackgroundJobComponent,
+  type BackgroundJobsRuntime,
+} from "./infrastructure/background-jobs/index.js";
+import {
   createRedisAuthRateLimitStoreFactory,
   createRedisRuntime,
 } from "./infrastructure/redis/index.js";
@@ -39,6 +45,7 @@ import {
   createRedisPresenceStore,
 } from "./modules/presence/index.js";
 import {
+  createBullMqMailJobs,
   createMailOutboxJobFactory,
   createMailOutboxWorker,
   createMailPayloadCipher,
@@ -49,6 +56,7 @@ import {
 } from "./modules/mail/index.js";
 import {
   createAssetCleanupWorker,
+  createBullMqAssetCleanupJobs,
   createDisabledObjectStorage,
   createR2ObjectStorage,
 } from "./modules/uploads/index.js";
@@ -65,9 +73,8 @@ type InTouchServer = Server<
 
 const resources: {
   closeAbuseProtection?: () => void;
-  closeMail?: () => Promise<void>;
+  closeBackgroundJobs?: () => Promise<void>;
   closePresence?: () => void;
-  closeStorage?: () => Promise<void>;
   closeTyping?: () => void;
   closeRuntimeState?: () => Promise<void>;
   server?: http.Server;
@@ -138,15 +145,14 @@ const shutdown = (
       logger.fatal({ reason }, "Graceful shutdown timed out");
       resources.server?.closeAllConnections();
       process.exit(1);
-    }, 10_000);
+    }, 30_000);
     forceShutdownTimer.unref();
 
     try {
       await closeSocketServer();
       await closeHttpServer();
       resources.closeAbuseProtection?.();
-      await resources.closeMail?.();
-      await resources.closeStorage?.();
+      await resources.closeBackgroundJobs?.();
       resources.closePresence?.();
       resources.closeTyping?.();
       await resources.closeRuntimeState?.();
@@ -217,7 +223,6 @@ const mailWorker = createMailOutboxWorker({
   render: createMailRenderer(config.webAppUrl),
   transport: mailTransport,
 });
-resources.closeMail = () => mailWorker.close();
 const apiDocsRouter = createApiDocsRouter(loadOpenApiContract());
 const abuseProtection = createAbuseProtectionModule(logger, {
   ...(runtimeState.command
@@ -319,7 +324,48 @@ const assetCleanupWorker = createAssetCleanupWorker({
   storage,
   logger,
 });
-resources.closeStorage = () => assetCleanupWorker.close();
+let backgroundJobs: BackgroundJobsRuntime;
+if (config.backgroundJobsProvider === "bullmq") {
+  if (config.runtimeState.provider !== "redis") {
+    throw new Error("BullMQ background jobs require Redis runtime state");
+  }
+  const mailJobsComponent = createBullMqMailJobs({
+    cipher: mailCipher,
+    logger,
+    outbox: createMongooseMailOutboxRepository(),
+    redisKeyPrefix: config.runtimeState.keyPrefix,
+    redisUrl: config.runtimeState.url,
+    render: createMailRenderer(config.webAppUrl),
+    transport: mailTransport,
+  });
+  const closeMailComponent: BackgroundJobComponent = {
+    isReady: () => mailJobsComponent.isReady(),
+    start: () => mailJobsComponent.start(),
+    async close() {
+      await mailJobsComponent.close();
+      await mailTransport.close();
+    },
+  };
+  backgroundJobs = createBullMqBackgroundJobsRuntime(
+    [
+      closeMailComponent,
+      createBullMqAssetCleanupJobs({
+        assets: organizations.assets,
+        storage,
+        logger,
+        redisKeyPrefix: config.runtimeState.keyPrefix,
+        redisUrl: config.runtimeState.url,
+      }),
+    ],
+    logger,
+  );
+} else {
+  backgroundJobs = createPollingBackgroundJobsRuntime([
+    mailWorker,
+    assetCleanupWorker,
+  ]);
+}
+resources.closeBackgroundJobs = () => backgroundJobs.close();
 const presenceExpiryWorker = presenceStore
   ? createPresenceExpiryWorker(
       presenceStore,
@@ -353,7 +399,8 @@ const app = createApp({
   userAvatarRouter: organizations.userAvatarRouter,
   trustProxy: config.trustProxy,
   readiness: {
-    isReady: () => isDatabaseReady() && runtimeState.isReady(),
+    isReady: () =>
+      isDatabaseReady() && runtimeState.isReady() && backgroundJobs.isReady(),
   },
 });
 const server = http.createServer(app);
@@ -398,8 +445,7 @@ configureSocket(
 
 try {
   await connectDatabase(config.databaseUri, logger);
-  mailWorker.start();
-  assetCleanupWorker.start();
+  await backgroundJobs.start();
   presenceExpiryWorker?.start();
   typingExpiryWorker?.start();
 

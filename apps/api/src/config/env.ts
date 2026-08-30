@@ -48,6 +48,7 @@ export interface AppConfig {
   loginAttemptWindowMs: number;
   loginThrottleSecret: string;
   authActionTokenSecret: string;
+  backgroundJobsProvider: "bullmq" | "polling";
   mailOutboxEncryptionSecret: string;
   mailFromAddress: string;
   mailFromName: string;
@@ -268,6 +269,24 @@ const parseRuntimeState = (
   return { provider, keyPrefix, url: url.toString() };
 };
 
+const parseBackgroundJobsProvider = (
+  value: string | undefined,
+  runtimeState: RuntimeStateConfig,
+): "bullmq" | "polling" => {
+  const provider =
+    value ?? (runtimeState.provider === "redis" ? "bullmq" : "polling");
+
+  if (provider !== "bullmq" && provider !== "polling") {
+    throw new Error("BACKGROUND_JOBS_PROVIDER must be bullmq or polling");
+  }
+  if (provider === "bullmq" && runtimeState.provider !== "redis") {
+    throw new Error(
+      "BACKGROUND_JOBS_PROVIDER=bullmq requires RUNTIME_STATE_PROVIDER=redis",
+    );
+  }
+  return provider;
+};
+
 const parseMailTransport = (
   env: NodeJS.ProcessEnv,
   isProduction: boolean,
@@ -365,11 +384,16 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     isProduction,
   );
   const mailTransport = parseMailTransport(env, isProduction);
+  const runtimeState = parseRuntimeState(env, isProduction);
 
   return {
     authActionTokenSecret: validateSecret(
       requireEnv(env, "AUTH_ACTION_TOKEN_SECRET"),
       "AUTH_ACTION_TOKEN_SECRET",
+    ),
+    backgroundJobsProvider: parseBackgroundJobsProvider(
+      env.BACKGROUND_JOBS_PROVIDER,
+      runtimeState,
     ),
     accessTokenAudience: env.ACCESS_TOKEN_AUDIENCE ?? "intouch-client",
     accessTokenIssuer: env.ACCESS_TOKEN_ISSUER ?? "intouch-api",
@@ -431,7 +455,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       "ORGANIZATION_STORAGE_BYTES",
       10_995_116_277_760,
     ),
-    runtimeState: parseRuntimeState(env, isProduction),
+    runtimeState,
     trustProxy: isProduction ? 1 : "loopback",
     webAppUrl: parseWebAppUrl(
       requireEnv(env, "WEB_APP_URL"),

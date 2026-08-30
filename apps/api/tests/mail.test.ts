@@ -156,6 +156,9 @@ describe("transactional mail", () => {
       cancel: async () => undefined,
       cancelByPrefix: async () => undefined,
       claimNext: async () => job,
+      claimById: async () => job,
+      listDispatchable: async () => [job],
+      markDispatched: async () => undefined,
       markSent: async () => assert.fail("failed mail must not be marked sent"),
       scheduleRetry: async (_id, availableAt, errorCode) => {
         retryAt = availableAt;
@@ -213,6 +216,24 @@ describe("transactional mail", () => {
       outboxIndexes.some(
         ([fields, options]) =>
           fields.purgeAt === 1 && options.expireAfterSeconds === 0,
+      ),
+    );
+    assert.ok(
+      outboxIndexes.some(
+        ([fields, options]) =>
+          fields.status === 1 &&
+          fields.availableAt === 1 &&
+          fields.dispatchedAt === 1 &&
+          options.name === "dispatch_pending_mail",
+      ),
+    );
+    assert.ok(
+      outboxIndexes.some(
+        ([fields, options]) =>
+          fields.status === 1 &&
+          fields.availableAt === 1 &&
+          fields.dispatchedAt === 1 &&
+          options.name === "dispatch_pending_mail",
       ),
     );
   });

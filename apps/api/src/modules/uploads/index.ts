@@ -27,9 +27,15 @@ export type {
 } from "./upload.unit-of-work.js";
 export { createAssetCleanupWorker } from "./upload.worker.js";
 export type { AssetCleanupWorker } from "./upload.worker.js";
+export {
+  createBullMqAssetCleanupJobs,
+  parseAssetCleanupJobData,
+} from "./upload.bullmq.js";
 export { StoredAssetModel, UploadDailyUsageModel } from "./upload.model.js";
-export { StoredAssetStatus } from "./upload.types.js";
+export { AssetCleanupMode, StoredAssetStatus } from "./upload.types.js";
 export type {
+  AssetCleanupCandidate,
+  AssetCleanupModeValue,
   ObjectStorage,
   StoredAsset,
   StoredAssetRecord,

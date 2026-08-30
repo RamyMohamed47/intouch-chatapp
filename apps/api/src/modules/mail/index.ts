@@ -9,6 +9,14 @@ export type { MailOutboxRepository } from "./mail.outbox.repository.js";
 export { createSmtpMailTransport } from "./mail.smtp.js";
 export type { SmtpMailConfig } from "./mail.smtp.js";
 export { createMailRenderer } from "./mail.templates.js";
+export {
+  deliverClaimedMail,
+  getMailErrorCode,
+  MAIL_LEASE_MS,
+  MAIL_MAX_ATTEMPTS,
+  MAIL_RETRY_DELAYS_MS,
+} from "./mail.delivery.js";
+export type { MailDeliveryDependencies } from "./mail.delivery.js";
 export { MailKind } from "./mail.types.js";
 export type {
   CreateMailOutboxInput,
@@ -20,3 +28,4 @@ export type {
 } from "./mail.types.js";
 export { createMailOutboxWorker } from "./mail.worker.js";
 export type { MailOutboxWorker } from "./mail.worker.js";
+export { createBullMqMailJobs, parseMailJobData } from "./mail.bullmq.js";

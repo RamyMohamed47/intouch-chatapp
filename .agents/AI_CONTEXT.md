@@ -50,8 +50,10 @@
 - Password reset uses a single-use action token and revokes every refresh
   session after the password changes.
 - Mail delivery is decoupled through an encrypted MongoDB outbox with bounded
-  retries. Brevo HTTPS supports restricted cloud hosts, while SMTP remains a
-  local/VPS option. Organization invitations are emailed to verified users.
+  retries. Production BullMQ jobs contain opaque outbox IDs and are reconciled
+  from MongoDB; polling remains the local fallback. Brevo HTTPS supports
+  restricted cloud hosts, while SMTP remains a local/VPS option. Organization
+  invitations are emailed to verified users.
 - Google sign-in uses a backend-owned authorization-code redirect flow.
 - Google identities are keyed by the verified ID-token `sub` claim and linked
   to existing users only through verified email addresses.
@@ -83,7 +85,8 @@ Single Database + organizationId
   read URL.
 - Message creation, avatar replacement, and organization-logo assignment claim
   completed uploads inside MongoDB transactions. Asynchronous cleanup removes
-  canceled, abandoned, replaced, and deleted objects.
+  canceled, abandoned, replaced, and deleted objects through BullMQ in
+  production or leased polling locally.
 - Public DTOs and Socket.IO events expose opaque asset IDs and safe metadata,
   never bucket keys, credentials, ETags, or presigned URLs.
 

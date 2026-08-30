@@ -8,6 +8,8 @@ import { StoredAssetModel, UploadDailyUsageModel } from "./upload.model.js";
 import {
   StoredAssetStatus,
   type CreateStoredAssetInput,
+  type AssetCleanupCandidate,
+  type AssetCleanupModeValue,
   type StoredAsset,
   type StoredAssetRecord,
 } from "./upload.types.js";
@@ -106,6 +108,16 @@ export interface StoredAssetRepository {
     leaseUntil: Date,
   ): Promise<StoredAssetRecord | null>;
   claimNextStagingCleanup(
+    now: Date,
+    leaseUntil: Date,
+  ): Promise<StoredAssetRecord | null>;
+  listCleanupCandidates(
+    now: Date,
+    limit: number,
+  ): Promise<AssetCleanupCandidate[]>;
+  claimCleanupById(
+    assetId: string,
+    mode: AssetCleanupModeValue,
     now: Date,
     leaseUntil: Date,
   ): Promise<StoredAssetRecord | null>;
@@ -471,10 +483,113 @@ export const createMongooseStoredAssetRepository = (
           { cleanupLeaseUntil: { $lte: now } },
         ],
       },
-      { $set: { cleanupLeaseUntil: leaseUntil } },
+      {
+        $set: { cleanupLeaseUntil: leaseUntil },
+        $inc: { cleanupAttempts: 1 },
+      },
       { new: true, sort: { updatedAt: 1 } },
     ).lean<StoredAssetDocument>();
     const asset = await query.exec();
+    return asset ? toRecord(asset) : null;
+  },
+
+  async listCleanupCandidates(now, limit) {
+    const availableLease = {
+      $or: [
+        { cleanupLeaseUntil: { $exists: false } },
+        { cleanupLeaseUntil: { $lte: now } },
+      ],
+    };
+    const assets = await StoredAssetModel.find({
+      cleanupAvailableAt: { $lte: now },
+      $or: [
+        {
+          status: StoredAssetStatus.READY,
+          stagingKey: { $exists: true },
+          ...availableLease,
+        },
+        {
+          status: StoredAssetStatus.DELETE_PENDING,
+          ...availableLease,
+        },
+        {
+          status: {
+            $in: [
+              StoredAssetStatus.PENDING,
+              StoredAssetStatus.PROMOTING,
+              StoredAssetStatus.PROMOTED,
+            ],
+          },
+          expiresAt: { $lte: now },
+          ...availableLease,
+        },
+      ],
+    })
+      .sort({ cleanupAvailableAt: 1, updatedAt: 1 })
+      .limit(limit)
+      .lean<StoredAssetDocument[]>()
+      .exec();
+
+    return assets.map((asset) => ({
+      asset: toRecord(asset),
+      mode: asset.status === StoredAssetStatus.READY ? "STAGING" : "DELETE",
+    }));
+  },
+
+  async claimCleanupById(assetId, mode, now, leaseUntil) {
+    if (!Types.ObjectId.isValid(assetId)) return null;
+    const availableLease = {
+      $or: [
+        { cleanupLeaseUntil: { $exists: false } },
+        { cleanupLeaseUntil: { $lte: now } },
+      ],
+    };
+    const modeFilter =
+      mode === "STAGING"
+        ? {
+            status: StoredAssetStatus.READY,
+            stagingKey: { $exists: true },
+            ...availableLease,
+          }
+        : {
+            $or: [
+              {
+                status: StoredAssetStatus.DELETE_PENDING,
+                ...availableLease,
+              },
+              {
+                status: {
+                  $in: [
+                    StoredAssetStatus.PENDING,
+                    StoredAssetStatus.PROMOTING,
+                    StoredAssetStatus.PROMOTED,
+                  ],
+                },
+                expiresAt: { $lte: now },
+                ...availableLease,
+              },
+            ],
+          };
+    const asset = await StoredAssetModel.findOneAndUpdate(
+      {
+        _id: assetId,
+        cleanupAvailableAt: { $lte: now },
+        ...modeFilter,
+      },
+      {
+        $set: {
+          ...(mode === "DELETE"
+            ? { status: StoredAssetStatus.DELETE_PENDING }
+            : {}),
+          cleanupLeaseUntil: leaseUntil,
+        },
+        $inc: { cleanupAttempts: 1 },
+        ...(mode === "DELETE" ? { $unset: { promotionLeaseUntil: 1 } } : {}),
+      },
+      { new: true },
+    )
+      .lean<StoredAssetDocument>()
+      .exec();
     return asset ? toRecord(asset) : null;
   },
 
