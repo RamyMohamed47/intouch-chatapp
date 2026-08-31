@@ -1,0 +1,99 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(intouch_realtime_connections_total[5m]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Realtime Connections",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum by (event, result) (rate(intouch_realtime_events_total[5m]))",
+          "legendFormat": "{{event}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Realtime Events",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (provider, operation, result) (rate(intouch_provider_operations_total[10m]))",
+          "legendFormat": "{{provider}} {{operation}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Provider Outcomes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, provider, operation) (rate(intouch_provider_duration_bucket[10m])))",
+          "legendFormat": "{{provider}} {{operation}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Provider Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum by (queue, state) (intouch_background_jobs_queue_depth)",
+          "legendFormat": "{{queue}} {{state}}",
+          "refId": "A"
+        }
+      ],
+      "title": "BullMQ Queue Depth",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "sum by (queue, job, result) (rate(intouch_background_jobs_processed_total[10m]))",
+          "legendFormat": "{{queue}} {{job}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "BullMQ Job Outcomes",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 41,
+  "tags": ["intouch", "realtime", "jobs"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "InTouch Realtime and Jobs",
+  "uid": "intouch-realtime-jobs",
+  "version": 1
+}

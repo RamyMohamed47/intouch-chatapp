@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -5,4 +7,21 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+const canUploadSourceMaps = Boolean(
+  process.env.SENTRY_AUTH_TOKEN &&
+  process.env.SENTRY_ORG &&
+  process.env.SENTRY_PROJECT,
+);
+
+export default withSentryConfig(nextConfig, {
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !canUploadSourceMaps,
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+    disable: !canUploadSourceMaps,
+  },
+  telemetry: false,
+  widenClientFileUpload: true,
+});

@@ -68,6 +68,20 @@ describe("frontend content security policy", () => {
     expect(policy).not.toContain("*.r2.cloudflarestorage.com");
   });
 
+  it("allows only the exact configured Sentry ingest origin", () => {
+    const policy = buildContentSecurityPolicy({
+      isDevelopment: false,
+      nonce: "sentry-nonce",
+      socketOrigin: "https://api.intouch.example",
+      sentryDsn: "https://public-key@o123.ingest.sentry.io/456",
+    });
+
+    expect(directive(policy, "connect-src")).toBe(
+      "connect-src 'self' https://api.intouch.example wss://api.intouch.example https://o123.ingest.sentry.io",
+    );
+    expect(policy).not.toContain("*.sentry.io");
+  });
+
   it("adds a per-request nonce CSP and complementary security headers", () => {
     const response = proxy(new NextRequest("http://localhost:3001/login"));
     const policy = response.headers.get("content-security-policy");

@@ -6,6 +6,19 @@ export interface BackgroundJobComponent {
   start(): Promise<void>;
 }
 
+export interface BackgroundJobTelemetry {
+  recordBackgroundJob(input: {
+    durationSeconds: number;
+    job: string;
+    queue: string;
+    result: "completed" | "failed";
+  }): void;
+  registerBackgroundQueue(
+    queue: string,
+    check: () => Promise<Record<string, number>>,
+  ): () => unknown;
+}
+
 export interface BackgroundJobsRuntime extends BackgroundJobComponent {
   provider: "bullmq" | "polling";
 }

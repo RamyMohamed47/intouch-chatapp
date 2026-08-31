@@ -105,11 +105,12 @@ describe("transactional mail", () => {
 
     assert.deepEqual(cipher.decrypt(encrypted), payload);
     assert.equal(encrypted.ciphertext.includes(payload.token), false);
-    const replacement = encrypted.ciphertext.endsWith("A") ? "B" : "A";
+    const tamperIndex = Math.floor(encrypted.ciphertext.length / 2);
+    const replacement = encrypted.ciphertext[tamperIndex] === "A" ? "B" : "A";
     assert.throws(() =>
       cipher.decrypt({
         ...encrypted,
-        ciphertext: `${encrypted.ciphertext.slice(0, -1)}${replacement}`,
+        ciphertext: `${encrypted.ciphertext.slice(0, tamperIndex)}${replacement}${encrypted.ciphertext.slice(tamperIndex + 1)}`,
       }),
     );
   });

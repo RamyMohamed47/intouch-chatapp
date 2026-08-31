@@ -11,6 +11,7 @@ import {
 
 import NotFoundError from "./errors/NotFoundError.js";
 import ForbiddenError from "./errors/ForbiddenError.js";
+import { createObservabilityMiddleware } from "./infrastructure/observability/observability.middleware.js";
 import handleError from "./middleware/errorHandler.js";
 import createHttpLogger from "./middleware/httpLogger.js";
 
@@ -88,6 +89,7 @@ const createApp = ({
   app.use(express.urlencoded({ extended: true, limit: "10kb" }));
   app.use(cookieParser());
   app.use(createHttpLogger());
+  app.use(createObservabilityMiddleware());
 
   app.get("/health", (_req, res) => {
     res.status(200).json(

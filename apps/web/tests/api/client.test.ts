@@ -62,6 +62,24 @@ describe("API transport", () => {
     ).rejects.toEqual(new ApiError(403, "FORBIDDEN", "No access"));
   });
 
+  it("preserves the backend request id on transport errors", async () => {
+    server.use(
+      http.get("http://localhost:3000/api/v1/example", () =>
+        HttpResponse.json(
+          {
+            success: false,
+            error: { code: "INTERNAL_SERVER_ERROR", message: "Failed" },
+          },
+          { headers: { "X-Request-Id": "request-123" }, status: 500 },
+        ),
+      ),
+    );
+
+    await expect(
+      apiRequest("/api/v1/example", z.object({}), {}, false),
+    ).rejects.toMatchObject({ requestId: "request-123" });
+  });
+
   it("handles no-content responses", async () => {
     server.use(
       http.delete(

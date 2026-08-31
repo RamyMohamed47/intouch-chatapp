@@ -20,11 +20,13 @@ export const buildContentSecurityPolicy = ({
   nonce,
   socketOrigin,
   storageOrigin,
+  sentryDsn,
 }: {
   isDevelopment: boolean;
   nonce: string;
   socketOrigin: string;
   storageOrigin?: string;
+  sentryDsn?: string;
 }) => {
   const normalizedStorageOrigin = storageOrigin
     ? new URL(storageOrigin).origin
@@ -33,6 +35,7 @@ export const buildContentSecurityPolicy = ({
     "'self'",
     ...toConnectSources(socketOrigin),
     ...(normalizedStorageOrigin ? [normalizedStorageOrigin] : []),
+    ...(sentryDsn ? [new URL(sentryDsn).origin] : []),
   ];
   const imageSources = [
     "'self'",

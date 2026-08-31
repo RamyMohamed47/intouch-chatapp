@@ -19,6 +19,7 @@ import {
   type PublicUser,
 } from "@/lib/auth/client";
 import { subscribeToAccessToken } from "@/lib/auth/access-token";
+import { setSentryUser } from "@/lib/observability/sentry";
 import type {
   LoginInput,
   RegisterInput,
@@ -54,6 +55,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void restore();
   }, [restore]);
+
+  useEffect(() => {
+    void setSentryUser(user?.id ?? null);
+  }, [user]);
 
   useEffect(
     () =>

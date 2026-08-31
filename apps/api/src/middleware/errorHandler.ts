@@ -4,6 +4,8 @@ import { errorResponseSchema } from "@intouch/shared/common";
 import { getLogger } from "../config/logger.js";
 import type { ErrorCode } from "../errors/AppError.js";
 import ValidationError from "../errors/ValidationError.js";
+import { getNormalizedRoute } from "../infrastructure/observability/observability.middleware.js";
+import { captureUnexpectedError } from "../infrastructure/observability/observability.sentry.js";
 
 interface OperationalError extends Error {
   code?: ErrorCode;
@@ -66,7 +68,10 @@ const sendError = (err: OperationalError, res: Response) => {
   );
 };
 
-const handleError: ErrorRequestHandler = (err, _req, res, next) => {
+export const shouldCaptureError = (error: OperationalError) =>
+  error.isOperational !== true || (error.statusCode ?? 500) >= 500;
+
+const handleError: ErrorRequestHandler = (err, req, res, next) => {
   if (res.headersSent) {
     next(err);
     return;
@@ -77,7 +82,26 @@ const handleError: ErrorRequestHandler = (err, _req, res, next) => {
     : toOperationalError(err);
 
   if (process.env.NODE_ENV !== "test") {
-    getLogger().error({ err }, "Request failed");
+    const logger = getLogger();
+    if (shouldCaptureError(error)) {
+      logger.error({ err: error }, "Request failed");
+    } else if ((error.statusCode ?? 500) === 429) {
+      logger.warn({ code: error.code }, "Request rate limited");
+    } else {
+      logger.info(
+        { code: error.code, statusCode: error.statusCode },
+        "Request rejected",
+      );
+    }
+  }
+
+  if (shouldCaptureError(error)) {
+    captureUnexpectedError(error, {
+      method: req.method,
+      request_id: String(res.getHeader("X-Request-Id") ?? "unknown"),
+      route: getNormalizedRoute(req),
+      status_code: error.statusCode ?? 500,
+    });
   }
 
   sendError(error, res);

@@ -15,6 +15,10 @@ provides:
   `127.0.0.1:6379`.
 - Mailpit SMTP on `127.0.0.1:1025` and its browser UI on
   `http://localhost:8025`.
+- An optional disposable Grafana LGTM service on `127.0.0.1:3002`, with OTLP
+  HTTP on `127.0.0.1:4318` and OTLP gRPC on `127.0.0.1:4317`.
+- An optional disposable Grafana LGTM service on `127.0.0.1:3002`, with OTLP
+  HTTP on `127.0.0.1:4318` and OTLP gRPC on `127.0.0.1:4317`.
 
 MongoDB and Redis use named volumes. Mailpit is intentionally disposable, so
 captured messages are cleared when its container is recreated.
@@ -55,6 +59,14 @@ npm run infra:reset
 
 The compatibility commands `redis:up` and `redis:down` start or stop only the
 Redis service from the consolidated Compose definition.
+
+The observability service is behind a Compose profile and does not start with
+`infra:up`. Start it explicitly with `npm run observability:up`; see
+`Observability.md` for API settings and dashboard usage.
+
+The observability service is behind a Compose profile and does not start with
+`infra:up`. Start it explicitly with `npm run observability:up`; see
+`Observability.md` for API settings and dashboard usage.
 
 ## API Configuration
 

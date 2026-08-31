@@ -40,6 +40,17 @@ export default tseslint.config(
     },
   },
   {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+      },
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+    },
+  },
+  {
     files: ["apps/api/tests/**/*.ts", "packages/*/tests/**/*.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",

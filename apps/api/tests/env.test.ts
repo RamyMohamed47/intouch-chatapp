@@ -60,6 +60,7 @@ describe("auth environment configuration", () => {
     assert.deepEqual(config.storage, { provider: "disabled" });
     assert.equal(config.uploadDailyUserBytes, 524_288_000);
     assert.equal(config.organizationStorageBytes, 5_368_709_120);
+    assert.deepEqual(config.observability, { provider: "disabled" });
     assert.equal(config.trustProxy, "loopback");
     assert.equal(config.mailTransport.provider, "smtp");
     assert.equal(config.backgroundJobsProvider, "bullmq");
@@ -358,6 +359,81 @@ describe("auth environment configuration", () => {
             "https://app.example.com/api/v1/auth/oauth/google/callback",
         }),
       /MAIL_PROVIDER env var is required in production/,
+    );
+  });
+
+  test("validates optional OTLP observability configuration", () => {
+    const config = loadConfig({
+      ...validEnv,
+      OBSERVABILITY_PROVIDER: "otlp",
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318",
+      OTEL_SERVICE_NAME: "intouch-api-test",
+      OTEL_TRACES_SAMPLER_ARG: "0.25",
+    });
+
+    assert.deepEqual(config.observability, {
+      provider: "otlp",
+      endpoint: "http://127.0.0.1:4318",
+      sampleRatio: 0.25,
+      serviceName: "intouch-api-test",
+    });
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          OBSERVABILITY_PROVIDER: "otlp",
+          OTEL_EXPORTER_OTLP_ENDPOINT: undefined,
+        }),
+      /OTEL_EXPORTER_OTLP_ENDPOINT is required/,
+    );
+    assert.throws(() =>
+      loadConfig({
+        ...validEnv,
+        OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318",
+      }),
+    );
+    assert.throws(() =>
+      loadConfig({
+        ...validEnv,
+        OBSERVABILITY_PROVIDER: "otlp",
+        OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4318",
+        OTEL_TRACES_SAMPLER_ARG: "1.1",
+      }),
+    );
+  });
+
+  test("requires secure authenticated OTLP export in production", () => {
+    const productionEnv = {
+      ...validEnv,
+      NODE_ENV: "production",
+      GOOGLE_OAUTH_CALLBACK_URL:
+        "https://app.example.com/api/v1/auth/oauth/google/callback",
+      OBSERVABILITY_PROVIDER: "otlp",
+      OTEL_EXPORTER_OTLP_ENDPOINT: "https://otlp.example.com",
+      SEARCH_PROVIDER: "atlas",
+      STORAGE_PROVIDER: "r2",
+      R2_ACCOUNT_ID: "account-id",
+      R2_ACCESS_KEY_ID: "access-key-id",
+      R2_SECRET_ACCESS_KEY: "secret-access-key",
+      R2_BUCKET_NAME: "intouch-private",
+    };
+
+    assert.throws(() => loadConfig(productionEnv), /OTLP_HEADERS is required/);
+    assert.throws(
+      () =>
+        loadConfig({
+          ...productionEnv,
+          OTEL_EXPORTER_OTLP_ENDPOINT: "http://otlp.example.com",
+          OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Basic token",
+        }),
+      /must use HTTPS in production/,
+    );
+    assert.equal(
+      loadConfig({
+        ...productionEnv,
+        OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Basic token",
+      }).observability.provider,
+      "otlp",
     );
   });
 });

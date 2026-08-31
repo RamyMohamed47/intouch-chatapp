@@ -3,7 +3,10 @@ import type { Logger } from "pino";
 import { z } from "zod";
 
 import { createBullMqConnection } from "../../infrastructure/background-jobs/index.js";
-import type { BackgroundJobComponent } from "../../infrastructure/background-jobs/index.js";
+import type {
+  BackgroundJobComponent,
+  BackgroundJobTelemetry,
+} from "../../infrastructure/background-jobs/index.js";
 import {
   ASSET_CLEANUP_BULL_ATTEMPTS,
   ASSET_CLEANUP_LEASE_MS,
@@ -47,6 +50,7 @@ export const createBullMqAssetCleanupJobs = (dependencies: {
   redisUrl: string;
   redisKeyPrefix: string;
   now?: () => Date;
+  telemetry?: BackgroundJobTelemetry;
 }): BackgroundJobComponent => {
   const now = dependencies.now ?? (() => new Date());
   const prefix = `${dependencies.redisKeyPrefix}:bullmq`;
@@ -153,6 +157,24 @@ export const createBullMqAssetCleanupJobs = (dependencies: {
       prefix,
     },
   );
+  const unregisterQueueMetrics =
+    dependencies.telemetry?.registerBackgroundQueue(
+      ASSET_QUEUE_NAME,
+      async () => {
+        const counts = await queue.getJobCounts(
+          "wait",
+          "active",
+          "delayed",
+          "failed",
+        );
+        return {
+          active: counts.active ?? 0,
+          delayed: counts.delayed ?? 0,
+          failed: counts.failed ?? 0,
+          waiting: counts.wait ?? 0,
+        };
+      },
+    );
   let started = false;
 
   queue.on("error", (error) => {
@@ -161,7 +183,27 @@ export const createBullMqAssetCleanupJobs = (dependencies: {
   worker.on("error", (error) => {
     dependencies.logger.error({ err: error }, "Asset cleanup worker error");
   });
+  worker.on("completed", (job: Job<AssetCleanupJobData>) => {
+    dependencies.telemetry?.recordBackgroundJob({
+      durationSeconds:
+        Math.max(
+          0,
+          (job.finishedOn ?? Date.now()) - (job.processedOn ?? Date.now()),
+        ) / 1_000,
+      job: job.name,
+      queue: ASSET_QUEUE_NAME,
+      result: "completed",
+    });
+  });
   worker.on("failed", (job: Job<AssetCleanupJobData> | undefined, error) => {
+    dependencies.telemetry?.recordBackgroundJob({
+      durationSeconds: job?.processedOn
+        ? Math.max(0, Date.now() - job.processedOn) / 1_000
+        : 0,
+      job: job?.name ?? "unknown",
+      queue: ASSET_QUEUE_NAME,
+      result: "failed",
+    });
     dependencies.logger.warn(
       {
         errorCode: getAssetCleanupErrorCode(error),
@@ -201,6 +243,7 @@ export const createBullMqAssetCleanupJobs = (dependencies: {
     },
     async close() {
       started = false;
+      unregisterQueueMetrics?.();
       await worker.close();
       await queue.close();
     },

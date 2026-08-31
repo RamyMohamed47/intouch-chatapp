@@ -2,7 +2,10 @@ import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 import { z } from "zod";
 
 import { createBullMqConnection } from "../../infrastructure/background-jobs/index.js";
-import type { BackgroundJobComponent } from "../../infrastructure/background-jobs/index.js";
+import type {
+  BackgroundJobComponent,
+  BackgroundJobTelemetry,
+} from "../../infrastructure/background-jobs/index.js";
 import {
   deliverClaimedMail,
   getMailErrorCode,
@@ -42,6 +45,7 @@ export const createBullMqMailJobs = (
     redisUrl: string;
     redisKeyPrefix: string;
     now?: () => Date;
+    telemetry?: BackgroundJobTelemetry;
   },
 ): BackgroundJobComponent => {
   const now = dependencies.now ?? (() => new Date());
@@ -154,6 +158,24 @@ export const createBullMqMailJobs = (
       },
     },
   );
+  const unregisterQueueMetrics =
+    dependencies.telemetry?.registerBackgroundQueue(
+      MAIL_QUEUE_NAME,
+      async () => {
+        const counts = await queue.getJobCounts(
+          "wait",
+          "active",
+          "delayed",
+          "failed",
+        );
+        return {
+          active: counts.active ?? 0,
+          delayed: counts.delayed ?? 0,
+          failed: counts.failed ?? 0,
+          waiting: counts.wait ?? 0,
+        };
+      },
+    );
   let started = false;
 
   queue.on("error", (error) => {
@@ -162,7 +184,27 @@ export const createBullMqMailJobs = (
   worker.on("error", (error) => {
     dependencies.logger.error({ err: error }, "Mail worker error");
   });
+  worker.on("completed", (job: Job<MailJobData>) => {
+    dependencies.telemetry?.recordBackgroundJob({
+      durationSeconds:
+        Math.max(
+          0,
+          (job.finishedOn ?? Date.now()) - (job.processedOn ?? Date.now()),
+        ) / 1_000,
+      job: job.name,
+      queue: MAIL_QUEUE_NAME,
+      result: "completed",
+    });
+  });
   worker.on("failed", (job: Job<MailJobData> | undefined, error) => {
+    dependencies.telemetry?.recordBackgroundJob({
+      durationSeconds: job?.processedOn
+        ? Math.max(0, Date.now() - job.processedOn) / 1_000
+        : 0,
+      job: job?.name ?? "unknown",
+      queue: MAIL_QUEUE_NAME,
+      result: "failed",
+    });
     dependencies.logger.warn(
       {
         errorCode: getMailErrorCode(error),
@@ -200,6 +242,7 @@ export const createBullMqMailJobs = (
     },
     async close() {
       started = false;
+      unregisterQueueMetrics?.();
       await worker.close();
       await queue.close();
     },

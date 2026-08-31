@@ -1,4 +1,5 @@
 import pino from "pino";
+import { trace } from "@opentelemetry/api";
 
 import type { Logger, LoggerOptions } from "pino";
 
@@ -39,6 +40,19 @@ export const createLoggerOptions = (
   const options: LoggerOptions = {
     name: "intouch",
     level: resolveLogLevel(env),
+    base: {
+      deploymentId: env.RAILWAY_DEPLOYMENT_ID,
+      environment: env.RAILWAY_ENVIRONMENT_NAME ?? env.NODE_ENV,
+      pid: process.pid,
+      replicaId: env.RAILWAY_REPLICA_ID,
+      service: env.RAILWAY_SERVICE_NAME ?? "intouch-api",
+    },
+    mixin() {
+      const context = trace.getActiveSpan()?.spanContext();
+      return context
+        ? { spanId: context.spanId, traceId: context.traceId }
+        : {};
+    },
     serializers: {
       err: pino.stdSerializers.err,
     },

@@ -27,6 +27,7 @@ import {
   roomName,
   userRoomName,
 } from "../broadcasting/socketRealtimeGateway.js";
+import { getObservabilityMetrics } from "../infrastructure/observability/observability.metrics.js";
 
 export interface SocketDomainServices {
   connections?: SocketConnectionGuard;
@@ -78,9 +79,11 @@ const configureSocket = (
   logger: Logger = getLogger(),
   services: SocketDomainServices = {},
 ) => {
+  const metrics = getObservabilityMetrics();
   io.use((socket, next) => {
     const auth = socketHandshakeAuthSchema.safeParse(socket.handshake.auth);
     if (!auth.success) {
+      metrics.recordRealtimeConnection("rejected");
       next(
         createConnectionError(
           "UNAUTHORIZED",
@@ -98,6 +101,7 @@ const configureSocket = (
             ? await services.connections.admit(userId, socket.id)
             : { allowed: true, retryAfterMs: 0 };
           if (!admission.allowed) {
+            metrics.recordRealtimeConnection("rejected");
             next(
               createConnectionError(
                 "TOO_MANY_REQUESTS",
@@ -130,6 +134,7 @@ const configureSocket = (
           }
           next();
         })().catch((error: unknown) => {
+          metrics.recordRealtimeConnection("rejected");
           logger.error({ err: error, userId }, "Socket admission failed");
           const socketError = toSocketError(error);
           next(
@@ -141,17 +146,19 @@ const configureSocket = (
           );
         });
       })
-      .catch(() =>
+      .catch(() => {
+        metrics.recordRealtimeConnection("rejected");
         next(
           createConnectionError(
             "UNAUTHORIZED",
             "Invalid or expired access token",
           ),
-        ),
-      );
+        );
+      });
   });
 
   io.on("connection", (socket) => {
+    metrics.recordRealtimeConnection("accepted");
     logger.debug({ socketId: socket.id }, "Socket connected");
     void socket.join(userRoomName(socket.data.userId));
     void services.presence
@@ -194,6 +201,7 @@ const configureSocket = (
       proceed: () => void,
     ) => {
       if (!services.rateLimits) {
+        metrics.recordRealtimeEvent(action, "accepted");
         proceed();
         return;
       }
@@ -201,9 +209,11 @@ const configureSocket = (
         .consume(socket.data.userId, action)
         .then((decision) => {
           if (decision.allowed) {
+            metrics.recordRealtimeEvent(action, "accepted");
             proceed();
             return;
           }
+          metrics.recordRealtimeEvent(action, "rejected");
           acknowledge({
             success: false,
             error: {
@@ -213,6 +223,7 @@ const configureSocket = (
           });
         })
         .catch((error: unknown) => {
+          metrics.recordRealtimeEvent(action, "rejected");
           logger.error(
             { action, err: error, userId: socket.data.userId },
             "Realtime rate limit failed",
@@ -410,6 +421,7 @@ const configureSocket = (
     });
 
     socket.on("disconnect", () => {
+      metrics.recordRealtimeConnection("closed");
       void services.typing?.disconnect(socket.id).catch((error: unknown) => {
         logger.error(
           { err: error, userId: socket.data.userId },

@@ -30,6 +30,20 @@ export type RuntimeStateConfig =
   | { provider: "memory"; keyPrefix: string }
   | { provider: "redis"; keyPrefix: string; url: string };
 
+export type ObservabilityConfig =
+  | {
+      provider: "disabled";
+      sentryDsn?: string;
+    }
+  | {
+      provider: "otlp";
+      endpoint: string;
+      headers?: string;
+      sampleRatio: number;
+      sentryDsn?: string;
+      serviceName: string;
+    };
+
 export interface AppConfig {
   accessTokenAudience: string;
   accessTokenIssuer: string;
@@ -60,6 +74,7 @@ export interface AppConfig {
   storage: StorageConfig;
   uploadDailyUserBytes: number;
   organizationStorageBytes: number;
+  observability: ObservabilityConfig;
   runtimeState: RuntimeStateConfig;
 }
 
@@ -287,6 +302,80 @@ const parseBackgroundJobsProvider = (
   return provider;
 };
 
+const parseOptionalHttpsUrl = (
+  value: string | undefined,
+  name: string,
+  isProduction: boolean,
+) => {
+  if (!value) return undefined;
+
+  const url = new URL(value);
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error(`${name} must be an HTTP(S) URL`);
+  }
+  if (isProduction && url.protocol !== "https:") {
+    throw new Error(`${name} must use HTTPS in production`);
+  }
+  return url.toString().replace(/\/$/, "");
+};
+
+const parseSampleRatio = (value: string | undefined) => {
+  const ratio = value === undefined ? 0.1 : Number(value);
+  if (!Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
+    throw new Error("OTEL_TRACES_SAMPLER_ARG must be between 0 and 1");
+  }
+  return ratio;
+};
+
+export const parseObservabilityConfig = (
+  env: NodeJS.ProcessEnv,
+): ObservabilityConfig => {
+  const isProduction = env.NODE_ENV === "production";
+  const provider = env.OBSERVABILITY_PROVIDER ?? "disabled";
+  const sentryDsn = parseOptionalHttpsUrl(
+    env.SENTRY_DSN,
+    "SENTRY_DSN",
+    isProduction,
+  );
+
+  if (provider === "disabled") {
+    if (env.OTEL_EXPORTER_OTLP_ENDPOINT || env.OTEL_EXPORTER_OTLP_HEADERS) {
+      throw new Error("OTLP settings require OBSERVABILITY_PROVIDER=otlp");
+    }
+    return sentryDsn ? { provider, sentryDsn } : { provider };
+  }
+  if (provider !== "otlp") {
+    throw new Error("OBSERVABILITY_PROVIDER must be disabled or otlp");
+  }
+
+  const endpoint = parseOptionalHttpsUrl(
+    env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    isProduction,
+  );
+  if (!endpoint) {
+    throw new Error(
+      "OTEL_EXPORTER_OTLP_ENDPOINT is required when observability uses OTLP",
+    );
+  }
+  if (isProduction && !env.OTEL_EXPORTER_OTLP_HEADERS) {
+    throw new Error(
+      "OTEL_EXPORTER_OTLP_HEADERS is required for production OTLP export",
+    );
+  }
+
+  return {
+    provider,
+    endpoint,
+    ...(env.OTEL_EXPORTER_OTLP_HEADERS
+      ? { headers: env.OTEL_EXPORTER_OTLP_HEADERS }
+      : {}),
+    sampleRatio: parseSampleRatio(env.OTEL_TRACES_SAMPLER_ARG),
+    ...(sentryDsn ? { sentryDsn } : {}),
+    serviceName: env.OTEL_SERVICE_NAME?.trim() || "intouch-api",
+  };
+};
+
 const parseMailTransport = (
   env: NodeJS.ProcessEnv,
   isProduction: boolean,
@@ -455,6 +544,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       "ORGANIZATION_STORAGE_BYTES",
       10_995_116_277_760,
     ),
+    observability: parseObservabilityConfig(env),
     runtimeState,
     trustProxy: isProduction ? 1 : "loopback",
     webAppUrl: parseWebAppUrl(

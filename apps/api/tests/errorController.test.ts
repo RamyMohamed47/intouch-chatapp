@@ -4,7 +4,9 @@ import { describe, test } from "node:test";
 import type { NextFunction, Request, Response } from "express";
 
 import AppError from "../src/errors/AppError.js";
-import handleError from "../src/middleware/errorHandler.js";
+import handleError, {
+  shouldCaptureError,
+} from "../src/middleware/errorHandler.js";
 
 process.env.NODE_ENV = "test";
 
@@ -14,6 +16,7 @@ interface MockResponse {
   statusCode: number | null;
   status(code: number): MockResponse;
   json(body: unknown): MockResponse;
+  getHeader(name: string): string | undefined;
 }
 
 const createResponse = (): MockResponse => ({
@@ -30,11 +33,28 @@ const createResponse = (): MockResponse => ({
     this.body = body;
     return this;
   },
+
+  getHeader() {
+    return undefined;
+  },
 });
 
 const noopNext: NextFunction = () => {};
 
 describe("handleError", () => {
+  test("captures unexpected failures but not expected client errors", () => {
+    assert.equal(shouldCaptureError(new Error("unexpected")), true);
+    assert.equal(
+      shouldCaptureError(new AppError("Missing", 404, "NOT_FOUND")),
+      false,
+    );
+    assert.equal(
+      shouldCaptureError(
+        new AppError("Unavailable", 503, "SERVICE_UNAVAILABLE"),
+      ),
+      true,
+    );
+  });
   test("sends operational errors to the client", () => {
     const err = new AppError("Message not found", 404, "NOT_FOUND");
     const res = createResponse();

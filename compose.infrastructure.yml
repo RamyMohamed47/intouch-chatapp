@@ -63,6 +63,25 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  observability:
+    image: grafana/otel-lgtm:0.32.0
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:3002:3000"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./observability/grafana/provisioning/dashboards/intouch.yaml:/etc/grafana/provisioning/dashboards/intouch.yaml:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards/intouch:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
 volumes:
   intouch-mongo-data:
   intouch-redis-data:

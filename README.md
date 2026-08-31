@@ -56,6 +56,8 @@ GET /ready
 Mailpit captures local transactional email at `http://localhost:8025`.
 Infrastructure lifecycle and troubleshooting are documented under
 [Local Docker Infrastructure](.agents/infrastructure/Local%20Docker%20Infrastructure.md).
+Optional metrics, traces, error monitoring, dashboards, and alert guidance are
+documented under [Observability](.agents/infrastructure/Observability.md).
 
 ## API Documentation
 
@@ -164,6 +166,13 @@ values are:
 - `STORAGE_PROVIDER`; production requires `r2`
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
   `R2_BUCKET_NAME` when R2 storage is enabled
+
+Production observability is optional. When enabled, set
+`OBSERVABILITY_PROVIDER=otlp`, the Grafana Cloud
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`, and keep
+`OTEL_TRACES_SAMPLER_ARG=0.1`. API and web Sentry projects use their respective
+DSNs plus build-only source-map upload settings. See the observability guide for
+the exact separation and privacy rules.
 
 `MAIL_PROVIDER=brevo` requires `BREVO_API_KEY`. `MAIL_PROVIDER=smtp` requires
 `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASSWORD`.
@@ -464,6 +473,10 @@ Pino HTTP still sets `X-Request-Id`, but automatic request completed logs are
 disabled to keep local output readable. Socket connection logs are emitted at
 `debug`, so they are hidden by the default `info` level.
 
+For local dashboards and traces, run `npm run observability:up`, enable OTLP in
+the API configuration, and open `http://localhost:3002`. No public metrics
+endpoint is exposed.
+
 ## Organization Search
 
 Authenticated organization members can search accessible messages, channels,
@@ -544,6 +557,12 @@ than silently falling back to process-local state. Configure Redis eviction as
 `noeviction`, as BullMQ must not lose queue keys under memory pressure. MongoDB
 remains authoritative for refresh sessions, login-attempt records,
 notifications, mail outbox state, and file metadata.
+
+Railway structured logs and resource graphs remain the first operational view.
+Grafana Cloud OTLP export and Sentry are optional external integrations; their
+failure does not affect `/ready`. Production setup, dashboard imports, source
+maps, and alert thresholds are documented in
+`.agents/infrastructure/Observability.md`.
 
 BullMQ workers run inside every API replica. Its shared global concurrency
 limits prevent adding replicas from multiplying mail or cleanup throughput.

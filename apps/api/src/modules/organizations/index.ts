@@ -96,6 +96,7 @@ import {
   createSearchRouter,
   createSearchService,
   type SearchProvider,
+  type SearchServiceDependencies,
 } from "../search/index.js";
 import createOrganizationController from "./organization.controller.js";
 import createOrganizationPolicy from "./organization.policy.js";
@@ -131,6 +132,7 @@ export interface OrganizationModuleDependencies {
   searchProvider: SearchProvider;
   mail: MailOutboxJobFactory;
   storage: ObjectStorage;
+  telemetry?: SearchServiceDependencies["telemetry"];
   uploadDailyUserBytes: number;
   organizationStorageBytes: number;
 }
@@ -151,6 +153,7 @@ const createOrganizationModule = ({
   searchProvider,
   mail,
   storage,
+  telemetry,
   uploadDailyUserBytes,
   organizationStorageBytes,
 }: OrganizationModuleDependencies) => {
@@ -266,6 +269,7 @@ const createOrganizationModule = ({
     participants: conversationParticipants,
     presence: presenceService,
     repository: createMongooseSearchRepository(searchProvider),
+    ...(telemetry ? { telemetry } : {}),
     users,
   });
   const service = createOrganizationService({

@@ -4,7 +4,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 
 import createApp from "./app.js";
 import createSocketRealtimeGateway from "./broadcasting/socketRealtimeGateway.js";
-import { loadConfig, loadEnvFile } from "./config/env.js";
+import { loadConfig } from "./config/env.js";
 import connectDatabase, {
   disconnectDatabase,
   isDatabaseReady,
@@ -60,8 +60,13 @@ import {
   createDisabledObjectStorage,
   createR2ObjectStorage,
 } from "./modules/uploads/index.js";
-
-loadEnvFile();
+import {
+  captureUnexpectedError,
+  getObservabilityMetrics,
+  instrumentMailTransport,
+  instrumentObjectStorage,
+  shutdownObservability,
+} from "./infrastructure/observability/index.js";
 
 const logger = getLogger();
 type InTouchServer = Server<
@@ -139,6 +144,7 @@ const shutdown = (
       logger.info({ reason }, "Graceful shutdown started");
     } else {
       logger.fatal({ err: error, reason }, "Fatal process error");
+      captureUnexpectedError(error, { phase: "process", reason });
     }
 
     const forceShutdownTimer = setTimeout(() => {
@@ -159,10 +165,13 @@ const shutdown = (
       await disconnectDatabase(logger);
       clearTimeout(forceShutdownTimer);
       logger.info({ reason }, "Graceful shutdown complete");
+      await shutdownObservability();
       process.exit(exitCode);
     } catch (shutdownError) {
       clearTimeout(forceShutdownTimer);
       logger.fatal({ err: shutdownError, reason }, "Graceful shutdown failed");
+      captureUnexpectedError(shutdownError, { phase: "shutdown", reason });
+      await shutdownObservability();
       resources.server?.closeAllConnections();
       process.exit(1);
     }
@@ -199,7 +208,7 @@ try {
 
 const mailCipher = createMailPayloadCipher(config.mailOutboxEncryptionSecret);
 const mailJobs = createMailOutboxJobFactory(mailCipher);
-const mailTransport =
+const rawMailTransport =
   config.mailTransport.provider === "brevo"
     ? createBrevoMailTransport({
         apiKey: config.mailTransport.apiKey,
@@ -216,6 +225,10 @@ const mailTransport =
         fromName: config.mailFromName,
         fromAddress: config.mailFromAddress,
       });
+const mailTransport = instrumentMailTransport(
+  rawMailTransport,
+  config.mailTransport.provider,
+);
 const mailWorker = createMailOutboxWorker({
   cipher: mailCipher,
   logger,
@@ -255,10 +268,12 @@ const typingExpiryWorker = typingStore
   : undefined;
 resources.closeTyping = () => typingExpiryWorker?.close();
 realtimeGateway.setTypingService(typingService);
-const storage =
+const rawStorage =
   config.storage.provider === "r2"
     ? createR2ObjectStorage(config.storage)
     : createDisabledObjectStorage();
+const storage = instrumentObjectStorage(rawStorage, config.storage.provider);
+const observabilityMetrics = getObservabilityMetrics();
 const presenceStore = runtimeState.command
   ? createRedisPresenceStore(runtimeState.command, runtimeState.keyPrefix)
   : undefined;
@@ -316,6 +331,7 @@ const organizations = createOrganizationModule({
   searchProvider: config.searchProvider,
   mail: mailJobs,
   storage,
+  telemetry: observabilityMetrics,
   uploadDailyUserBytes: config.uploadDailyUserBytes,
   organizationStorageBytes: config.organizationStorageBytes,
 });
@@ -337,6 +353,7 @@ if (config.backgroundJobsProvider === "bullmq") {
     redisUrl: config.runtimeState.url,
     render: createMailRenderer(config.webAppUrl),
     transport: mailTransport,
+    telemetry: observabilityMetrics,
   });
   const closeMailComponent: BackgroundJobComponent = {
     isReady: () => mailJobsComponent.isReady(),
@@ -355,6 +372,7 @@ if (config.backgroundJobsProvider === "bullmq") {
         logger,
         redisKeyPrefix: config.runtimeState.keyPrefix,
         redisUrl: config.runtimeState.url,
+        telemetry: observabilityMetrics,
       }),
     ],
     logger,
@@ -366,6 +384,11 @@ if (config.backgroundJobsProvider === "bullmq") {
   ]);
 }
 resources.closeBackgroundJobs = () => backgroundJobs.close();
+observabilityMetrics.registerReadiness("mongodb", isDatabaseReady);
+observabilityMetrics.registerReadiness("redis", () => runtimeState.isReady());
+observabilityMetrics.registerReadiness("background_jobs", () =>
+  backgroundJobs.isReady(),
+);
 const presenceExpiryWorker = presenceStore
   ? createPresenceExpiryWorker(
       presenceStore,

@@ -27,6 +27,9 @@
 - Future mobile application reserved for `apps/mobile`
 - Local application processes run natively; `compose.infrastructure.yml`
   provides the MongoDB replica set, Redis/BullMQ, and Mailpit development stack.
+- Observability uses structured Railway logs, OpenTelemetry OTLP metrics and
+  sampled traces, and sanitized Sentry error reporting. Local Grafana LGTM is
+  optional and disposable; telemetry never controls application readiness.
 
 ## Engineering Principles
 

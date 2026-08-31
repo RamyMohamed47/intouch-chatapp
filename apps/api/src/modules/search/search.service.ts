@@ -77,6 +77,14 @@ export interface SearchServiceDependencies {
   participants: ConversationParticipantRepository;
   presence: Pick<PresenceService, "getMany">;
   repository: SearchRepository;
+  telemetry?: {
+    recordProviderOperation(input: {
+      durationSeconds: number;
+      operation: string;
+      provider: string;
+      result: "success" | "failure";
+    }): void;
+  };
   users: Pick<UserRepository, "findPublicByIds">;
 }
 
@@ -89,6 +97,7 @@ const createSearchService = ({
   participants,
   presence,
   repository,
+  telemetry,
   users,
 }: SearchServiceDependencies) => {
   const getScope = async (userId: string, organizationId: string) => {
@@ -362,8 +371,20 @@ const createSearchService = ({
           },
           "Organization search completed",
         );
+        telemetry?.recordProviderOperation({
+          durationSeconds: (performance.now() - startedAt) / 1_000,
+          operation: "search.execute",
+          provider: repository.provider,
+          result: "success",
+        });
         return { query: query.q, type: query.type, results, nextCursor };
       } catch (error) {
+        telemetry?.recordProviderOperation({
+          durationSeconds: (performance.now() - startedAt) / 1_000,
+          operation: "search.execute",
+          provider: repository.provider,
+          result: "failure",
+        });
         if (error instanceof SearchPersistenceUnavailableError) {
           logger.error(
             {

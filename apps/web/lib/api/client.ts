@@ -8,12 +8,19 @@ interface ResponseSchema<T> {
 
 export class ApiError extends Error {
   readonly code: string;
+  readonly requestId: string | null;
   readonly status: number;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    requestId: string | null = null,
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
+    this.requestId = requestId;
     this.status = status;
   }
 }
@@ -29,10 +36,12 @@ const withRefreshLock = async <T>(work: () => Promise<T>): Promise<T> => {
 };
 
 const parseError = async (response: Response) => {
+  const requestId = response.headers.get("X-Request-Id");
   const fallback = new ApiError(
     response.status,
     "REQUEST_FAILED",
     "The request could not be completed",
+    requestId,
   );
 
   try {
@@ -42,6 +51,7 @@ const parseError = async (response: Response) => {
         response.status,
         body.data.error.code,
         body.data.error.message,
+        requestId,
       );
     }
   } catch {
