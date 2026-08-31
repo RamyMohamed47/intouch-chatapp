@@ -215,6 +215,7 @@ export function ChatWallpaperDialog({
               </span>
               <input
                 id="wallpaper-dimming"
+                name="dimming"
                 aria-label="Dimming"
                 type="range"
                 min="0"

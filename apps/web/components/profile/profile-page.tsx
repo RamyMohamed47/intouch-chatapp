@@ -81,6 +81,9 @@ export function ProfilePage() {
             <div className="mt-8 rounded-2xl border border-border bg-background/45 p-5">
               <input
                 ref={inputRef}
+                id="profile-avatar-upload"
+                name="avatar"
+                aria-label="Choose profile photo"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 className="sr-only"

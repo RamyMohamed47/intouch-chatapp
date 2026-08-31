@@ -887,6 +887,9 @@ export function ConversationPage({
                             }}
                           >
                             <Input
+                              id={`edit-message-${message.id}`}
+                              name="content"
+                              aria-label="Edit message"
                               value={editingContent}
                               onChange={(event) =>
                                 setEditingContent(event.target.value)
@@ -1066,6 +1069,9 @@ export function ConversationPage({
               </span>
               <Textarea
                 ref={composerRef}
+                id={`message-composer-${conversationId}`}
+                name="content"
+                aria-label={`Message ${title}`}
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 onPaste={(event) => {
@@ -1105,6 +1111,9 @@ export function ConversationPage({
               />
               <input
                 ref={attachmentInputRef}
+                id={`message-attachments-${conversationId}`}
+                name="attachments"
+                aria-label="Attach files"
                 type="file"
                 multiple
                 className="sr-only"

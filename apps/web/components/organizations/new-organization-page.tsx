@@ -159,6 +159,7 @@ export function NewOrganizationPage() {
                 <input
                   ref={logoInputRef}
                   id="organization-logo"
+                  name="logo"
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   className="sr-only"

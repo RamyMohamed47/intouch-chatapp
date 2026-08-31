@@ -124,6 +124,9 @@ function OrganizationLogoSettings({
     <section className="rounded-2xl border border-border bg-background/30 p-5">
       <input
         ref={inputRef}
+        id={`organization-logo-upload-${organizationId}`}
+        name="logo"
+        aria-label="Choose organization logo"
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="sr-only"

@@ -115,6 +115,8 @@ export function OrganizationSearchPage({
           <div className="relative">
             <Search className="absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground" />
             <Input
+              id="organization-search-query"
+              name="q"
               value={input}
               onChange={(event) => setInput(event.target.value)}
               className="h-14 rounded-2xl pl-12 text-base"
@@ -142,6 +144,9 @@ export function OrganizationSearchPage({
             </Tabs>
             {type === SearchType.MESSAGES && (
               <Select
+                id="organization-search-conversation"
+                name="conversationId"
+                aria-label="Filter messages by conversation"
                 className="min-w-56"
                 value={conversationId ?? ""}
                 onChange={(event) =>
@@ -151,7 +156,6 @@ export function OrganizationSearchPage({
                     event.target.value || undefined,
                   )
                 }
-                aria-label="Filter messages by conversation"
               >
                 <option value="">All conversations</option>
                 {channels.data
