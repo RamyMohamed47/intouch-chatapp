@@ -52,6 +52,7 @@ export const initializeSentry = (config: ObservabilityConfig) => {
     environment: process.env.RAILWAY_ENVIRONMENT_NAME ?? process.env.NODE_ENV,
     release: process.env.RAILWAY_GIT_COMMIT_SHA,
     sendDefaultPii: false,
+    skipOpenTelemetrySetup: true,
     tracesSampleRate: 0,
     beforeSend: sanitizeEvent,
   });
