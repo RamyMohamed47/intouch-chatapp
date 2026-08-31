@@ -32,8 +32,20 @@ memberships, or read receipts. MongoDB reconcilers can recreate BullMQ work.
 
 ## Configuration
 
-Local development defaults to `RUNTIME_STATE_PROVIDER=memory`. Redis can be
-started locally with `npm run redis:up` and stopped with `npm run redis:down`.
+The standard local stack uses `RUNTIME_STATE_PROVIDER=redis` and
+`BACKGROUND_JOBS_PROVIDER=bullmq`. Start the complete infrastructure stack with
+`npm run infra:up`; `redis:up` and `redis:down` remain Redis-only compatibility
+commands. Memory runtime state and polling jobs remain available as an explicit
+fallback when Redis behavior is not under test.
+
+Local configuration:
+
+```dotenv
+RUNTIME_STATE_PROVIDER=redis
+REDIS_URL=redis://127.0.0.1:6379
+REDIS_KEY_PREFIX=intouch:development:v2
+BACKGROUND_JOBS_PROVIDER=bullmq
+```
 
 Production requires:
 
@@ -52,6 +64,11 @@ BullMQ keys use the `${REDIS_KEY_PREFIX}:bullmq` namespace. Redis must use the
 global concurrency, and MongoDB remains authoritative for outbox and asset
 lifecycle state. Local memory mode defaults to
 `BACKGROUND_JOBS_PROVIDER=polling`; BullMQ cannot be selected without Redis.
+
+The consolidated local Compose service enables AOF and configures
+`maxmemory-policy noeviction`. See
+`.agents/infrastructure/Local Docker Infrastructure.md` for lifecycle and
+inspection commands.
 
 ## Failure Behavior
 

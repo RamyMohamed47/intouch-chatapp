@@ -10,7 +10,19 @@ Install dependencies:
 npm install
 ```
 
-Run the API, shared-contract watcher, and web application together:
+Start the local MongoDB replica set, Redis, and Mailpit infrastructure, then run
+the native application processes:
+
+```bash
+npm run infra:up
+npm run dev
+```
+
+`infra:up` waits for every service to become healthy. The API, shared-contract
+watcher, and web application remain native processes; `npm run dev` does not
+start or stop Docker.
+
+Run the application processes together after infrastructure is available:
 
 ```bash
 npm run dev
@@ -40,6 +52,10 @@ Health check:
 GET /health
 GET /ready
 ```
+
+Mailpit captures local transactional email at `http://localhost:8025`.
+Infrastructure lifecycle and troubleshooting are documented under
+[Local Docker Infrastructure](.agents/infrastructure/Local%20Docker%20Infrastructure.md).
 
 ## API Documentation
 
@@ -139,8 +155,8 @@ values are:
 - `MAIL_PROVIDER`; use `brevo` for HTTPS delivery or `smtp` for SMTP
 - `MAIL_FROM_NAME` and `MAIL_FROM_ADDRESS`
 - `SEARCH_PROVIDER`; use `atlas` in production and `native` for local MongoDB
-- `RUNTIME_STATE_PROVIDER`; production requires `redis`, while local
-  development defaults to `memory`
+- `RUNTIME_STATE_PROVIDER`; production and the standard local infrastructure
+  workflow use `redis`; `memory` remains an explicit fallback
 - `REDIS_URL` when Redis runtime state is enabled
 - `REDIS_KEY_PREFIX`, optional and namespaced per environment
 - `BACKGROUND_JOBS_PROVIDER`; defaults to `bullmq` with Redis and `polling`
@@ -156,36 +172,38 @@ values are:
 organization creation and deletion use transactions. Atlas deployments support
 transactions. A standalone MongoDB server is rejected during startup.
 
-For local development, initialize MongoDB as a single-node replica set and use
-a URI containing the replica-set name, for example:
+The standard local configuration uses the Docker infrastructure stack:
 
 ```dotenv
 DATABASE=mongodb://127.0.0.1:27017/intouch?replicaSet=rs0
 DB_PASSWORD=unused
-```
-
-Start `mongod` with `--replSet rs0`, then initialize it once from `mongosh`:
-
-```javascript
-rs.initiate();
-```
-
-Local development does not require Redis. To exercise the distributed runtime
-path locally, start the included Redis container and update the API environment:
-
-```bash
-npm run redis:up
-```
-
-```dotenv
 RUNTIME_STATE_PROVIDER=redis
 REDIS_URL=redis://127.0.0.1:6379
 REDIS_KEY_PREFIX=intouch:development:v2
 BACKGROUND_JOBS_PROVIDER=bullmq
+MAIL_PROVIDER=smtp
+SMTP_HOST=localhost
+SMTP_PORT=1025
+SMTP_SECURE=false
+SMTP_REQUIRE_TLS=false
+SMTP_USER=unused
+SMTP_PASSWORD=unused
 ```
 
-Stop it with `npm run redis:down`. Use a different key prefix for every shared
-environment so development, staging, and production counters cannot collide.
+Apply these values manually to the ignored `apps/api/config.env`; the
+infrastructure commands never edit real secrets. Start and inspect the stack
+with:
+
+```bash
+npm run infra:up
+npm run infra:status
+```
+
+Use `npm run infra:down` to stop containers without deleting MongoDB or Redis
+data. `npm run infra:reset` deliberately removes both persistent volumes.
+Mailpit data is disposable and resets when its container is recreated. Use a
+different Redis key prefix for every shared environment so development,
+staging, and production counters cannot collide.
 
 Optional:
 
@@ -258,7 +276,7 @@ concurrency `5`, a global `10/second` provider admission limit, and the existing
 five-attempt retry schedule. MongoDB remains authoritative: Redis jobs contain
 only opaque outbox IDs, and a two-second reconciler recovers records missed by
 process crashes. `BACKGROUND_JOBS_PROVIDER=polling` retains the original leased
-MongoDB worker for local development and emergency rollback.
+MongoDB worker as a local-memory fallback and emergency rollback.
 
 Railway Free, Trial, and Hobby deployments should use Brevo HTTPS:
 

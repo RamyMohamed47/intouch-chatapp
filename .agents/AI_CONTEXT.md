@@ -25,6 +25,8 @@
 - Backend composition root at `apps/api/src/server.ts`
 - Next.js frontend at `apps/web`
 - Future mobile application reserved for `apps/mobile`
+- Local application processes run natively; `compose.infrastructure.yml`
+  provides the MongoDB replica set, Redis/BullMQ, and Mailpit development stack.
 
 ## Engineering Principles
 

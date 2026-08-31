@@ -1,8 +1,9 @@
 # Background Jobs
 
 InTouch uses BullMQ when `BACKGROUND_JOBS_PROVIDER=bullmq` and the original
-leased MongoDB pollers when `BACKGROUND_JOBS_PROVIDER=polling`. Production uses
-BullMQ; polling is the local-memory default and emergency rollback path.
+leased MongoDB pollers when `BACKGROUND_JOBS_PROVIDER=polling`. Production and
+the standard Docker-backed local workflow use BullMQ. Polling remains the
+local-memory fallback and emergency rollback path.
 
 ## Ownership
 
@@ -43,3 +44,10 @@ Workers run inside every API replica. BullMQ global limits keep aggregate
 throughput bounded as replicas scale. Redis must use `noeviction`. There is no
 public queue endpoint or Bull Board deployment; structured logs are the current
 operational interface.
+
+For local development, `npm run infra:up` starts Redis with the required policy
+and Mailpit for SMTP capture. Set `MAIL_PROVIDER=smtp`, `SMTP_HOST=localhost`,
+`SMTP_PORT=1025`, and disable TLS. Inspect captured jobs at
+`http://localhost:8025`. See
+`.agents/infrastructure/Local Docker Infrastructure.md` for the complete local
+configuration.
