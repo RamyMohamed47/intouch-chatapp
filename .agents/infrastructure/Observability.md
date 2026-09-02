@@ -140,6 +140,13 @@ Configure these initial Grafana Cloud alerts with email notifications:
 | Event-loop delay | p95 exceeds 250 ms | 5 minutes |
 | Provider failures | failure rate exceeds 5 percent with at least 5 operations | 10 minutes |
 
+Voice telemetry uses bounded labels and never includes users, conversations,
+provider room names, or credentials. Grafana receives
+`intouch_voice_calls_total`, `intouch_voice_join_duration_seconds`,
+`intouch_voice_active_sessions`, and `intouch_voice_channel_occupancy` after
+OpenTelemetry Prometheus normalization. LiveKit operations also appear in the
+existing provider operation and duration metrics with `provider=livekit`.
+
 Use Railway's API health check for `/ready`. Add an external synthetic monitor
 for `/health` and, if the monitor should verify dependencies, a second one for
 `/ready`. Do not send alerts for a single failed probe; require at least two

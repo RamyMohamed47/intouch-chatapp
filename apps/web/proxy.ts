@@ -4,7 +4,7 @@ import { buildContentSecurityPolicy } from "@/lib/security/csp";
 
 const securityHeaders = {
   "Permissions-Policy":
-    "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "X-Content-Type-Options": "nosniff",
 } as const;
@@ -18,6 +18,7 @@ export function proxy(request: NextRequest) {
       process.env.NEXT_PUBLIC_SOCKET_ORIGIN ?? "http://localhost:3000",
     storageOrigin: process.env.NEXT_PUBLIC_R2_ORIGIN,
     sentryDsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    liveKitUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL,
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

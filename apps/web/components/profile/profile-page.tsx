@@ -1,8 +1,8 @@
 "use client";
 
-import { Camera, RefreshCw, Trash2, Upload } from "lucide-react";
+import { BellRing, Camera, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UploadPurpose } from "@intouch/shared/uploads";
 
 import { PageHeader } from "@/components/workspace/page-header";
@@ -13,11 +13,16 @@ import { uploadsApi } from "@/lib/api/uploads";
 import { useAuth } from "@/lib/auth/provider";
 import { prepareAvatarImage } from "@/lib/uploads/avatar-image";
 import { useUploadQueue } from "@/lib/uploads/use-upload-queue";
+import { CALL_NOTIFICATION_PREFERENCE } from "@/lib/voice/provider";
 
 export function ProfilePage() {
   const { user, updateUser } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  const [callNotifications, setCallNotifications] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(
+    null,
+  );
   const queue = useUploadQueue({
     purpose: UploadPurpose.AVATAR,
     maximumFiles: 1,
@@ -34,6 +39,12 @@ export function ProfilePage() {
     mutationFn: () => uploadsApi.removeAvatar(),
     onSuccess: (updatedUser) => updateUser(updatedUser),
   });
+
+  useEffect(() => {
+    setCallNotifications(
+      localStorage.getItem(CALL_NOTIFICATION_PREFERENCE) === "enabled",
+    );
+  }, []);
 
   if (!user) return null;
 
@@ -176,6 +187,59 @@ export function ProfilePage() {
                 Images are cropped to a private 512 by 512 WebP before upload.
                 JPEG, PNG, and WebP sources are supported.
               </p>
+            </div>
+          </div>
+        </section>
+        <section className="rounded-3xl border border-border bg-card/80 p-6 shadow-xl backdrop-blur-xl md:p-8">
+          <div className="flex items-start gap-4">
+            <span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
+              <BellRing aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold">Browser call notifications</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Alert this browser about incoming calls while InTouch is open in
+                a hidden tab. This is not an offline push notification.
+              </p>
+              <Button
+                type="button"
+                variant={callNotifications ? "destructive" : "outline"}
+                className="mt-4"
+                onClick={() => {
+                  setNotificationError(null);
+                  if (callNotifications) {
+                    localStorage.removeItem(CALL_NOTIFICATION_PREFERENCE);
+                    setCallNotifications(false);
+                    return;
+                  }
+                  if (!("Notification" in window)) {
+                    setNotificationError(
+                      "This browser does not support notifications.",
+                    );
+                    return;
+                  }
+                  void Notification.requestPermission().then((permission) => {
+                    if (permission !== "granted") {
+                      setNotificationError(
+                        "Notification permission was not granted.",
+                      );
+                      return;
+                    }
+                    localStorage.setItem(
+                      CALL_NOTIFICATION_PREFERENCE,
+                      "enabled",
+                    );
+                    setCallNotifications(true);
+                  });
+                }}
+              >
+                {callNotifications
+                  ? "Disable notifications"
+                  : "Enable notifications"}
+              </Button>
+              {notificationError && (
+                <FormError className="mt-3">{notificationError}</FormError>
+              )}
             </div>
           </div>
         </section>

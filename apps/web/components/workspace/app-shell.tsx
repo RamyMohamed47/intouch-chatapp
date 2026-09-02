@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Volume2,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -27,6 +28,7 @@ import { OrganizationAvatar } from "@/components/organizations/organization-avat
 import { OrganizationSearchDialog } from "@/components/search/organization-search-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { UserAvatar } from "@/components/users/user-avatar";
+import { VoiceSessionPanel } from "@/components/voice/voice-session-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -351,17 +353,25 @@ function WorkspaceNavigation({
                                 "bg-primary/10 font-medium text-foreground ring-1 ring-primary/20",
                             )}
                           >
-                            {channel.visibility === "PRIVATE" ? (
+                            {channel.kind === "VOICE" ? (
+                              <Volume2 />
+                            ) : channel.visibility === "PRIVATE" ? (
                               <Lock />
                             ) : (
                               <Hash />
                             )}
                             <span className="truncate">{channel.name}</span>
-                            {!!channel.unreadCount && (
-                              <Badge className="ml-auto h-5 min-w-5 px-1 text-[10px]">
-                                {channel.unreadCount}
-                              </Badge>
+                            {channel.kind === "VOICE" && (
+                              <span className="ml-auto text-[10px] text-muted-foreground">
+                                {channel.occupancy.participantUserIds.length}/10
+                              </span>
                             )}
+                            {"unreadCount" in channel &&
+                              !!channel.unreadCount && (
+                                <Badge className="ml-auto h-5 min-w-5 px-1 text-[10px]">
+                                  {channel.unreadCount}
+                                </Badge>
+                              )}
                           </Link>
                         );
                       })}
@@ -421,6 +431,8 @@ function WorkspaceNavigation({
           </div>
         )}
       </ScrollArea>
+
+      {!mobile && <VoiceSessionPanel variant="sidebar" />}
 
       {activeOrganization && (
         <Link
@@ -560,6 +572,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         {children}
+        <VoiceSessionPanel variant="mobile" />
       </section>
       <OrganizationSearchDialog
         organizationId={organizationId}

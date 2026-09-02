@@ -57,11 +57,13 @@ const toMessageRecord = (message: MessageDocument): MessageRecord => ({
   senderId: message.senderId.toString(),
   content: message.content,
   messageType: message.messageType,
+  ...(message.callId ? { callId: message.callId.toString() } : {}),
   editedAt: message.editedAt,
   deletedAt: message.deletedAt,
   createdAt: message.createdAt,
   updatedAt: message.updatedAt,
   attachments: [],
+  call: null,
 });
 
 const toReadStateRecord = (

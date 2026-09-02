@@ -1,0 +1,535 @@
+"use client";
+
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { OrganizationMemberDto } from "@intouch/shared/memberships";
+import type {
+  CallDto,
+  VoiceJoinResponse,
+  VoiceSessionDto,
+} from "@intouch/shared/voice";
+import {
+  ConnectionQuality,
+  ConnectionState,
+  Room,
+  RoomEvent,
+  Track,
+} from "livekit-client";
+import { Phone, PhoneOff } from "lucide-react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useAuth } from "@/lib/auth/provider";
+import { voiceApi } from "@/lib/api/voice";
+import { queryKeys } from "@/lib/query/keys";
+import { useRealtime } from "@/lib/realtime/provider";
+
+export const CALL_NOTIFICATION_PREFERENCE = "intouch:call-notifications";
+
+interface VoiceContextValue {
+  activeCall: CallDto | null;
+  activeSession: VoiceSessionDto | null;
+  activeSpeakerIdentities: string[];
+  connectionQuality: ConnectionQuality;
+  connectionState: ConnectionState;
+  error: string | null;
+  isDeafened: boolean;
+  isMuted: boolean;
+  isPlaybackBlocked: boolean;
+  isTransitioning: boolean;
+  participantIdentities: string[];
+  acceptCall(callId: string): Promise<void>;
+  declineCall(callId: string): Promise<void>;
+  enablePlayback(): Promise<void>;
+  endSession(): Promise<void>;
+  joinChannel(conversationId: string): Promise<void>;
+  setInputDevice(deviceId: string): Promise<void>;
+  startCall(conversationId: string): Promise<void>;
+  toggleDeafen(): void;
+  toggleMute(): Promise<void>;
+}
+
+const VoiceContext = createContext<VoiceContextValue | null>(null);
+
+const createLiveKitRoom = () =>
+  new Room({ adaptiveStream: true, dynacast: true });
+
+const shouldReplaceSession = (session: VoiceSessionDto | null) =>
+  !session ||
+  window.confirm(
+    "You already have an active audio session. Leave it and switch?",
+  );
+
+const voiceErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message.trim() ? error.message : fallback;
+
+export function VoiceProvider({
+  children,
+  roomFactory = createLiveKitRoom,
+}: {
+  children: ReactNode;
+  roomFactory?: () => Room;
+}) {
+  const { status, user } = useAuth();
+  const realtime = useRealtime();
+  const queryClient = useQueryClient();
+  const roomRef = useRef<Room | null>(null);
+  const audioContainerRef = useRef<HTMLDivElement | null>(null);
+  const attachedAudioTracksRef = useRef(new Set<Track>());
+  const transitionInFlightRef = useRef(false);
+  const [activeSession, setActiveSession] = useState<VoiceSessionDto | null>(
+    null,
+  );
+  const [activeCall, setActiveCall] = useState<CallDto | null>(null);
+  const [connectionState, setConnectionState] = useState(
+    ConnectionState.Disconnected,
+  );
+  const [connectionQuality, setConnectionQuality] = useState(
+    ConnectionQuality.Unknown,
+  );
+  const [participantIdentities, setParticipantIdentities] = useState<string[]>(
+    [],
+  );
+  const [activeSpeakerIdentities, setActiveSpeakerIdentities] = useState<
+    string[]
+  >([]);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
+  const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const runTransition = useCallback(
+    async (work: () => Promise<void>, fallback: string) => {
+      if (transitionInFlightRef.current) return;
+      transitionInFlightRef.current = true;
+      setIsTransitioning(true);
+      setError(null);
+      try {
+        await work();
+      } catch (actionError) {
+        setError(voiceErrorMessage(actionError, fallback));
+      } finally {
+        transitionInFlightRef.current = false;
+        setIsTransitioning(false);
+      }
+    },
+    [],
+  );
+
+  const activeSessionQuery = useQuery({
+    queryKey: queryKeys.voice.activeSession,
+    queryFn: () => voiceApi.activeSession(),
+    enabled: status === "authenticated",
+  });
+
+  const resolveDisplayName = useCallback(
+    (userId: string) => {
+      for (const [, members] of queryClient.getQueriesData<
+        OrganizationMemberDto[]
+      >({
+        predicate: ({ queryKey }) =>
+          queryKey.length === 3 &&
+          queryKey[0] === "organizations" &&
+          queryKey[2] === "members",
+      })) {
+        const member = members?.find(({ user }) => user.id === userId);
+        if (member) return member.user.displayName;
+      }
+      return "A teammate";
+    },
+    [queryClient],
+  );
+
+  const syncParticipants = useCallback((room: Room) => {
+    setParticipantIdentities([
+      room.localParticipant.identity,
+      ...room.remoteParticipants.keys(),
+    ]);
+  }, []);
+
+  const disconnectRoom = useCallback(() => {
+    const room = roomRef.current;
+    roomRef.current = null;
+    attachedAudioTracksRef.current.forEach((track) => {
+      track.detach().forEach((element) => element.remove());
+    });
+    attachedAudioTracksRef.current.clear();
+    audioContainerRef.current?.replaceChildren();
+    if (room) void room.disconnect();
+    setConnectionState(ConnectionState.Disconnected);
+    setConnectionQuality(ConnectionQuality.Unknown);
+    setParticipantIdentities([]);
+    setActiveSpeakerIdentities([]);
+    setIsMuted(false);
+    setIsDeafened(false);
+    setIsPlaybackBlocked(false);
+  }, []);
+
+  const connect = useCallback(
+    async (result: VoiceJoinResponse, call?: CallDto) => {
+      disconnectRoom();
+      setError(null);
+      const room = roomFactory();
+      roomRef.current = room;
+      room.on(RoomEvent.ConnectionStateChanged, setConnectionState);
+      room.on(RoomEvent.ParticipantConnected, () => syncParticipants(room));
+      room.on(RoomEvent.ParticipantDisconnected, () => syncParticipants(room));
+      room.on(RoomEvent.ActiveSpeakersChanged, (speakers) =>
+        setActiveSpeakerIdentities(speakers.map(({ identity }) => identity)),
+      );
+      room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+        if (participant.isLocal) setConnectionQuality(quality);
+      });
+      room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind !== Track.Kind.Audio) return;
+        const element = track.attach();
+        element.autoplay = true;
+        element.setAttribute("aria-hidden", "true");
+        audioContainerRef.current?.appendChild(element);
+        attachedAudioTracksRef.current.add(track);
+      });
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind !== Track.Kind.Audio) return;
+        track.detach().forEach((element) => element.remove());
+        attachedAudioTracksRef.current.delete(track);
+      });
+      room.on(RoomEvent.AudioPlaybackStatusChanged, (canPlay) => {
+        setIsPlaybackBlocked(!canPlay);
+      });
+      try {
+        await room.connect(
+          result.credentials.serverUrl,
+          result.credentials.token,
+        );
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setIsPlaybackBlocked(!room.canPlaybackAudio);
+        syncParticipants(room);
+        setActiveSession(result.session);
+        setActiveCall(call ?? null);
+        queryClient.setQueryData(queryKeys.voice.activeSession, result.session);
+      } catch (connectionError) {
+        disconnectRoom();
+        setError(
+          connectionError instanceof Error
+            ? connectionError.message
+            : "Could not connect to voice",
+        );
+        throw connectionError;
+      }
+    },
+    [disconnectRoom, queryClient, roomFactory, syncParticipants],
+  );
+
+  const replaceCurrent = useCallback(async () => {
+    if (!activeSession) return true;
+    if (!shouldReplaceSession(activeSession)) return false;
+    await voiceApi.leave();
+    disconnectRoom();
+    setActiveSession(null);
+    setActiveCall(null);
+    return true;
+  }, [activeSession, disconnectRoom]);
+
+  const joinChannel = useCallback(
+    async (conversationId: string) => {
+      await runTransition(async () => {
+        if (!(await replaceCurrent())) return;
+        await connect(
+          await voiceApi.joinChannel(conversationId, {
+            replaceActiveSession: Boolean(activeSession),
+          }),
+        );
+      }, "Could not join the voice channel");
+    },
+    [activeSession, connect, replaceCurrent, runTransition],
+  );
+
+  const startCall = useCallback(
+    async (conversationId: string) => {
+      await runTransition(async () => {
+        if (!(await replaceCurrent())) return;
+        const result = await voiceApi.startCall(conversationId, {
+          replaceActiveSession: Boolean(activeSession),
+        });
+        const session = await voiceApi.activeSession();
+        if (!session) throw new Error("Call session is unavailable");
+        await connect(
+          { session, credentials: result.credentials },
+          result.call,
+        );
+      }, "Could not start the voice call");
+    },
+    [activeSession, connect, replaceCurrent, runTransition],
+  );
+
+  const acceptCall = useCallback(
+    async (callId: string) => {
+      await runTransition(async () => {
+        if (!(await replaceCurrent())) return;
+        const result = await voiceApi.accept(callId);
+        const session = await voiceApi.activeSession();
+        if (!session) throw new Error("Call session is unavailable");
+        await connect(
+          { session, credentials: result.credentials },
+          result.call,
+        );
+        realtime.dismissIncomingCall();
+      }, "Could not accept the voice call");
+    },
+    [connect, realtime, replaceCurrent, runTransition],
+  );
+
+  const declineCall = useCallback(
+    async (callId: string) => {
+      await runTransition(async () => {
+        await voiceApi.transition(callId, "decline");
+        realtime.dismissIncomingCall();
+      }, "Could not decline the voice call");
+    },
+    [realtime, runTransition],
+  );
+
+  const endSession = useCallback(async () => {
+    await runTransition(async () => {
+      if (activeCall && activeCall.status !== "ENDED") {
+        const callerCanCancel =
+          activeCall.callerUserId === user?.id &&
+          ["RINGING", "CONNECTING"].includes(activeCall.status);
+        await voiceApi.transition(
+          activeCall.id,
+          callerCanCancel ? "cancel" : "end",
+        );
+      } else {
+        await voiceApi.leave();
+      }
+      disconnectRoom();
+      setActiveSession(null);
+      setActiveCall(null);
+      queryClient.setQueryData(queryKeys.voice.activeSession, null);
+    }, "Could not leave the voice session");
+  }, [activeCall, disconnectRoom, queryClient, runTransition, user?.id]);
+
+  const toggleMute = useCallback(async () => {
+    await runTransition(async () => {
+      const participant = roomRef.current?.localParticipant;
+      if (!participant) return;
+      await participant.setMicrophoneEnabled(isMuted);
+      setIsMuted(!isMuted);
+    }, "Could not change the microphone state");
+  }, [isMuted, runTransition]);
+
+  const enablePlayback = useCallback(async () => {
+    await runTransition(async () => {
+      const room = roomRef.current;
+      if (!room) return;
+      await room.startAudio();
+      if (!room.canPlaybackAudio) {
+        throw new Error("Your browser is still blocking call audio");
+      }
+      setIsPlaybackBlocked(false);
+    }, "Could not enable call audio");
+  }, [runTransition]);
+
+  const toggleDeafen = useCallback(() => {
+    if (transitionInFlightRef.current) return;
+    setError(null);
+    const next = !isDeafened;
+    roomRef.current?.remoteParticipants.forEach((participant) => {
+      participant.audioTrackPublications.forEach((publication) =>
+        publication.setEnabled(!next),
+      );
+    });
+    setIsDeafened(next);
+  }, [isDeafened]);
+
+  const setInputDevice = useCallback(
+    async (deviceId: string) => {
+      await runTransition(async () => {
+        await roomRef.current?.switchActiveDevice("audioinput", deviceId);
+      }, "Could not change the microphone");
+    },
+    [runTransition],
+  );
+
+  useEffect(() => {
+    const session = activeSessionQuery.data;
+    if (!session || activeSession || status !== "authenticated") return;
+    void voiceApi
+      .resume()
+      .then((result) => connect(result))
+      .catch(() =>
+        queryClient.setQueryData(queryKeys.voice.activeSession, null),
+      );
+  }, [activeSession, activeSessionQuery.data, connect, queryClient, status]);
+
+  useEffect(() => {
+    if (!activeSession) return;
+    const timer = setInterval(() => {
+      void realtime.heartbeatVoice(activeSession.id).then((result) => {
+        if (!result.success) {
+          disconnectRoom();
+          setActiveSession(null);
+          setActiveCall(null);
+          queryClient.setQueryData(queryKeys.voice.activeSession, null);
+        }
+      });
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [activeSession, disconnectRoom, queryClient, realtime]);
+
+  useEffect(() => {
+    const call = realtime.latestCall;
+    if (!call) return;
+    if (activeCall?.id === call.id) setActiveCall(call);
+    if (call.status === "ENDED" && activeCall?.id === call.id) {
+      disconnectRoom();
+      setActiveSession(null);
+      queryClient.setQueryData(queryKeys.voice.activeSession, null);
+    }
+  }, [activeCall?.id, disconnectRoom, queryClient, realtime.latestCall]);
+
+  useEffect(() => {
+    const call = realtime.incomingCall;
+    if (!call || document.visibilityState === "visible") return;
+    if (
+      localStorage.getItem(CALL_NOTIFICATION_PREFERENCE) === "enabled" &&
+      Notification.permission === "granted"
+    ) {
+      new Notification("Incoming InTouch call", {
+        body: `${resolveDisplayName(call.callerUserId)} is calling`,
+      });
+    }
+  }, [realtime.incomingCall, resolveDisplayName]);
+
+  useEffect(() => {
+    if (!realtime.incomingCall) return;
+    let audioContext: AudioContext | null = null;
+    const ring = () => {
+      try {
+        audioContext ??= new AudioContext();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.frequency.value = 660;
+        gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(
+          0.08,
+          audioContext.currentTime + 0.02,
+        );
+        gain.gain.exponentialRampToValueAtTime(
+          0.0001,
+          audioContext.currentTime + 0.45,
+        );
+        oscillator.connect(gain).connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.5);
+      } catch {
+        // Browser autoplay policy may block audio until the first interaction.
+      }
+    };
+    ring();
+    const timer = setInterval(ring, 1_500);
+    return () => {
+      clearInterval(timer);
+      if (audioContext) void audioContext.close();
+    };
+  }, [realtime.incomingCall]);
+
+  useEffect(() => {
+    if (status === "authenticated") return;
+    disconnectRoom();
+    setActiveSession(null);
+    setActiveCall(null);
+  }, [disconnectRoom, status]);
+
+  useEffect(() => () => disconnectRoom(), [disconnectRoom]);
+
+  const incoming = realtime.incomingCall;
+  return (
+    <VoiceContext.Provider
+      value={{
+        activeCall,
+        activeSession,
+        activeSpeakerIdentities,
+        connectionQuality,
+        connectionState,
+        error,
+        isDeafened,
+        isMuted,
+        isPlaybackBlocked,
+        isTransitioning,
+        participantIdentities,
+        acceptCall,
+        declineCall,
+        enablePlayback,
+        endSession,
+        joinChannel,
+        setInputDevice,
+        startCall,
+        toggleDeafen,
+        toggleMute,
+      }}
+    >
+      {children}
+      <div ref={audioContainerRef} aria-hidden="true" />
+      <Dialog
+        open={Boolean(incoming)}
+        onOpenChange={(open) => {
+          if (!open && incoming) void declineCall(incoming.id);
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Incoming voice call</DialogTitle>
+            <DialogDescription>
+              {incoming
+                ? `${resolveDisplayName(incoming.callerUserId)} is calling you.`
+                : "A teammate is calling you."}
+            </DialogDescription>
+            {error && (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            )}
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              disabled={isTransitioning}
+              onClick={() => incoming && void declineCall(incoming.id)}
+            >
+              <PhoneOff /> Decline
+            </Button>
+            <Button
+              disabled={isTransitioning}
+              onClick={() => incoming && void acceptCall(incoming.id)}
+            >
+              <Phone /> Accept
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </VoiceContext.Provider>
+  );
+}
+
+export const useVoice = () => {
+  const context = useContext(VoiceContext);
+  if (!context) throw new Error("useVoice must be used within VoiceProvider");
+  return context;
+};

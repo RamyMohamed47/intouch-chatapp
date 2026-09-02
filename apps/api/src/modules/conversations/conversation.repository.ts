@@ -1,6 +1,7 @@
 import type { ClientSession } from "mongoose";
 import { Types } from "mongoose";
 import {
+  ChannelKind,
   ConversationType,
   type ConversationTypeValue,
 } from "@intouch/shared/conversations";
@@ -78,6 +79,12 @@ const toConversationRecord = (
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
   };
+  if (conversation.type === ConversationType.CHANNEL) {
+    record.kind = conversation.kind ?? ChannelKind.TEXT;
+  }
+  if (conversation.voiceRoomId !== undefined) {
+    record.voiceRoomId = conversation.voiceRoomId;
+  }
   if (conversation.activityAt !== undefined) {
     record.activityAt = conversation.activityAt;
   }
@@ -122,8 +129,9 @@ const createMongooseConversationRepository = (
   },
 
   async findById(conversationId) {
-    const query =
-      ConversationModel.findById(conversationId).lean<ConversationDocument>();
+    const query = ConversationModel.findById(conversationId)
+      .select("+voiceRoomId")
+      .lean<ConversationDocument>();
     if (session) query.session(session);
     const conversation = await query.exec();
     return conversation ? toConversationRecord(conversation) : null;

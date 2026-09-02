@@ -21,12 +21,14 @@ export const buildContentSecurityPolicy = ({
   socketOrigin,
   storageOrigin,
   sentryDsn,
+  liveKitUrl,
 }: {
   isDevelopment: boolean;
   nonce: string;
   socketOrigin: string;
   storageOrigin?: string;
   sentryDsn?: string;
+  liveKitUrl?: string;
 }) => {
   const normalizedStorageOrigin = storageOrigin
     ? new URL(storageOrigin).origin
@@ -36,6 +38,7 @@ export const buildContentSecurityPolicy = ({
     ...toConnectSources(socketOrigin),
     ...(normalizedStorageOrigin ? [normalizedStorageOrigin] : []),
     ...(sentryDsn ? [new URL(sentryDsn).origin] : []),
+    ...(liveKitUrl ? toConnectSources(liveKitUrl) : []),
   ];
   const imageSources = [
     "'self'",
@@ -54,7 +57,7 @@ export const buildContentSecurityPolicy = ({
     `img-src ${imageSources.join(" ")}`,
     "font-src 'self' data:",
     `connect-src ${connectSources.join(" ")}`,
-    "media-src 'self'",
+    "media-src 'self' blob:",
     "manifest-src 'self'",
     "worker-src 'self' blob:",
     "object-src 'none'",

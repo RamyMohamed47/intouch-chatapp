@@ -6,6 +6,7 @@ import type {
 } from "@intouch/shared/messages";
 import { MessageType, type MessageTypeValue } from "@intouch/shared/messages";
 import type { AttachmentDto } from "@intouch/shared/uploads";
+import type { CallSummaryDto } from "@intouch/shared/voice";
 import type { Types } from "mongoose";
 
 export { MessageType };
@@ -16,6 +17,7 @@ export interface Message {
   senderId: Types.ObjectId;
   content: string | null;
   messageType: MessageTypeValue;
+  callId?: Types.ObjectId;
   editedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
@@ -28,11 +30,13 @@ export interface MessageRecord {
   senderId: string;
   content: string | null;
   messageType: MessageTypeValue;
+  callId?: string;
   editedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   attachments: AttachmentDto[];
+  call?: CallSummaryDto | null;
 }
 
 export interface CreateMessageRecordInput {
@@ -40,6 +44,7 @@ export interface CreateMessageRecordInput {
   senderId: string;
   content: string | null;
   messageType: MessageTypeValue;
+  callId?: string;
 }
 
 export interface MessagePage {

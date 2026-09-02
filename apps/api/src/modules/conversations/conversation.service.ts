@@ -1,9 +1,12 @@
 import {
+  ChannelKind,
   ConversationType,
   ConversationVisibility,
   type CreateConversationInput,
   type UpdateConversationInput,
 } from "@intouch/shared/conversations";
+import { randomUUID } from "node:crypto";
+import type { VoiceOccupancyDto } from "@intouch/shared/voice";
 
 import type { CategoryRepository } from "../categories/category.repository.js";
 import { CategoryNotFoundError } from "../categories/category.errors.js";
@@ -58,6 +61,25 @@ export interface ConversationServiceDependencies {
   unitOfWork: OrganizationUnitOfWork;
   users: UserRepository;
   notificationDelivery?: Pick<NotificationService, "publishDeleted">;
+  voiceOccupancy?: {
+    list(conversationIds: readonly string[]): Promise<VoiceOccupancyDto[]>;
+  };
+  voiceLifecycle?: {
+    closeConversation(
+      conversationId: string,
+      providerRoomId?: string,
+    ): Promise<void>;
+    retainOnlyUser(
+      conversationId: string,
+      retainedUserId: string,
+      actorUserId: string,
+    ): Promise<void>;
+    revokeUser(
+      conversationId: string,
+      participantUserId: string,
+      actorUserId: string,
+    ): Promise<void>;
+  };
 }
 
 const mapPersistenceConflict = (error: unknown): never => {
@@ -91,6 +113,8 @@ const createConversationService = ({
   unitOfWork,
   users,
   notificationDelivery = { publishDeleted: () => undefined },
+  voiceOccupancy = { list: () => Promise.resolve([]) },
+  voiceLifecycle,
 }: ConversationServiceDependencies) => {
   const getAccessFrom = async (
     userId: string,
@@ -135,7 +159,14 @@ const createConversationService = ({
         );
       }
     }
-    const [states, peers] = await Promise.all([
+    const voiceIds = records
+      .filter(
+        (record) =>
+          record.type === ConversationType.CHANNEL &&
+          record.kind === ChannelKind.VOICE,
+      )
+      .map(({ id }) => id);
+    const [states, peers, occupancies] = await Promise.all([
       conversationSummaries.getStates(
         records.map(({ id }) => id),
         userId,
@@ -145,11 +176,15 @@ const createConversationService = ({
         })),
       ),
       users.findPublicByIds([...new Set(peerIdByConversation.values())]),
+      voiceOccupancy.list(voiceIds),
     ]);
     const statesByConversation = new Map(
       states.map((state) => [state.conversationId, state]),
     );
     const peersById = new Map(peers.map((peer) => [peer.id, peer]));
+    const occupancyByConversation = new Map(
+      occupancies.map((occupancy) => [occupancy.conversationId, occupancy]),
+    );
 
     return records.map((conversation) => {
       const state = statesByConversation.get(conversation.id);
@@ -175,12 +210,27 @@ const createConversationService = ({
       if (conversation.categoryId !== undefined) {
         summary.categoryId = conversation.categoryId;
       }
+      if (conversation.kind !== undefined) summary.kind = conversation.kind;
       if (conversation.name !== undefined) summary.name = conversation.name;
       if (conversation.visibility !== undefined) {
         summary.visibility = conversation.visibility;
       }
       if (conversation.position !== undefined) {
         summary.position = conversation.position;
+      }
+      if (
+        conversation.type === ConversationType.CHANNEL &&
+        conversation.kind === ChannelKind.VOICE
+      ) {
+        summary.occupancy = occupancyByConversation.get(conversation.id) ?? {
+          conversationId: conversation.id,
+          capacity: 10,
+          participantUserIds: [],
+          participants: [],
+        };
+        delete summary.lastMessage;
+        delete summary.unreadCount;
+        delete summary.readReceipt;
       }
       const peerId = peerIdByConversation.get(conversation.id);
       const peer = peerId ? peersById.get(peerId) : undefined;
@@ -212,8 +262,10 @@ const createConversationService = ({
       organizationId: string,
       input: CreateConversationInput,
     ) {
+      const kind = input.kind ?? ChannelKind.TEXT;
+      const visibility = input.visibility ?? ConversationVisibility.PUBLIC;
       try {
-        return await unitOfWork.run(async (context) => {
+        const conversation = await unitOfWork.run(async (context) => {
           const organization =
             await context.organizations.findById(organizationId);
           const membership = await context.memberships.findForUser(
@@ -237,11 +289,15 @@ const createConversationService = ({
             name: input.name,
             nameKey: normalizeNameKey(input.name),
             type: ConversationType.CHANNEL,
-            visibility: input.visibility,
+            kind,
+            ...(kind === ChannelKind.VOICE
+              ? { voiceRoomId: randomUUID() }
+              : {}),
+            visibility,
             position,
           });
 
-          if (input.visibility === ConversationVisibility.PRIVATE) {
+          if (visibility === ConversationVisibility.PRIVATE) {
             await context.conversationParticipants.create({
               organizationId,
               conversationId: conversation.id,
@@ -251,6 +307,9 @@ const createConversationService = ({
           }
           return conversation;
         });
+        const [summary] = await summarize(userId, [conversation]);
+        if (!summary) throw new ConversationNotFoundError();
+        return summary;
       } catch (error) {
         return mapPersistenceConflict(error);
       }
@@ -455,14 +514,18 @@ const createConversationService = ({
             ConversationVisibility.PRIVATE
         ) {
           await realtime.retainOnlyUser(conversationId, userId);
+          await voiceLifecycle?.retainOnlyUser(conversationId, userId, userId);
         }
-        return transactionResult.updated;
+        const [summary] = await summarize(userId, [transactionResult.updated]);
+        if (!summary) throw new ConversationNotFoundError();
+        return summary;
       } catch (error) {
         return mapPersistenceConflict(error);
       }
     },
 
     async delete(userId: string, conversationId: string) {
+      let deletedVoiceRoomId: string | undefined;
       const removedNotifications = await unitOfWork.run(async (context) => {
         const conversation =
           await context.conversations.findById(conversationId);
@@ -480,6 +543,7 @@ const createConversationService = ({
           membership,
           actorParticipant,
         );
+        deletedVoiceRoomId = channel.voiceRoomId;
         if (
           !(await context.organizations.lockForMutation(channel.organizationId))
         ) {
@@ -490,6 +554,7 @@ const createConversationService = ({
         );
         await context.chatWallpapers.deleteByConversationId(conversationId);
         await context.messageReactions.deleteByConversationId(conversationId);
+        await context.calls?.deleteByConversationId(conversationId);
         await context.assets.markConversationAssetsForDeletion(conversationId);
         await context.messages.deleteByConversationId(conversationId);
         await context.conversationReadStates.deleteByConversationId(
@@ -515,6 +580,10 @@ const createConversationService = ({
         notificationDelivery.publishDeleted(notification);
       }
       await realtime.closeConversation(conversationId);
+      await voiceLifecycle?.closeConversation(
+        conversationId,
+        deletedVoiceRoomId,
+      );
     },
 
     async listParticipants(userId: string, conversationId: string) {
@@ -649,6 +718,11 @@ const createConversationService = ({
         notificationDelivery.publishDeleted(notification);
       }
       await realtime.evictUser(conversationId, participantUserId);
+      await voiceLifecycle?.revokeUser(
+        conversationId,
+        participantUserId,
+        userId,
+      );
     },
   };
 };

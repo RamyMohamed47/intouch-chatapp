@@ -10,9 +10,13 @@ export const RateLimitAction = {
   WALLPAPER_MUTATE: "wallpaper:mutate",
   UPLOAD_MUTATE: "upload:mutate",
   ASSET_ACCESS: "asset:access",
+  VOICE_JOIN: "voice:join",
+  VOICE_LIFECYCLE: "voice:lifecycle",
+  VOICE_MODERATE: "voice:moderate",
   SOCKET_CONNECT: "socket:connect",
   SOCKET_SUBSCRIBE: "socket:subscribe",
   SOCKET_TYPING: "socket:typing",
+  SOCKET_VOICE: "socket:voice",
 } as const;
 
 export type RateLimitAction =

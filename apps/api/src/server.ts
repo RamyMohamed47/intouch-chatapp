@@ -65,8 +65,17 @@ import {
   getObservabilityMetrics,
   instrumentMailTransport,
   instrumentObjectStorage,
+  instrumentVoiceMediaProvider,
   shutdownObservability,
 } from "./infrastructure/observability/index.js";
+import {
+  createBullMqVoiceCallJobs,
+  createDisabledVoiceMediaProvider,
+  createInMemoryVoiceCallJobs,
+  createInMemoryVoiceSessionStore,
+  createLiveKitVoiceMediaProvider,
+  createRedisVoiceSessionStore,
+} from "./modules/voice/index.js";
 
 const logger = getLogger();
 type InTouchServer = Server<
@@ -274,6 +283,40 @@ const rawStorage =
     : createDisabledObjectStorage();
 const storage = instrumentObjectStorage(rawStorage, config.storage.provider);
 const observabilityMetrics = getObservabilityMetrics();
+const voiceMedia = instrumentVoiceMediaProvider(
+  config.voice.provider === "livekit"
+    ? createLiveKitVoiceMediaProvider(config.voice)
+    : createDisabledVoiceMediaProvider(),
+  config.voice.provider,
+);
+const voiceSessions = runtimeState.command
+  ? createRedisVoiceSessionStore(runtimeState.command, runtimeState.keyPrefix)
+  : createInMemoryVoiceSessionStore();
+observabilityMetrics.registerVoiceState(async () => {
+  const sessions = (await voiceSessions.listReserved()).filter(
+    ({ connectedAt }) => connectedAt !== null,
+  );
+  const channelSessions = sessions.filter(
+    ({ kind }) => kind === "VOICE_CHANNEL",
+  );
+  return {
+    activeCalls: sessions.length - channelSessions.length,
+    channelParticipants: channelSessions.length,
+    occupiedChannels: new Set(
+      channelSessions.map(({ conversationId }) => conversationId),
+    ).size,
+  };
+});
+const voiceJobs =
+  config.backgroundJobsProvider === "bullmq" &&
+  config.runtimeState.provider === "redis"
+    ? createBullMqVoiceCallJobs({
+        logger,
+        redisKeyPrefix: config.runtimeState.keyPrefix,
+        redisUrl: config.runtimeState.url,
+        telemetry: observabilityMetrics,
+      })
+    : createInMemoryVoiceCallJobs();
 const presenceStore = runtimeState.command
   ? createRedisPresenceStore(runtimeState.command, runtimeState.keyPrefix)
   : undefined;
@@ -334,6 +377,10 @@ const organizations = createOrganizationModule({
   telemetry: observabilityMetrics,
   uploadDailyUserBytes: config.uploadDailyUserBytes,
   organizationStorageBytes: config.organizationStorageBytes,
+  voiceJobs,
+  voiceMedia,
+  voiceRealtime: realtimeGateway,
+  voiceSessions,
 });
 const assetCleanupWorker = createAssetCleanupWorker({
   assets: organizations.assets,
@@ -374,6 +421,7 @@ if (config.backgroundJobsProvider === "bullmq") {
         redisUrl: config.runtimeState.url,
         telemetry: observabilityMetrics,
       }),
+      voiceJobs,
     ],
     logger,
   );
@@ -381,6 +429,7 @@ if (config.backgroundJobsProvider === "bullmq") {
   backgroundJobs = createPollingBackgroundJobsRuntime([
     mailWorker,
     assetCleanupWorker,
+    voiceJobs,
   ]);
 }
 resources.closeBackgroundJobs = () => backgroundJobs.close();
@@ -403,10 +452,12 @@ const app = createApp({
   assetRouter: organizations.assetRouter,
   authRouter: auth.router,
   categoryRouter: organizations.categoryRouter,
+  callRouter: organizations.callRouter,
   conversationMessageRouter: organizations.conversationMessageRouter,
   conversationChatWallpaperRouter:
     organizations.conversationChatWallpaperRouter,
   conversationRouter: organizations.conversationRouter,
+  conversationVoiceRouter: organizations.conversationVoiceRouter,
   directMessageRouter: organizations.directMessageRouter,
   invitationRouter: organizations.invitationRouter,
   messageRouter: organizations.messageRouter,
@@ -420,6 +471,8 @@ const app = createApp({
   userChatWallpaperRouter: organizations.userChatWallpaperRouter,
   uploadRouter: organizations.uploadRouter,
   userAvatarRouter: organizations.userAvatarRouter,
+  voiceSessionRouter: organizations.voiceSessionRouter,
+  voiceWebhookRouter: organizations.voiceWebhookRouter,
   trustProxy: config.trustProxy,
   readiness: {
     isReady: () =>
@@ -463,6 +516,7 @@ configureSocket(
     presence: organizations.presenceService,
     rateLimits: abuseProtection.rateLimits,
     typing: typingService,
+    voice: organizations.voiceService,
   },
 );
 

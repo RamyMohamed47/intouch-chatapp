@@ -3,10 +3,12 @@ import { z } from "zod";
 import { dateTimeDtoSchema, identifierDtoSchema } from "../common/index.js";
 import { publicUserSummaryDtoSchema } from "../users/index.js";
 import { attachmentDtoSchema } from "../uploads/index.js";
+import { callSummaryDtoSchema } from "../voice/index.js";
 
 export const MessageType = {
   TEXT: "TEXT",
   ATTACHMENT: "ATTACHMENT",
+  CALL: "CALL",
 } as const;
 
 export const messageTypeSchema = z.enum(MessageType);
@@ -22,6 +24,7 @@ export const messageCoreDtoSchema = z.object({
   createdAt: dateTimeDtoSchema,
   updatedAt: dateTimeDtoSchema,
   attachments: z.array(attachmentDtoSchema).default([]),
+  call: callSummaryDtoSchema.nullable().optional(),
 });
 
 export const messageReactionSummaryDtoSchema = z

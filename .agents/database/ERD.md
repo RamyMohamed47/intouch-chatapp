@@ -107,6 +107,8 @@ erDiagram
         string name
         string nameKey
         enum type
+        enum kind
+        string voiceRoomId
         enum visibility
         int position
         string directParticipantKey
@@ -132,6 +134,7 @@ erDiagram
         ObjectId senderId
         string content
         enum messageType
+        ObjectId callId
         datetime createdAt
         datetime updatedAt
         datetime editedAt
@@ -144,6 +147,24 @@ erDiagram
         ObjectId messageId
         ObjectId userId
         string emoji
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    CallSession {
+        ObjectId id
+        ObjectId organizationId
+        ObjectId conversationId
+        ObjectId callerUserId
+        ObjectId recipientUserId
+        string providerRoomId
+        ObjectId timelineMessageId
+        enum status
+        enum endReason
+        datetime startedAt
+        datetime acceptedAt
+        datetime answeredAt
+        datetime endedAt
         datetime createdAt
         datetime updatedAt
     }
@@ -271,6 +292,14 @@ erDiagram
     Conversation ||--o{ StoredAsset : scopes
 
     Message ||--o{ StoredAsset : attaches
+
+    Organization ||--o{ CallSession : scopes
+
+    Conversation ||--o{ CallSession : contains
+
+    Message ||--o| CallSession : records
+
+    User ||--o{ CallSession : participates
 
     User ||--o{ UploadDailyUsage : reserves
 
@@ -427,3 +456,12 @@ currently accessible conversation IDs before DTO serialization; people results
 are filtered to current organization memberships and never expose email or
 provider data. Search cursors are opaque and bound to the provider, normalized
 query, result type, and optional conversation filter.
+
+Channel conversations have immutable `kind = TEXT | VOICE`. Existing channels
+are backfilled to `TEXT`; voice channels own an opaque provider room ID and do
+not have message history, unread state, or read receipts. `CallSession` stores
+the durable direct-message call lifecycle and links exactly one immutable
+`Message.messageType = CALL` timeline entry. Provider room IDs are selected out
+of normal queries and never enter public DTOs. Live occupancy, participant
+identities, connection leases, and webhook deduplication remain expiring Redis
+state rather than MongoDB entities.

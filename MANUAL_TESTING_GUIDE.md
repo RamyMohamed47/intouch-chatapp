@@ -459,6 +459,31 @@ chat` is pressed.
 - Delete an overridden channel or organization and confirm no wallpaper
   preference survives for the deleted conversation.
 
+### Voice Calls and Channels
+
+- Create both public and private voice channels. Confirm they render as voice
+  lounges, never expose message history, and retain their kind after edits.
+- Join a voice channel from two browsers. Verify participant count, active
+  speaker indication, mute, deafen, microphone selection, and owner-only
+  server mute/disconnect. A remotely muted user must unmute themselves.
+- Fill a voice channel with ten users or test clients. The eleventh join must
+  return `409 VOICE_CAPACITY_REACHED`, including during simultaneous joins.
+- Start a DM call and verify outgoing ringing, recipient-only incoming dialog,
+  accept, decline, cancel, missed timeout, hang-up, and completed duration.
+  Busy recipients must return `409 VOICE_USER_BUSY` without a timeline entry.
+- Reload during an active session and confirm authorized resume. Attempt to
+  join another room and confirm switching requires explicit confirmation.
+- Use two tabs for one account. Confirm there is still only one logical voice
+  reservation and ending the final call clears the persistent dock.
+- Remove a private-channel participant, make a voice channel private, delete a
+  channel, and delete an organization while users are connected. Provider
+  participants and occupancy must clear after the database mutation commits.
+- Enable browser call notifications in the profile, grant permission, hide the
+  tab, and verify an incoming call notification. The in-app dialog remains the
+  authoritative action surface.
+- Inspect LiveKit identities and InTouch logs. They must not contain user names,
+  user IDs, conversation IDs, tokens, or provider room names in metric labels.
+
 ## 9. Defect Reporting Template
 
 Use one report per distinct defect:

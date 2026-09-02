@@ -27,6 +27,9 @@ All keys are under `${REDIS_KEY_PREFIX}:bullmq`.
 - `asset-cleanup`: reconciles every five seconds in batches of 20, global
   concurrency 5, and performs three BullMQ retries with exponential delay before
   returning the asset to MongoDB's bounded cleanup backoff.
+- `voice-lifecycle`: processes ringing, accepted-media, and disconnect-grace
+  timeouts and runs a repeatable reconciliation job every 30 seconds. Every
+  transition is idempotent so duplicate, delayed, or out-of-order jobs are safe.
 
 Every mutation remains idempotent through repository-level leases and status
 conditions. Reconciliation recovers committed MongoDB work after API crashes,

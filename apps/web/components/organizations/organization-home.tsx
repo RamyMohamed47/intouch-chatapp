@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Settings,
   Users,
+  Volume2,
 } from "lucide-react";
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -102,7 +103,9 @@ export function OrganizationHome({
   const dmList =
     directMessages.data?.pages.flatMap((page) => page.directMessages) ?? [];
   const unread = [...channelList, ...dmList].reduce(
-    (total, conversation) => total + (conversation.unreadCount ?? 0),
+    (total, conversation) =>
+      total +
+      ("unreadCount" in conversation ? (conversation.unreadCount ?? 0) : 0),
     0,
   );
 
@@ -146,12 +149,23 @@ export function OrganizationHome({
                         href={`/app/${organizationId}/channels/${channel.id}`}
                         className="flex items-center gap-3 rounded-2xl border border-border bg-card/35 p-4 hover:border-primary/30"
                       >
-                        {channel.visibility === "PRIVATE" ? <Lock /> : <Hash />}
+                        {channel.kind === "VOICE" ? (
+                          <Volume2 />
+                        ) : channel.visibility === "PRIVATE" ? (
+                          <Lock />
+                        ) : (
+                          <Hash />
+                        )}
                         <span className="min-w-0 flex-1 truncate font-medium">
                           {channel.name}
                         </span>
-                        {!!channel.unreadCount && (
+                        {"unreadCount" in channel && !!channel.unreadCount && (
                           <Badge>{channel.unreadCount}</Badge>
+                        )}
+                        {channel.kind === "VOICE" && (
+                          <Badge variant="outline">
+                            {channel.occupancy.participantUserIds.length}/10
+                          </Badge>
                         )}
                       </Link>
                     ))}

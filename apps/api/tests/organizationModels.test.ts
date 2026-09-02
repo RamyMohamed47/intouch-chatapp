@@ -12,6 +12,7 @@ import MessageModel from "../src/modules/message/message.model.js";
 import MessageReactionModel from "../src/modules/message-reactions/message-reaction.model.js";
 import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
 import ChatWallpaperPreferenceModel from "../src/modules/chat-wallpapers/chat-wallpaper.model.js";
+import CallSessionModel from "../src/modules/voice/call.model.js";
 
 describe("organization persistence indexes", () => {
   test("enforces unique organization slugs", () => {
@@ -148,5 +149,24 @@ describe("organization persistence indexes", () => {
 
     assert.equal(uniquePreference?.[1].unique, true);
     assert.ok(conversationCleanup);
+  });
+
+  test("indexes call history, active participants, and timeline messages", () => {
+    const indexes = CallSessionModel.schema.indexes();
+    assert.ok(
+      indexes.some(([, options]) => options.name === "calls_by_conversation"),
+    );
+    assert.ok(
+      indexes.some(([, options]) => options.name === "active_calls_by_caller"),
+    );
+    assert.ok(
+      indexes.some(
+        ([, options]) => options.name === "active_calls_by_recipient",
+      ),
+    );
+    const timeline = indexes.find(
+      ([, options]) => options.name === "unique_call_timeline_message",
+    );
+    assert.equal(timeline?.[1].unique, true);
   });
 });

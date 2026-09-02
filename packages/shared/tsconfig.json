@@ -15,6 +15,7 @@
     "realtime/**/*.ts",
     "search/**/*.ts",
     "users/**/*.ts",
+    "voice/**/*.ts",
     "tests/**/*.ts"
   ]
 }

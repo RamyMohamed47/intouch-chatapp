@@ -14,6 +14,10 @@ import type {
   ReadReceiptEvent,
   SocketAcknowledgementResult,
   TypingEvent,
+  VoiceHeartbeatInput,
+  CallIncomingEvent,
+  CallUpdatedEvent,
+  VoiceOccupancyUpdatedEvent,
 } from "@intouch/shared/realtime";
 
 export type { ConversationSocketInput, OrganizationSocketInput };
@@ -47,6 +51,10 @@ export interface ClientToServerEvents {
     input: ConversationSocketInput,
     acknowledge: SocketAcknowledgement,
   ) => void;
+  "voice:heartbeat": (
+    input: VoiceHeartbeatInput,
+    acknowledge: SocketAcknowledgement,
+  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -66,6 +74,11 @@ export interface ServerToClientEvents {
   "presence:updated": (presence: PresenceEvent) => void;
   "typing:updated": (update: TypingEvent) => void;
   "read-receipt:updated": (receipt: ReadReceiptEvent) => void;
+  "call:incoming": (event: CallIncomingEvent) => void;
+  "call:updated": (event: CallUpdatedEvent) => void;
+  "voice-channel:occupancy-updated": (
+    event: VoiceOccupancyUpdatedEvent,
+  ) => void;
 }
 
 export type InterServerEvents = Record<string, never>;

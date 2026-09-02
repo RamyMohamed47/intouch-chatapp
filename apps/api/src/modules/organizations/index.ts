@@ -115,6 +115,26 @@ import {
   createUserAvatarRouter,
   type ObjectStorage,
 } from "../uploads/index.js";
+import {
+  createCallRouter,
+  createConversationVoiceRouter,
+  createMongooseCallSessionRepository,
+  createVoiceController,
+  createVoiceService,
+  createVoiceSessionRouter,
+  createVoiceWebhookRouter,
+  type VoiceCallJobs,
+  type VoiceMediaProvider,
+  type VoiceRealtime,
+  type VoiceService,
+  type VoiceSessionStore,
+  type VoiceTelemetry,
+} from "../voice/index.js";
+
+type OrganizationTelemetry = NonNullable<
+  SearchServiceDependencies["telemetry"]
+> &
+  VoiceTelemetry;
 
 export interface OrganizationModuleDependencies {
   conversationActivityRealtime: ConversationActivityRealtime;
@@ -132,9 +152,13 @@ export interface OrganizationModuleDependencies {
   searchProvider: SearchProvider;
   mail: MailOutboxJobFactory;
   storage: ObjectStorage;
-  telemetry?: SearchServiceDependencies["telemetry"];
+  telemetry?: OrganizationTelemetry;
   uploadDailyUserBytes: number;
   organizationStorageBytes: number;
+  voiceJobs: VoiceCallJobs;
+  voiceMedia: VoiceMediaProvider;
+  voiceRealtime: VoiceRealtime;
+  voiceSessions: VoiceSessionStore;
 }
 
 const createOrganizationModule = ({
@@ -156,6 +180,10 @@ const createOrganizationModule = ({
   telemetry,
   uploadDailyUserBytes,
   organizationStorageBytes,
+  voiceJobs,
+  voiceMedia,
+  voiceRealtime,
+  voiceSessions,
 }: OrganizationModuleDependencies) => {
   const createDirectMessageLimit = createAuthenticatedRateLimit(
     rateLimits,
@@ -212,6 +240,21 @@ const createOrganizationModule = ({
     RateLimitAction.ASSET_ACCESS,
     "Too many asset access attempts",
   );
+  const voiceJoinLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.VOICE_JOIN,
+    "Too many voice session attempts",
+  );
+  const voiceLifecycleLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.VOICE_LIFECYCLE,
+    "Too many call lifecycle requests",
+  );
+  const voiceModerateLimit = createAuthenticatedRateLimit(
+    rateLimits,
+    RateLimitAction.VOICE_MODERATE,
+    "Too many voice moderation requests",
+  );
   const categories = createMongooseCategoryRepository();
   const chatWallpapers = createMongooseChatWallpaperRepository();
   const conversations = createMongooseConversationRepository();
@@ -227,6 +270,7 @@ const createOrganizationModule = ({
     logger,
     realtime: conversationActivityRealtime,
   });
+  const calls = createMongooseCallSessionRepository();
   const organizations = createMongooseOrganizationRepository();
   const notifications = createMongooseNotificationRepository();
   const invitations = createMongooseInvitationRepository();
@@ -272,6 +316,7 @@ const createOrganizationModule = ({
     ...(telemetry ? { telemetry } : {}),
     users,
   });
+  const voiceServiceRef: { current?: VoiceService } = {};
   const service = createOrganizationService({
     organizations,
     memberships,
@@ -279,6 +324,11 @@ const createOrganizationModule = ({
     policy,
     realtime: conversationRealtime,
     notificationDelivery: notificationService,
+    voiceLifecycle: {
+      closeConversation: (conversationId) =>
+        voiceServiceRef.current?.closeConversation(conversationId) ??
+        Promise.resolve(),
+    },
   });
   const controller = createOrganizationController(service);
   const categoryService = createCategoryService({
@@ -301,7 +351,49 @@ const createOrganizationModule = ({
     unitOfWork,
     users,
     notificationDelivery: notificationService,
+    voiceOccupancy: {
+      list: (conversationIds) =>
+        voiceServiceRef.current?.occupancy.list(conversationIds) ??
+        Promise.resolve([]),
+    },
+    voiceLifecycle: {
+      closeConversation: (conversationId, providerRoomId) =>
+        voiceServiceRef.current?.closeConversation(
+          conversationId,
+          providerRoomId,
+        ) ?? Promise.resolve(),
+      retainOnlyUser: (conversationId, retainedUserId, actorUserId) =>
+        voiceServiceRef.current?.retainOnlyUser(
+          conversationId,
+          retainedUserId,
+          actorUserId,
+        ) ?? Promise.resolve(),
+      revokeUser: (conversationId, participantUserId, actorUserId) =>
+        voiceServiceRef.current?.revokeUser(
+          conversationId,
+          participantUserId,
+          actorUserId,
+        ) ?? Promise.resolve(),
+    },
   });
+  const voiceService = createVoiceService({
+    activity: conversationActivity,
+    audiences: createMongooseConversationActivityAudienceRepository(),
+    broadcaster: messageBroadcaster,
+    calls,
+    conversationPolicy,
+    conversations: conversationService,
+    jobs: voiceJobs,
+    logger,
+    media: voiceMedia,
+    memberships,
+    participants: conversationParticipants,
+    realtime: voiceRealtime,
+    sessions: voiceSessions,
+    ...(telemetry ? { telemetry } : {}),
+    unitOfWork,
+  });
+  voiceServiceRef.current = voiceService;
   const assets = createMongooseStoredAssetRepository();
   const uploadService = createUploadService({
     assets,
@@ -336,6 +428,7 @@ const createOrganizationModule = ({
     broadcaster: messageBroadcaster,
     conversationPolicy,
     conversations: conversationService,
+    calls: voiceService,
     messages,
     notificationDelivery: notificationService,
     reactions: messageReactionService,
@@ -396,6 +489,7 @@ const createOrganizationModule = ({
   const notificationController =
     createNotificationController(notificationService);
   const uploadController = createUploadController(uploadService);
+  const voiceController = createVoiceController(voiceService);
   const router = createOrganizationRouter(controller, requireAccessToken);
   const accessRouter = createOrganizationAccessRouter(
     membershipController,
@@ -479,15 +573,34 @@ const createOrganizationModule = ({
     requireAccessToken,
     mutateUploadLimit,
   );
+  const conversationVoiceRouter = createConversationVoiceRouter(
+    voiceController,
+    requireAccessToken,
+    voiceJoinLimit,
+    voiceModerateLimit,
+  );
+  const voiceSessionRouter = createVoiceSessionRouter(
+    voiceController,
+    requireAccessToken,
+    voiceJoinLimit,
+  );
+  const callRouter = createCallRouter(
+    voiceController,
+    requireAccessToken,
+    voiceLifecycleLimit,
+  );
+  const voiceWebhookRouter = createVoiceWebhookRouter(voiceController);
 
   return {
     accessRouter,
     assetRouter,
     assets,
     categoryRouter,
+    callRouter,
     conversationMessageRouter,
     conversationChatWallpaperRouter,
     conversationRouter,
+    conversationVoiceRouter,
     conversationService,
     directMessageRouter,
     invitationRouter,
@@ -503,6 +616,9 @@ const createOrganizationModule = ({
     userChatWallpaperRouter,
     uploadRouter,
     userAvatarRouter,
+    voiceService,
+    voiceSessionRouter,
+    voiceWebhookRouter,
   };
 };
 

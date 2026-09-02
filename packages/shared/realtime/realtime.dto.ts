@@ -12,6 +12,11 @@ import {
   organizationSocketSchema,
   socketIdentifierSchema,
 } from "./realtime.schema.js";
+import {
+  callIncomingEventSchema,
+  callUpdatedEventSchema,
+  voiceOccupancyUpdatedEventSchema,
+} from "../voice/index.js";
 
 export const socketHandshakeAuthSchema = z
   .object({ accessToken: z.string().min(1) })
@@ -92,6 +97,11 @@ export const conversationActivityEventSchema = z
   .strict();
 
 export const channelReadReceiptsChangedEventSchema = conversationSocketSchema;
+export {
+  callIncomingEventSchema,
+  callUpdatedEventSchema,
+  voiceOccupancyUpdatedEventSchema,
+};
 
 export type SocketHandshakeAuth = z.infer<typeof socketHandshakeAuthSchema>;
 export type SocketAcknowledgementResult = z.infer<
@@ -117,4 +127,9 @@ export type ConversationActivityEvent = z.infer<
 >;
 export type ChannelReadReceiptsChangedEvent = z.infer<
   typeof channelReadReceiptsChangedEventSchema
+>;
+export type CallIncomingEvent = z.infer<typeof callIncomingEventSchema>;
+export type CallUpdatedEvent = z.infer<typeof callUpdatedEventSchema>;
+export type VoiceOccupancyUpdatedEvent = z.infer<
+  typeof voiceOccupancyUpdatedEventSchema
 >;

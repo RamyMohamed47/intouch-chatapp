@@ -1,10 +1,12 @@
 import {
+  type ChannelKindValue,
   ConversationType,
   type ConversationTypeValue,
   type ConversationVisibilityType,
   type CreateConversationInput,
   type UpdateConversationInput,
 } from "@intouch/shared/conversations";
+import type { VoiceOccupancyDto } from "@intouch/shared/voice";
 import type { Types } from "mongoose";
 import type { MembershipRole } from "../memberships/index.js";
 import type { PublicUser } from "../user/user.types.js";
@@ -14,6 +16,8 @@ import type { PresenceStatusValue } from "../presence/presence.types.js";
 export interface Conversation {
   organizationId: Types.ObjectId;
   categoryId?: Types.ObjectId;
+  kind?: ChannelKindValue;
+  voiceRoomId?: string;
   name?: string;
   nameKey?: string;
   type: ConversationTypeValue;
@@ -31,6 +35,8 @@ export interface ConversationRecord {
   id: string;
   organizationId: string;
   categoryId?: string;
+  kind?: ChannelKindValue;
+  voiceRoomId?: string;
   name?: string;
   type: ConversationTypeValue;
   visibility?: ConversationVisibilityType;
@@ -43,10 +49,12 @@ export interface ConversationRecord {
 
 export type ChannelConversationRecord = ConversationRecord & {
   type: typeof ConversationType.CHANNEL;
+  kind: ChannelKindValue;
   categoryId: string;
   name: string;
   visibility: ConversationVisibilityType;
   position: number;
+  voiceRoomId?: string;
 };
 
 export type DirectConversationRecord = ConversationRecord & {
@@ -58,6 +66,7 @@ export const isChannelConversation = (
   conversation: ConversationRecord,
 ): conversation is ChannelConversationRecord =>
   conversation.type === "CHANNEL" &&
+  conversation.kind !== undefined &&
   conversation.categoryId !== undefined &&
   conversation.name !== undefined &&
   conversation.visibility !== undefined &&
@@ -75,6 +84,8 @@ export interface CreateChannelConversationRecordInput {
   name: string;
   nameKey: string;
   type: ConversationTypeValue;
+  kind: ChannelKindValue;
+  voiceRoomId?: string;
   visibility: ConversationVisibilityType;
   position: number;
 }
@@ -138,11 +149,12 @@ export interface ReadReceiptView {
 }
 
 export interface ConversationSummary extends ConversationRecord {
-  lastMessage: MessageRecord | null;
-  unreadCount: number;
-  readReceipt: ReadReceiptView | null;
+  lastMessage?: MessageRecord | null;
+  unreadCount?: number;
+  readReceipt?: ReadReceiptView | null;
   peerReadReceipt?: ReadReceiptView | null;
   peer?: Pick<PublicUser, "id" | "username" | "displayName" | "avatarUrl">;
+  occupancy?: VoiceOccupancyDto;
 }
 
 export type { CreateConversationInput, UpdateConversationInput };

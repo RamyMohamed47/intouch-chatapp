@@ -10,10 +10,16 @@ export const ConversationVisibility = {
   PRIVATE: "PRIVATE",
 } as const;
 
+export const ChannelKind = {
+  TEXT: "TEXT",
+  VOICE: "VOICE",
+} as const;
+
 export type ConversationTypeValue =
   (typeof ConversationType)[keyof typeof ConversationType];
 export type ConversationVisibilityType =
   (typeof ConversationVisibility)[keyof typeof ConversationVisibility];
+export type ChannelKindValue = (typeof ChannelKind)[keyof typeof ChannelKind];
 
 const mongoIdSchema = z
   .string()
@@ -24,6 +30,7 @@ export const createConversationSchema = z
   .object({
     categoryId: mongoIdSchema,
     name: conversationNameSchema,
+    kind: z.enum(ChannelKind).default(ChannelKind.TEXT),
     visibility: z
       .enum(ConversationVisibility)
       .default(ConversationVisibility.PUBLIC),
@@ -67,7 +74,13 @@ export const listDirectMessagesQuerySchema = z
   })
   .strict();
 
-export type CreateConversationInput = z.infer<typeof createConversationSchema>;
+export type CreateConversationInput = Omit<
+  z.infer<typeof createConversationSchema>,
+  "kind" | "visibility"
+> & {
+  kind?: ChannelKindValue;
+  visibility?: ConversationVisibilityType;
+};
 export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
 export type AddConversationParticipantInput = z.infer<
   typeof addConversationParticipantSchema

@@ -83,3 +83,15 @@ tokens.
 The standard Socket.IO Redis adapter uses Pub/Sub and does not replay events
 missed while a client or replica is disconnected. Durable state is reconciled
 from MongoDB after reconnects.
+
+## Voice Runtime State
+
+Redis owns distributed voice admission and ephemeral occupancy. Atomic scripts
+reserve one active session per user, enforce the ten-person voice-channel
+capacity, and support explicit session replacement without a cross-replica
+race. Session leases are refreshed by authenticated `voice:heartbeat` events.
+
+Keys contain opaque session and provider participant identities. They do not
+contain names, email addresses, LiveKit credentials, or provider room tokens.
+MongoDB remains authoritative for durable DM call history; periodic BullMQ
+reconciliation repairs missed or delayed LiveKit webhook transitions.

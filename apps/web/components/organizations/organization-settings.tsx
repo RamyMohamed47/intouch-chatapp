@@ -14,6 +14,7 @@ import {
   Trash2,
   UserMinus,
   UserPlus,
+  Volume2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type SubmitEvent } from "react";
@@ -614,9 +615,16 @@ function ChannelCard({
     >
       <div className="flex items-center gap-3">
         <span className="grid size-9 place-items-center rounded-xl bg-muted">
-          {channel.visibility === "PRIVATE" ? <Lock /> : <Hash />}
+          {channel.kind === "VOICE" ? (
+            <Volume2 />
+          ) : channel.visibility === "PRIVATE" ? (
+            <Lock />
+          ) : (
+            <Hash />
+          )}
         </span>
         <strong className="min-w-0 flex-1 truncate">{channel.name}</strong>
+        <Badge variant="outline">{channel.kind.toLowerCase()}</Badge>
         <Button
           type="button"
           variant="destructive"
@@ -698,6 +706,7 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
           const parsed = createConversationSchema.safeParse({
             name: getFormString(data, "name"),
             categoryId: getFormString(data, "categoryId"),
+            kind: getFormString(data, "kind"),
             visibility: getFormString(data, "visibility"),
           });
           if (!parsed.success) return setNotice(firstIssue(parsed.error));
@@ -705,7 +714,7 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
         }}
       >
         <h2 className="font-semibold">Create channel</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-[1fr_1fr_0.8fr_auto] md:items-end">
+        <div className="mt-5 grid gap-4 md:grid-cols-[1fr_1fr_0.7fr_0.7fr_auto] md:items-end">
           <div className="grid gap-2">
             <Label>Name</Label>
             <Input name="name" placeholder="team-updates" />
@@ -718,6 +727,13 @@ function ChannelSettings({ organizationId }: { organizationId: string }) {
                   {category.name}
                 </option>
               ))}
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label>Kind</Label>
+            <Select name="kind" defaultValue="TEXT">
+              <option value="TEXT">Text</option>
+              <option value="VOICE">Voice</option>
             </Select>
           </div>
           <div className="grid gap-2">

@@ -3,6 +3,7 @@ import { after, before, describe, test } from "node:test";
 import http from "node:http";
 
 import {
+  ChannelKind,
   ConversationType,
   ConversationVisibility,
 } from "@intouch/shared/conversations";
@@ -49,6 +50,7 @@ const conversation = {
   categoryId,
   name: "General",
   type: ConversationType.CHANNEL,
+  kind: ChannelKind.TEXT,
   visibility: ConversationVisibility.PUBLIC,
   position: 0,
   createdAt: now,

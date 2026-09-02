@@ -21,6 +21,10 @@ const validEnv: NodeJS.ProcessEnv = {
   MAIL_OUTBOX_ENCRYPTION_SECRET:
     "a-mail-outbox-encryption-secret-over-32-bytes",
   MAIL_PROVIDER: "smtp",
+  VOICE_PROVIDER: "livekit",
+  LIVEKIT_URL: "wss://intouch-test.livekit.cloud",
+  LIVEKIT_API_KEY: "livekit-api-key",
+  LIVEKIT_API_SECRET: "a-livekit-api-secret-that-is-over-32-bytes",
   REDIS_URL: "redis://redis.internal:6379",
   RUNTIME_STATE_PROVIDER: "redis",
   SEARCH_PROVIDER: "native",
@@ -61,6 +65,12 @@ describe("auth environment configuration", () => {
     assert.equal(config.uploadDailyUserBytes, 524_288_000);
     assert.equal(config.organizationStorageBytes, 5_368_709_120);
     assert.deepEqual(config.observability, { provider: "disabled" });
+    assert.deepEqual(config.voice, {
+      provider: "livekit",
+      url: "wss://intouch-test.livekit.cloud",
+      apiKey: "livekit-api-key",
+      apiSecret: "a-livekit-api-secret-that-is-over-32-bytes",
+    });
     assert.equal(config.trustProxy, "loopback");
     assert.equal(config.mailTransport.provider, "smtp");
     assert.equal(config.backgroundJobsProvider, "bullmq");
@@ -83,6 +93,27 @@ describe("auth environment configuration", () => {
       keyPrefix: "intouch:development:v2",
     });
     assert.equal(config.backgroundJobsProvider, "polling");
+  });
+
+  test("defaults voice to disabled locally and validates LiveKit settings", () => {
+    assert.deepEqual(
+      loadConfig({
+        ...validEnv,
+        VOICE_PROVIDER: undefined,
+        LIVEKIT_URL: undefined,
+        LIVEKIT_API_KEY: undefined,
+        LIVEKIT_API_SECRET: undefined,
+      }).voice,
+      { provider: "disabled" },
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnv, LIVEKIT_URL: "https://livekit.test" }),
+      /must use wss/,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnv, LIVEKIT_API_SECRET: "too-short" }),
+      /at least 32 bytes/,
+    );
   });
 
   test("validates the background job provider against runtime state", () => {

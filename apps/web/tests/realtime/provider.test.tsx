@@ -359,6 +359,62 @@ describe("RealtimeProvider", () => {
       }),
     );
 
+    const callId = "650000000000000000000010";
+    const callMessageId = "650000000000000000000011";
+    act(() => {
+      fakeSocket.trigger("message:created", {
+        id: callMessageId,
+        conversationId,
+        senderId: user.id,
+        content: null,
+        messageType: "CALL",
+        editedAt: null,
+        deletedAt: null,
+        createdAt: "2026-08-05T10:07:00.000Z",
+        updatedAt: "2026-08-05T10:07:00.000Z",
+        call: {
+          id: callId,
+          callerUserId: user.id,
+          recipientUserId: directConversation.peer.id,
+          status: "RINGING",
+          endReason: null,
+          startedAt: "2026-08-05T10:07:00.000Z",
+          answeredAt: null,
+          endedAt: null,
+          durationSeconds: null,
+        },
+      });
+      fakeSocket.trigger("call:updated", {
+        call: {
+          id: callId,
+          organizationId,
+          conversationId,
+          callerUserId: user.id,
+          recipientUserId: directConversation.peer.id,
+          status: "ENDED",
+          endReason: "MISSED",
+          startedAt: "2026-08-05T10:07:00.000Z",
+          answeredAt: null,
+          endedAt: "2026-08-05T10:07:30.000Z",
+          durationSeconds: null,
+        },
+      });
+    });
+    await waitFor(() => {
+      const callMessage = queryClient
+        .getQueryData<InfiniteData<MessageListResponse>>(
+          queryKeys.conversations.messages(conversationId),
+        )
+        ?.pages.flatMap(({ messages }) => messages)
+        .find(({ id }) => id === callMessageId);
+      expect(callMessage?.call?.status).toBe("ENDED");
+      expect(
+        queryClient.getQueryData<DirectConversationDto>(
+          queryKeys.conversations.detail(conversationId),
+        )?.id,
+      ).toBe(conversationId);
+    });
+
     act(() => {
       fakeSocket.trigger("conversation:access-revoked", { conversationId });
     });

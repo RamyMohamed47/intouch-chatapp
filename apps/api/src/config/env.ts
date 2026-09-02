@@ -44,6 +44,15 @@ export type ObservabilityConfig =
       serviceName: string;
     };
 
+export type VoiceConfig =
+  | { provider: "disabled" }
+  | {
+      provider: "livekit";
+      url: string;
+      apiKey: string;
+      apiSecret: string;
+    };
+
 export interface AppConfig {
   accessTokenAudience: string;
   accessTokenIssuer: string;
@@ -76,6 +85,7 @@ export interface AppConfig {
   organizationStorageBytes: number;
   observability: ObservabilityConfig;
   runtimeState: RuntimeStateConfig;
+  voice: VoiceConfig;
 }
 
 const requireEnv = (
@@ -103,7 +113,10 @@ const requireEnv = (
     | "R2_ACCESS_KEY_ID"
     | "R2_SECRET_ACCESS_KEY"
     | "R2_BUCKET_NAME"
-    | "REDIS_URL",
+    | "REDIS_URL"
+    | "LIVEKIT_URL"
+    | "LIVEKIT_API_KEY"
+    | "LIVEKIT_API_SECRET",
 ) => {
   const value = env[name];
 
@@ -300,6 +313,39 @@ const parseBackgroundJobsProvider = (
     );
   }
   return provider;
+};
+
+const parseVoice = (
+  env: NodeJS.ProcessEnv,
+  isProduction: boolean,
+): VoiceConfig => {
+  const provider =
+    env.VOICE_PROVIDER ?? (isProduction ? undefined : "disabled");
+  if (provider === undefined) {
+    throw new Error("VOICE_PROVIDER env var is required in production");
+  }
+  if (provider === "disabled") {
+    if (isProduction) {
+      throw new Error("VOICE_PROVIDER must be livekit in production");
+    }
+    return { provider };
+  }
+  if (provider !== "livekit") {
+    throw new Error("VOICE_PROVIDER must be livekit or disabled");
+  }
+  const url = new URL(requireEnv(env, "LIVEKIT_URL"));
+  if (url.protocol !== "wss:") {
+    throw new Error("LIVEKIT_URL must use wss://");
+  }
+  return {
+    provider,
+    url: url.toString().replace(/\/$/, ""),
+    apiKey: requireEnv(env, "LIVEKIT_API_KEY"),
+    apiSecret: validateSecret(
+      requireEnv(env, "LIVEKIT_API_SECRET"),
+      "LIVEKIT_API_SECRET",
+    ),
+  };
 };
 
 const parseOptionalHttpsUrl = (
@@ -546,6 +592,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     ),
     observability: parseObservabilityConfig(env),
     runtimeState,
+    voice: parseVoice(env, isProduction),
     trustProxy: isProduction ? 1 : "loopback",
     webAppUrl: parseWebAppUrl(
       requireEnv(env, "WEB_APP_URL"),

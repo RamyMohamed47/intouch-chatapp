@@ -6,6 +6,7 @@ export { getObservabilityMetrics } from "./observability.metrics.js";
 export {
   instrumentMailTransport,
   instrumentObjectStorage,
+  instrumentVoiceMediaProvider,
 } from "./observability.providers.js";
 export {
   initializeObservability,

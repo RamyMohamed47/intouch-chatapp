@@ -10,6 +10,7 @@ import type { MembershipService } from "../memberships/index.js";
 import { MessageNotFoundError } from "../message/message.errors.js";
 import type { MessageRepository } from "../message/message.repository.js";
 import type { MessageRecord } from "../message/message.types.js";
+import { MessageType } from "../message/message.types.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
 import type { NotificationService } from "../notifications/index.js";
 import type { UserRepository } from "../user/user.repository.js";
@@ -49,6 +50,12 @@ export interface MessageReactionServiceDependencies {
 }
 
 const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+const assertReactable = (message: MessageRecord) => {
+  if (message.deletedAt || message.messageType === MessageType.CALL) {
+    throw new MessageReactionConflictError();
+  }
+};
 
 const createMessageReactionService = ({
   conversations,
@@ -136,6 +143,7 @@ const createMessageReactionService = ({
   const findAccessibleMessage = async (userId: string, messageId: string) => {
     const message = await messages.findById(messageId);
     if (!message) throw new MessageNotFoundError();
+    assertReactable(message);
     const conversation = await conversations.getAccessible(
       userId,
       message.conversationId,
@@ -181,7 +189,7 @@ const createMessageReactionService = ({
       const result = await unitOfWork.run(async (context) => {
         const message = await context.messages.findById(messageId);
         if (!message) throw new MessageNotFoundError();
-        if (message.deletedAt) throw new MessageReactionConflictError();
+        assertReactable(message);
         const conversation = await conversations.getAccessibleInContext(
           userId,
           message.conversationId,
@@ -254,6 +262,7 @@ const createMessageReactionService = ({
       const result = await unitOfWork.run(async (context) => {
         const message = await context.messages.findById(messageId);
         if (!message) throw new MessageNotFoundError();
+        assertReactable(message);
         const conversation = await conversations.getAccessibleInContext(
           userId,
           message.conversationId,

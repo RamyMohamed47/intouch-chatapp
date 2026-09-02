@@ -55,6 +55,10 @@
     "./realtime": {
       "types": "./dist/realtime/index.d.ts",
       "import": "./dist/realtime/index.js"
+    },
+    "./voice": {
+      "types": "./dist/voice/index.d.ts",
+      "import": "./dist/voice/index.js"
     }
   },
   "scripts": {

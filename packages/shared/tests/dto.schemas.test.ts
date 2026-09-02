@@ -167,6 +167,7 @@ describe("shared DTO schemas", () => {
         id,
         organizationId: id,
         categoryId: id,
+        kind: "TEXT",
         name: "general",
         type: ConversationType.CHANNEL,
         visibility: ConversationVisibility.PUBLIC,

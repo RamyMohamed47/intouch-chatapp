@@ -1,5 +1,6 @@
 export {
   addConversationParticipantSchema,
+  ChannelKind,
   ConversationType,
   ConversationVisibility,
   createConversationSchema,
@@ -10,6 +11,7 @@ export {
 } from "./conversation.schema.js";
 export type {
   AddConversationParticipantInput,
+  ChannelKindValue,
   ConversationTypeValue,
   ConversationVisibilityType,
   CreateConversationInput,
@@ -30,6 +32,8 @@ export {
   directMessageResponseSchema,
   participantListResponseSchema,
   participantResponseSchema,
+  textChannelConversationDtoSchema,
+  voiceChannelConversationDtoSchema,
 } from "./conversation.dto.js";
 export type {
   ChannelConversationDto,
@@ -43,4 +47,6 @@ export type {
   DirectMessageResponse,
   ParticipantListResponse,
   ParticipantResponse,
+  TextChannelConversationDto,
+  VoiceChannelConversationDto,
 } from "./conversation.dto.js";

@@ -572,6 +572,15 @@ provider retries before MongoDB schedules bounded backoff. `/ready` reports
 `503` when the selected queue runtime is not ready. No separate worker Railway
 service, migration, or queue dashboard is required.
 
+Voice requires a LiveKit Cloud project. Configure the API service with
+`VOICE_PROVIDER=livekit`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and the backend-only
+`LIVEKIT_API_SECRET`. Configure the web service with the same public WSS URL as
+`NEXT_PUBLIC_LIVEKIT_URL`. Point the LiveKit webhook directly to
+`https://<api-origin>/api/v1/integrations/livekit/webhook`; do not route it
+through the frontend proxy. Run `npm run migrate:channel-kinds` once before
+using voice channels against an existing database. LiveKit hosts WebRTC media,
+so Railway needs no UDP or TURN configuration.
+
 Railway plans that block outbound SMTP must configure `MAIL_PROVIDER=brevo`
 with `BREVO_API_KEY` and a Brevo-verified `MAIL_FROM_ADDRESS`. Upgrading to a
 plan that permits SMTP is not required when the HTTPS provider is selected.

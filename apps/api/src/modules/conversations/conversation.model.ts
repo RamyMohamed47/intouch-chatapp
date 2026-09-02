@@ -1,4 +1,5 @@
 import {
+  ChannelKind,
   ConversationType,
   ConversationVisibility,
 } from "@intouch/shared/conversations";
@@ -19,6 +20,24 @@ const conversationSchema = new Schema<Conversation>(
       required(this: Conversation) {
         return this.type === ConversationType.CHANNEL;
       },
+    },
+    kind: {
+      type: String,
+      enum: Object.values(ChannelKind),
+      default: ChannelKind.TEXT,
+      required(this: Conversation) {
+        return this.type === ConversationType.CHANNEL;
+      },
+    },
+    voiceRoomId: {
+      type: String,
+      required(this: Conversation) {
+        return (
+          this.type === ConversationType.CHANNEL &&
+          this.kind === ChannelKind.VOICE
+        );
+      },
+      select: false,
     },
     name: {
       type: String,
@@ -94,6 +113,14 @@ conversationSchema.index(
     name: "unique_channel_name_per_category",
     unique: true,
     partialFilterExpression: { type: ConversationType.CHANNEL },
+  },
+);
+conversationSchema.index(
+  { voiceRoomId: 1 },
+  {
+    name: "unique_voice_room_id",
+    unique: true,
+    partialFilterExpression: { voiceRoomId: { $type: "string" } },
   },
 );
 conversationSchema.index(

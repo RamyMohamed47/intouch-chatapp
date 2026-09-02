@@ -19,7 +19,8 @@
     "realtime/**/*.ts",
     "search/**/*.ts",
     "uploads/**/*.ts",
-    "users/**/*.ts"
+    "users/**/*.ts",
+    "voice/**/*.ts"
   ],
   "exclude": ["tests/**/*.ts"]
 }

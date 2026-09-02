@@ -6,7 +6,9 @@ import {
   readReceiptDtoSchema,
 } from "../messages/index.js";
 import { publicUserSummaryDtoSchema } from "../users/index.js";
+import { voiceOccupancyDtoSchema } from "../voice/index.js";
 import {
+  ChannelKind,
   ConversationType,
   ConversationVisibility,
 } from "./conversation.schema.js";
@@ -17,7 +19,7 @@ const conversationSummaryShape = {
   readReceipt: readReceiptDtoSchema.nullable(),
 };
 
-export const channelConversationDtoSchema = z.object({
+const channelConversationBase = {
   id: identifierDtoSchema,
   organizationId: identifierDtoSchema,
   categoryId: identifierDtoSchema,
@@ -27,10 +29,26 @@ export const channelConversationDtoSchema = z.object({
   position: z.number().int().nonnegative(),
   createdAt: dateTimeDtoSchema,
   updatedAt: dateTimeDtoSchema,
+};
+
+export const textChannelConversationDtoSchema = z.object({
+  ...channelConversationBase,
+  kind: z.literal(ChannelKind.TEXT),
   lastMessage: conversationSummaryShape.lastMessage.optional(),
   unreadCount: conversationSummaryShape.unreadCount.optional(),
   readReceipt: conversationSummaryShape.readReceipt.optional(),
 });
+
+export const voiceChannelConversationDtoSchema = z.object({
+  ...channelConversationBase,
+  kind: z.literal(ChannelKind.VOICE),
+  occupancy: voiceOccupancyDtoSchema,
+});
+
+export const channelConversationDtoSchema = z.union([
+  textChannelConversationDtoSchema,
+  voiceChannelConversationDtoSchema,
+]);
 
 export const directConversationDtoSchema = z.object({
   id: identifierDtoSchema,
@@ -43,8 +61,9 @@ export const directConversationDtoSchema = z.object({
   updatedAt: dateTimeDtoSchema,
 });
 
-export const conversationDtoSchema = z.discriminatedUnion("type", [
-  channelConversationDtoSchema,
+export const conversationDtoSchema = z.union([
+  textChannelConversationDtoSchema,
+  voiceChannelConversationDtoSchema,
   directConversationDtoSchema,
 ]);
 
@@ -89,6 +108,12 @@ export const participantListResponseSchema = z.object({
 
 export type ChannelConversationDto = z.infer<
   typeof channelConversationDtoSchema
+>;
+export type TextChannelConversationDto = z.infer<
+  typeof textChannelConversationDtoSchema
+>;
+export type VoiceChannelConversationDto = z.infer<
+  typeof voiceChannelConversationDtoSchema
 >;
 export type DirectConversationDto = z.infer<typeof directConversationDtoSchema>;
 export type ConversationDto = z.infer<typeof conversationDtoSchema>;

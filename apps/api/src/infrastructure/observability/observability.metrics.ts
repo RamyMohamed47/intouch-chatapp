@@ -8,6 +8,11 @@ import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
 
 type ReadinessCheck = () => boolean;
 type QueueDepthCheck = () => Promise<Record<string, number>>;
+type VoiceStateCheck = () => Promise<{
+  activeCalls: number;
+  channelParticipants: number;
+  occupiedChannels: number;
+}>;
 
 const activityRoutes = new Map<string, string>([
   ["POST /api/v1/auth/login", "auth.login"],
@@ -37,9 +42,12 @@ class InTouchMetrics {
   readonly providerDuration: Histogram;
   readonly backgroundJobs: Counter;
   readonly backgroundJobDuration: Histogram;
+  readonly voiceCalls: Counter;
+  readonly voiceJoinDuration: Histogram;
 
   private readonly readinessChecks = new Map<string, ReadinessCheck>();
   private readonly queueDepthChecks = new Map<string, QueueDepthCheck>();
+  private voiceStateCheck: VoiceStateCheck | undefined;
   private readonly eventLoop: IntervalHistogram;
 
   constructor() {
@@ -90,6 +98,48 @@ class InTouchMetrics {
         unit: "s",
       },
     );
+    this.voiceCalls = meter.createCounter("intouch.voice.calls", {
+      description: "Voice call lifecycle outcomes",
+    });
+    this.voiceJoinDuration = meter.createHistogram(
+      "intouch.voice.join.duration",
+      {
+        description: "Voice credential issuance latency",
+        unit: "s",
+      },
+    );
+
+    meter
+      .createObservableGauge("intouch.voice.active_sessions", {
+        description: "Connected voice sessions by kind",
+      })
+      .addCallback(async (result) => {
+        try {
+          const state = await this.voiceStateCheck?.();
+          if (!state) return;
+          result.observe(state.activeCalls, { kind: "call" });
+          result.observe(state.channelParticipants, { kind: "voice_channel" });
+        } catch {
+          // Runtime-state failures are reported through readiness and logs.
+        }
+      });
+
+    meter
+      .createObservableGauge("intouch.voice.channel_occupancy", {
+        description: "Aggregate occupied voice channels and participants",
+      })
+      .addCallback(async (result) => {
+        try {
+          const state = await this.voiceStateCheck?.();
+          if (!state) return;
+          result.observe(state.channelParticipants, {
+            measure: "participants",
+          });
+          result.observe(state.occupiedChannels, { measure: "rooms" });
+        } catch {
+          // Runtime-state failures are reported through readiness and logs.
+        }
+      });
 
     meter
       .createObservableGauge("intouch.background_jobs.queue_depth", {
@@ -178,6 +228,13 @@ class InTouchMetrics {
     return () => this.queueDepthChecks.delete(queue);
   }
 
+  registerVoiceState(check: VoiceStateCheck) {
+    this.voiceStateCheck = check;
+    return () => {
+      if (this.voiceStateCheck === check) this.voiceStateCheck = undefined;
+    };
+  }
+
   recordHttpRequest(input: {
     durationSeconds: number;
     method: string;
@@ -237,6 +294,21 @@ class InTouchMetrics {
     } satisfies Attributes;
     this.backgroundJobs.add(1, attributes);
     this.backgroundJobDuration.record(input.durationSeconds, attributes);
+  }
+
+  recordVoiceCall(input: { event: "ended" | "started"; outcome: string }) {
+    this.voiceCalls.add(1, input);
+  }
+
+  recordVoiceJoin(input: {
+    durationSeconds: number;
+    kind: "call" | "voice_channel";
+    result: "failure" | "success";
+  }) {
+    this.voiceJoinDuration.record(input.durationSeconds, {
+      kind: input.kind,
+      result: input.result,
+    });
   }
 
   close() {

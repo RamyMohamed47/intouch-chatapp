@@ -17,6 +17,9 @@ import {
   socketAcknowledgementSchema,
   socketConnectionErrorSchema,
   typingEventSchema,
+  callIncomingEventSchema,
+  callUpdatedEventSchema,
+  voiceOccupancyUpdatedEventSchema,
   type MessageEvent,
   type SocketAcknowledgementResult,
 } from "@intouch/shared/realtime";
@@ -24,6 +27,7 @@ import {
   NotificationChangeKind,
   NotificationType,
 } from "@intouch/shared/notifications";
+import type { CallDto } from "@intouch/shared/voice";
 import type { OrganizationMemberDto } from "@intouch/shared/memberships";
 import type { MessageListResponse } from "@intouch/shared/messages";
 import {
@@ -75,6 +79,10 @@ interface RealtimeContextValue {
   ) => Promise<SocketAcknowledgementResult>;
   startTyping: (conversationId: string) => void;
   stopTyping: (conversationId: string) => void;
+  incomingCall: CallDto | null;
+  latestCall: CallDto | null;
+  dismissIncomingCall: () => void;
+  heartbeatVoice: (sessionId: string) => Promise<SocketAcknowledgementResult>;
 }
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
@@ -114,6 +122,18 @@ const emitOrganization = (
       return;
     }
     socket.emit(event, { organizationId }, (result) => {
+      const parsed = socketAcknowledgementSchema.safeParse(result);
+      resolve(parsed.success ? parsed.data : unavailable);
+    });
+  });
+
+const emitVoiceHeartbeat = (socket: InTouchSocket | null, sessionId: string) =>
+  new Promise<SocketAcknowledgementResult>((resolve) => {
+    if (!socket?.connected) {
+      resolve(unavailable);
+      return;
+    }
+    socket.emit("voice:heartbeat", { sessionId }, (result) => {
       const parsed = socketAcknowledgementSchema.safeParse(result);
       resolve(parsed.success ? parsed.data : unavailable);
     });
@@ -162,6 +182,8 @@ export function RealtimeProvider({
   const [revokedConversationId, setRevokedConversationId] = useState<
     string | null
   >(null);
+  const [incomingCall, setIncomingCall] = useState<CallDto | null>(null);
+  const [latestCall, setLatestCall] = useState<CallDto | null>(null);
   const joinedConversationIdsRef = useRef(new Set<string>());
   const {
     applyTypingUpdate,
@@ -176,6 +198,8 @@ export function RealtimeProvider({
     if (status !== "authenticated" || !accessToken) {
       joinedConversationIdsRef.current.clear();
       clearAllTyping();
+      setIncomingCall(null);
+      setLatestCall(null);
       setSocket((current) => {
         current?.disconnect();
         return null;
@@ -494,6 +518,93 @@ export function RealtimeProvider({
           mergePeerReceiptIntoDirectMessagePage(data, parsed.data, user.id),
       );
     });
+    nextSocket.on("call:incoming", (raw) => {
+      const parsed = callIncomingEventSchema.safeParse(raw);
+      if (!parsed.success || parsed.data.call.recipientUserId !== user?.id) {
+        return;
+      }
+      setIncomingCall(parsed.data.call);
+      setLatestCall(parsed.data.call);
+      queryClient.setQueryData(
+        queryKeys.voice.call(parsed.data.call.id),
+        parsed.data.call,
+      );
+    });
+    nextSocket.on("call:updated", (raw) => {
+      const parsed = callUpdatedEventSchema.safeParse(raw);
+      if (!parsed.success) return;
+      const call = parsed.data.call;
+      setLatestCall(call);
+      setIncomingCall((current) =>
+        current?.id === call.id && call.status === "ENDED" ? null : current,
+      );
+      queryClient.setQueryData(queryKeys.voice.call(call.id), call);
+      queryClient.setQueriesData<InfiniteData<MessageListResponse>>(
+        {
+          predicate: (query) =>
+            query.queryKey[0] === "conversations" &&
+            query.queryKey[2] === "messages" &&
+            query.queryKey.length === 3,
+        },
+        (data) => {
+          if (!data) return data;
+          return {
+            ...data,
+            pages: data.pages.map((page) => ({
+              ...page,
+              messages: page.messages.map((message) =>
+                message.call?.id === call.id ? { ...message, call } : message,
+              ),
+            })),
+          };
+        },
+      );
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "organizations" &&
+          query.queryKey[1] === call.organizationId &&
+          ["direct-messages", "direct-message-preview"].includes(
+            String(query.queryKey[2]),
+          ),
+      });
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: queryKeys.conversations.detail(call.conversationId),
+      });
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "conversations" &&
+          query.queryKey[1] === call.conversationId &&
+          query.queryKey[2] === "messages" &&
+          query.queryKey[3] === "context",
+      });
+    });
+    nextSocket.on("voice-channel:occupancy-updated", (raw) => {
+      const parsed = voiceOccupancyUpdatedEventSchema.safeParse(raw);
+      if (!parsed.success) return;
+      queryClient.setQueriesData<ConversationDto[]>(
+        {
+          predicate: (query) =>
+            query.queryKey[0] === "organizations" &&
+            query.queryKey[2] === "channels",
+        },
+        (conversations) =>
+          conversations?.map((conversation) =>
+            conversation.id === parsed.data.conversationId &&
+            conversation.type === "CHANNEL" &&
+            conversation.kind === "VOICE"
+              ? { ...conversation, occupancy: parsed.data }
+              : conversation,
+          ),
+      );
+      queryClient.setQueryData<ConversationDto>(
+        queryKeys.conversations.detail(parsed.data.conversationId),
+        (conversation) =>
+          conversation?.type === "CHANNEL" && conversation.kind === "VOICE"
+            ? { ...conversation, occupancy: parsed.data }
+            : conversation,
+      );
+    });
     nextSocket.on("conversation:access-revoked", ({ conversationId }) => {
       for (const [messageId, pending] of reactionTimers) {
         if (pending.conversationId === conversationId) {
@@ -598,6 +709,11 @@ export function RealtimeProvider({
     },
     [socket],
   );
+  const dismissIncomingCall = useCallback(() => setIncomingCall(null), []);
+  const heartbeatVoice = useCallback(
+    (sessionId: string) => emitVoiceHeartbeat(socket, sessionId),
+    [socket],
+  );
   return (
     <RealtimeContext.Provider
       value={{
@@ -610,6 +726,10 @@ export function RealtimeProvider({
         leaveConversation,
         startTyping,
         stopTyping,
+        incomingCall,
+        latestCall,
+        dismissIncomingCall,
+        heartbeatVoice,
       }}
     >
       {children}

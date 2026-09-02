@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
-import { ConversationVisibility } from "@intouch/shared/conversations";
+import {
+  ChannelKind,
+  conversationResponseSchema,
+  ConversationVisibility,
+} from "@intouch/shared/conversations";
 import { ChatWallpaperId } from "@intouch/shared/chat-wallpapers";
 import { OrganizationVisibility } from "@intouch/shared/organizations";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
@@ -46,6 +50,7 @@ import { UserModel } from "../src/modules/user/user.model.js";
 import ConversationReadStateModel from "../src/modules/read-receipts/read-receipt.model.js";
 import createMongooseConversationReadStateRepository from "../src/modules/read-receipts/read-receipt.repository.js";
 import { createMongooseMailOutboxRepository } from "../src/modules/mail/index.js";
+import { backfillChannelKinds } from "../src/migrations/backfillChannelKinds.js";
 
 const ownerId = "507f1f77bcf86cd799439011";
 const memberId = "507f1f77bcf86cd799439012";
@@ -399,6 +404,49 @@ describe("category and conversation transactions", () => {
     assert.equal(conversation.position, 0);
     assert.equal(await ConversationModel.countDocuments(), 1);
     assert.equal(await ConversationParticipantModel.countDocuments(), 1);
+  });
+
+  test("hydrates voice-channel occupancy after creation and update", async () => {
+    const { category, conversationService, organization } =
+      await createOrganizationAndCategory();
+    const conversation = await conversationService.create(
+      ownerId,
+      organization.id,
+      {
+        categoryId: category.id,
+        kind: ChannelKind.VOICE,
+        name: "Daily Standup",
+        visibility: ConversationVisibility.PUBLIC,
+      },
+    );
+
+    assert.equal(conversation.kind, ChannelKind.VOICE);
+    assert.deepEqual(conversation.occupancy, {
+      conversationId: conversation.id,
+      capacity: 10,
+      participantUserIds: [],
+      participants: [],
+    });
+    assert.doesNotThrow(() =>
+      conversationResponseSchema.parse({ conversation }),
+    );
+
+    const updated = await conversationService.update(ownerId, conversation.id, {
+      name: "Team Standup",
+    });
+
+    assert.equal(updated.name, "Team Standup");
+    assert.deepEqual(updated.occupancy, {
+      conversationId: conversation.id,
+      capacity: 10,
+      participantUserIds: [],
+      participants: [],
+    });
+    assert.doesNotThrow(() =>
+      conversationResponseSchema.parse({
+        conversation: updated,
+      }),
+    );
   });
 
   test("summarizes only current eligible channel readers", async () => {
@@ -780,5 +828,29 @@ describe("category and conversation transactions", () => {
     assert.equal(await MessageModel.countDocuments(), 0);
     assert.equal(await MessageReactionModel.countDocuments(), 0);
     assert.equal(await ChatWallpaperPreferenceModel.countDocuments(), 0);
+  });
+
+  test("backfills legacy channels as text idempotently", async () => {
+    const id = new mongoose.Types.ObjectId();
+    await ConversationModel.collection.insertOne({
+      _id: id,
+      organizationId: new mongoose.Types.ObjectId(),
+      categoryId: new mongoose.Types.ObjectId(),
+      name: "Legacy",
+      nameKey: "legacy",
+      type: "CHANNEL",
+      visibility: "PUBLIC",
+      position: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const first = await backfillChannelKinds();
+    const second = await backfillChannelKinds();
+    const migrated = await ConversationModel.collection.findOne({ _id: id });
+
+    assert.equal(first.modifiedCount, 1);
+    assert.equal(second.modifiedCount, 0);
+    assert.equal(migrated?.kind, ChannelKind.TEXT);
   });
 });

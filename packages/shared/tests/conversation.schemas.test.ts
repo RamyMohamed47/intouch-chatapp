@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  ChannelKind,
   ConversationVisibility,
   addConversationParticipantSchema,
   createConversationSchema,
@@ -18,6 +19,7 @@ describe("shared conversation schemas", () => {
       createConversationSchema.parse({ categoryId, name: "  General  " }),
       {
         categoryId,
+        kind: ChannelKind.TEXT,
         name: "General",
         visibility: ConversationVisibility.PUBLIC,
       },

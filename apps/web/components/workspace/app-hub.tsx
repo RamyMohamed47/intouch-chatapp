@@ -70,7 +70,9 @@ export function AppHub() {
       channels,
       directMessages,
       unread: conversations.reduce(
-        (total, conversation) => total + (conversation.unreadCount ?? 0),
+        (total, conversation) =>
+          total +
+          ("unreadCount" in conversation ? (conversation.unreadCount ?? 0) : 0),
         0,
       ),
     };
@@ -78,12 +80,20 @@ export function AppHub() {
   const recent = cards
     .flatMap(({ organization, channels, directMessages }) =>
       [...channels, ...directMessages]
-        .filter((conversation) => conversation.lastMessage)
+        .filter(
+          (conversation) =>
+            "lastMessage" in conversation && conversation.lastMessage,
+        )
         .map((conversation) => ({ organization, conversation })),
     )
     .sort((left, right) =>
-      right.conversation.lastMessage!.createdAt.localeCompare(
-        left.conversation.lastMessage!.createdAt,
+      ("lastMessage" in right.conversation
+        ? right.conversation.lastMessage!.createdAt
+        : ""
+      ).localeCompare(
+        "lastMessage" in left.conversation
+          ? left.conversation.lastMessage!.createdAt
+          : "",
       ),
     )
     .slice(0, 5);
@@ -205,7 +215,11 @@ export function AppHub() {
               </div>
               <div className="mt-5 grid gap-2">
                 {recent.map(({ organization, conversation }) => {
-                  const message = conversation.lastMessage!;
+                  const message =
+                    "lastMessage" in conversation
+                      ? conversation.lastMessage!
+                      : null;
+                  if (!message) return null;
                   const isChannel = conversation.type === "CHANNEL";
                   const href = isChannel
                     ? `/app/${organization.id}/channels/${conversation.id}`

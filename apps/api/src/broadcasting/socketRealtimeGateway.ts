@@ -10,6 +10,9 @@ import {
   presenceEventSchema,
   readReceiptEventSchema,
   typingEventSchema,
+  callIncomingEventSchema,
+  callUpdatedEventSchema,
+  voiceOccupancyUpdatedEventSchema,
 } from "@intouch/shared/realtime";
 import type { InTouchSocketServer } from "../contracts/socket.js";
 import type { ConversationRealtime } from "../modules/conversations/conversation.realtime.js";
@@ -21,6 +24,7 @@ import type { MessageReactionRealtime } from "../modules/message-reactions/messa
 import type { NotificationRealtime } from "../modules/notifications/notification.realtime.js";
 import type { TypingRealtime } from "../modules/typing/typing.realtime.js";
 import type { TypingService } from "../modules/typing/typing.service.js";
+import type { VoiceRealtime } from "../modules/voice/index.js";
 
 const roomName = (conversationId: string) => `conversation:${conversationId}`;
 const organizationRoomName = (organizationId: string) =>
@@ -37,7 +41,8 @@ export interface SocketRealtimeGateway
     MembershipRealtime,
     PresenceRealtime,
     ReadReceiptRealtime,
-    TypingRealtime {
+    TypingRealtime,
+    VoiceRealtime {
   setSocketServer(io: InTouchSocketServer): void;
   setTypingService(
     typing: Pick<
@@ -133,6 +138,28 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       io?.to(roomName(receipt.conversationId)).emit(
         "read-receipt:updated",
         readReceiptEventSchema.parse(receipt),
+      );
+    },
+
+    callIncoming(recipientUserId, event) {
+      io?.to(userRoomName(recipientUserId)).emit(
+        "call:incoming",
+        callIncomingEventSchema.parse(event),
+      );
+    },
+
+    callUpdated(userIds, event) {
+      const rooms = [...new Set(userIds)].map(userRoomName);
+      if (rooms.length === 0) return;
+      io?.to(rooms).emit("call:updated", callUpdatedEventSchema.parse(event));
+    },
+
+    voiceOccupancyUpdated(userIds, event) {
+      const rooms = [...new Set(userIds)].map(userRoomName);
+      if (rooms.length === 0) return;
+      io?.to(rooms).emit(
+        "voice-channel:occupancy-updated",
+        voiceOccupancyUpdatedEventSchema.parse(event),
       );
     },
 

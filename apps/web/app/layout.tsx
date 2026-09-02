@@ -2,6 +2,7 @@ import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
+import Script from "next/script";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -73,10 +74,13 @@ export default async function RootLayout({
     >
       <head>
         <meta name="theme-color" content="#0d1120" />
-        <script
+        <Script
+          id="intouch-theme-bootstrap"
           nonce={nonce}
-          dangerouslySetInnerHTML={{ __html: themeScript }}
-        />
+          strategy="beforeInteractive"
+        >
+          {themeScript}
+        </Script>
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

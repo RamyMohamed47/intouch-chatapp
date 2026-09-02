@@ -22,6 +22,9 @@ export {
   socketConnectionErrorSchema,
   socketHandshakeAuthSchema,
   typingEventSchema,
+  callIncomingEventSchema,
+  callUpdatedEventSchema,
+  voiceOccupancyUpdatedEventSchema,
 } from "./realtime.dto.js";
 export {
   NotificationChangeKind,
@@ -42,4 +45,9 @@ export type {
   SocketConnectionError,
   SocketHandshakeAuth,
   TypingEvent,
+  CallIncomingEvent,
+  CallUpdatedEvent,
+  VoiceOccupancyUpdatedEvent,
 } from "./realtime.dto.js";
+export { voiceHeartbeatSchema } from "../voice/index.js";
+export type { VoiceHeartbeatInput } from "../voice/index.js";

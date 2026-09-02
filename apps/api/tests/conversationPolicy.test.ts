@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  ChannelKind,
   ConversationType,
   ConversationVisibility,
 } from "@intouch/shared/conversations";
@@ -35,6 +36,7 @@ const conversation: ConversationRecord = {
   categoryId: "507f1f77bcf86cd799439014",
   name: "general",
   type: ConversationType.CHANNEL,
+  kind: ChannelKind.TEXT,
   visibility: ConversationVisibility.PUBLIC,
   position: 0,
   createdAt: now,

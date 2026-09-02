@@ -74,4 +74,8 @@ export const queryKeys = {
   assets: {
     access: (assetId: string) => ["assets", assetId, "access"] as const,
   },
+  voice: {
+    activeSession: ["voice", "active-session"] as const,
+    call: (callId: string) => ["voice", "calls", callId] as const,
+  },
 };

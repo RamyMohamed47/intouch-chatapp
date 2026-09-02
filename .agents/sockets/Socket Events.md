@@ -61,6 +61,13 @@ events idempotently and refresh their local fallback expiry without repeatedly
 announcing unchanged state. A user who joins the room after typing begins sees
 the next heartbeat within approximately three seconds.
 
+### `voice:heartbeat`
+
+Payload: `{ sessionId: string }`, where the ID is the caller's current voice
+session UUID. Connected clients refresh this lease every 30 seconds. The event
+uses the standard acknowledgement shape and is rate-limited before runtime
+state work. It carries no media or signaling data; LiveKit transports audio.
+
 ## Authenticated Abuse Limits
 
 - `conversation:join` and `organization:subscribe` share a 20-token bucket that
@@ -89,6 +96,9 @@ the next heartbeat within approximately three seconds.
 - `channel-read-receipts:changed` carries only `{ conversationId }` to the active channel room when a channel high-water mark advances. It is an anonymous cache-invalidation signal and excludes every socket belonging to the reader.
 - `message-reactions:changed` carries `{ activityId, conversationId, messageId }` after a reaction transaction commits. It contains no reactor identity and is scoped to the authorized conversation room. Clients handle duplicate activity IDs idempotently and fetch `GET /api/v1/messages/:messageId/reactions` before merging authoritative personalized summaries.
 - `notification:changed` is delivered only to the affected `user:<userId>` room. It is a strict union of `UPSERTED` with a safe hydrated notification DTO, `DELETED` with a notification ID, and `READ_ALL`. Clients handle events idempotently, invalidate the notification query family, and use MongoDB-backed REST state to reconcile after reconnecting.
+- `call:incoming` carries `{ call }` only to the direct-message recipient's user room after the call transaction commits.
+- `call:updated` carries `{ call }` to both direct-message participants. Repeated or out-of-order lifecycle updates are idempotent; MongoDB remains authoritative.
+- `voice-channel:occupancy-updated` carries the authorized ten-person occupancy snapshot. Provider participant identities are opaque UUIDs mapped to safe organization user IDs only inside this authorized payload.
 
 Messages are written through REST. Socket.IO only manages authorized room
 subscriptions and scoped server events; no event is broadcast globally.
@@ -156,3 +166,19 @@ reaction notifications target the message sender. Selected incoming DMs and
 invitation events may produce frontend toasts; reaction notifications remain
 silent. Reconnects invalidate the notification query family so missed socket
 events never become the durable source of truth.
+
+## Voice Runtime
+
+Socket.IO transports call lifecycle, occupancy invalidation, and voice-session
+heartbeats only. LiveKit Cloud transports encrypted WebRTC audio and signaling.
+InTouch issues five-minute audio-only initial-connect credentials and never
+places user IDs, names, or conversation IDs in provider room or participant
+identities. Signed LiveKit webhooks activate/release Redis leases; BullMQ
+provides ringing, connection, and disconnect deadlines when webhooks are late.
+
+Every user has at most one reserved voice session across calls and voice
+channels. DM ringing reserves both participants, while voice channels enforce
+an atomic capacity of ten in the shared Redis store. Membership, private
+participant, channel, and organization lifecycle changes revoke provider
+participants and Redis leases after the MongoDB mutation commits. Audio is
+never broadcast through Socket.IO or persisted by InTouch.

@@ -17,6 +17,7 @@ const messageSchema = new Schema<Message>(
       default: MessageType.TEXT,
       required: true,
     },
+    callId: { type: Schema.Types.ObjectId, ref: "CallSession" },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
   },
@@ -26,6 +27,14 @@ const messageSchema = new Schema<Message>(
 messageSchema.index(
   { conversationId: 1, _id: -1 },
   { name: "messages_by_conversation_cursor" },
+);
+messageSchema.index(
+  { callId: 1 },
+  {
+    name: "unique_call_timeline_message",
+    unique: true,
+    partialFilterExpression: { callId: { $type: "objectId" } },
+  },
 );
 messageSchema.index(
   { content: "text" },

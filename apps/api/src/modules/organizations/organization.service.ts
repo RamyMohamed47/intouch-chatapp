@@ -40,6 +40,9 @@ export interface OrganizationServiceDependencies {
   realtime?: ConversationRealtime;
   notificationDelivery?: Pick<NotificationService, "publishDeleted">;
   now?: () => Date;
+  voiceLifecycle?: {
+    closeConversation(conversationId: string): Promise<void>;
+  };
 }
 
 const normalizeSlug = (name: string) => {
@@ -85,6 +88,7 @@ const createOrganizationService = ({
   realtime,
   notificationDelivery = { publishDeleted: () => undefined },
   now = () => new Date(),
+  voiceLifecycle,
 }: OrganizationServiceDependencies) => ({
   async create(userId: string, input: CreateOrganizationInput) {
     const baseSlug = normalizeSlug(input.name);
@@ -290,6 +294,7 @@ const createOrganizationService = ({
       deletedConversationIds = conversationIds;
       await context.chatWallpapers.deleteByConversationIds(conversationIds);
       await context.messageReactions.deleteByConversationIds(conversationIds);
+      await context.calls?.deleteByOrganizationId(organizationId);
       await context.messages.deleteByConversationIds(conversationIds);
       await context.conversationReadStates.deleteByOrganizationId(
         organizationId,
@@ -321,6 +326,13 @@ const createOrganizationService = ({
       await Promise.all(
         deletedConversationIds.map((conversationId) =>
           realtime.closeConversation(conversationId),
+        ),
+      );
+    }
+    if (voiceLifecycle) {
+      await Promise.all(
+        deletedConversationIds.map((conversationId) =>
+          voiceLifecycle.closeConversation(conversationId),
         ),
       );
     }

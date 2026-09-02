@@ -82,6 +82,20 @@ describe("frontend content security policy", () => {
     expect(policy).not.toContain("*.sentry.io");
   });
 
+  it("allows only the configured LiveKit HTTP and WebSocket origins", () => {
+    const policy = buildContentSecurityPolicy({
+      isDevelopment: false,
+      nonce: "voice-nonce",
+      socketOrigin: "https://api.intouch.example",
+      liveKitUrl: "wss://intouch-project.livekit.cloud",
+    });
+
+    expect(directive(policy, "connect-src")).toBe(
+      "connect-src 'self' https://api.intouch.example wss://api.intouch.example https://intouch-project.livekit.cloud wss://intouch-project.livekit.cloud",
+    );
+    expect(directive(policy, "media-src")).toBe("media-src 'self' blob:");
+  });
+
   it("adds a per-request nonce CSP and complementary security headers", () => {
     const response = proxy(new NextRequest("http://localhost:3001/login"));
     const policy = response.headers.get("content-security-policy");
@@ -95,5 +109,8 @@ describe("frontend content security policy", () => {
     );
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("permissions-policy")).toContain("camera=()");
+    expect(response.headers.get("permissions-policy")).toContain(
+      "microphone=(self)",
+    );
   });
 });

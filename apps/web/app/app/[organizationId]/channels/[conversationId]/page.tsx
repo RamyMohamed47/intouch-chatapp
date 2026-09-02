@@ -1,4 +1,4 @@
-import { ConversationPage } from "@/components/conversations/conversation-page";
+import { ChannelPage } from "@/components/conversations/channel-page";
 
 export default async function Page({
   params,
@@ -7,10 +7,9 @@ export default async function Page({
 }) {
   const { organizationId, conversationId } = await params;
   return (
-    <ConversationPage
+    <ChannelPage
       organizationId={organizationId}
       conversationId={conversationId}
-      expectedType="CHANNEL"
     />
   );
 }

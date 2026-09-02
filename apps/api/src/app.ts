@@ -21,9 +21,11 @@ export interface AppDependencies {
   assetRouter?: Router;
   authRouter?: Router;
   categoryRouter?: Router;
+  callRouter?: Router;
   conversationMessageRouter?: Router;
   conversationChatWallpaperRouter?: Router;
   conversationRouter?: Router;
+  conversationVoiceRouter?: Router;
   directMessageRouter?: Router;
   invitationRouter?: Router;
   messageRouter?: Router;
@@ -37,6 +39,8 @@ export interface AppDependencies {
   userChatWallpaperRouter?: Router;
   uploadRouter?: Router;
   userAvatarRouter?: Router;
+  voiceSessionRouter?: Router;
+  voiceWebhookRouter?: Router;
   trustProxy?: boolean | number | string;
   readiness?: { isReady(): boolean };
 }
@@ -47,9 +51,11 @@ const createApp = ({
   assetRouter,
   authRouter,
   categoryRouter,
+  callRouter,
   conversationMessageRouter,
   conversationChatWallpaperRouter,
   conversationRouter,
+  conversationVoiceRouter,
   directMessageRouter,
   invitationRouter,
   messageRouter,
@@ -63,6 +69,8 @@ const createApp = ({
   userChatWallpaperRouter,
   uploadRouter,
   userAvatarRouter,
+  voiceSessionRouter,
+  voiceWebhookRouter,
   trustProxy = false,
   readiness = { isReady: () => true },
 }: AppDependencies = {}) => {
@@ -84,6 +92,9 @@ const createApp = ({
       preflightContinue: true,
     }),
   );
+  if (voiceWebhookRouter) {
+    app.use("/api/v1/integrations/livekit", voiceWebhookRouter);
+  }
   app.use(compression());
   app.use(express.json({ limit: "10kb" }));
   app.use(express.urlencoded({ extended: true, limit: "10kb" }));
@@ -155,6 +166,10 @@ const createApp = ({
     app.use("/api/v1/conversations", conversationRouter);
   }
 
+  if (conversationVoiceRouter) {
+    app.use("/api/v1/conversations", conversationVoiceRouter);
+  }
+
   if (conversationChatWallpaperRouter) {
     app.use("/api/v1/conversations", conversationChatWallpaperRouter);
   }
@@ -181,6 +196,14 @@ const createApp = ({
 
   if (notificationRouter) {
     app.use("/api/v1/notifications", notificationRouter);
+  }
+
+  if (voiceSessionRouter) {
+    app.use("/api/v1/voice", voiceSessionRouter);
+  }
+
+  if (callRouter) {
+    app.use("/api/v1/calls", callRouter);
   }
 
   if (searchRouter) {

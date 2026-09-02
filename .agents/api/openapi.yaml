@@ -30,6 +30,7 @@ tags:
   - name: Uploads
   - name: Notifications
   - name: Search
+  - name: Voice
 
 security:
   - bearerAuth: []
@@ -1042,6 +1043,228 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /conversations/{conversationId}/voice/join:
+    post:
+      tags: [Voice]
+      summary: Join an authorized voice channel
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        $ref: "#/components/requestBodies/JoinVoiceSessionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/VoiceJoinResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /conversations/{conversationId}/voice/participants/{userId}/mute:
+    post:
+      tags: [Voice]
+      summary: Server-mute a voice-channel participant
+      description: Owner-only. Remote unmute is intentionally unsupported.
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Participant microphone muted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /conversations/{conversationId}/voice/participants/{userId}:
+    delete:
+      tags: [Voice]
+      summary: Disconnect a voice-channel participant
+      description: Owner-only.
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Participant disconnected
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /conversations/{conversationId}/calls:
+    post:
+      tags: [Voice]
+      summary: Start a direct-message voice call
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        $ref: "#/components/requestBodies/JoinVoiceSessionRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/CallJoinResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /voice/sessions/me:
+    get:
+      tags: [Voice]
+      summary: Get the caller's active voice session
+      responses:
+        "200":
+          $ref: "#/components/responses/ActiveVoiceSessionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Voice]
+      summary: Leave the caller's active voice session
+      responses:
+        "204":
+          description: Session released or already absent
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /voice/sessions/me/resume:
+    post:
+      tags: [Voice]
+      summary: Resume the caller's authorized active voice session
+      responses:
+        "200":
+          $ref: "#/components/responses/VoiceJoinResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /calls/{callId}:
+    get:
+      tags: [Voice]
+      summary: Get an authorized direct-message call
+      parameters:
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CallResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /calls/{callId}/accept:
+    post:
+      tags: [Voice]
+      summary: Accept an incoming call and receive media credentials
+      parameters:
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CallJoinResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /calls/{callId}/decline:
+    post:
+      tags: [Voice]
+      summary: Decline an incoming ringing call
+      parameters:
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CallResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /calls/{callId}/cancel:
+    post:
+      tags: [Voice]
+      summary: Cancel an outgoing ringing call
+      parameters:
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CallResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /calls/{callId}/end:
+    post:
+      tags: [Voice]
+      summary: End an accepted or active call
+      parameters:
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "200":
+          $ref: "#/components/responses/CallResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /integrations/livekit/webhook:
+    post:
+      tags: [Voice]
+      summary: Receive signed LiveKit lifecycle events
+      description: Provider-only endpoint. The signature is verified against the raw request body and duplicate events are ignored.
+      security: []
+      responses:
+        "204":
+          description: Event accepted or already processed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   #
   # Messages
   #
@@ -1388,6 +1611,14 @@ components:
         type: string
         pattern: "^[a-fA-F0-9]{24}$"
 
+    CallId:
+      name: callId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-fA-F0-9]{24}$"
+
     CategoryId:
       name: categoryId
       in: path
@@ -1605,6 +1836,14 @@ components:
           schema:
             $ref: "#/components/schemas/SetMessageReactionInput"
 
+    JoinVoiceSessionRequest:
+      description: Optionally replace the caller's existing voice session.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JoinVoiceSessionInput"
+
   responses:
 
     RegistrationPendingResponse:
@@ -1754,6 +1993,34 @@ components:
                 type: array
                 items:
                   $ref: "#/components/schemas/PublicOrganization"
+
+    VoiceJoinResponse:
+      description: Voice session reserved and short-lived LiveKit credentials issued.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/VoiceJoinPayload"
+
+    ActiveVoiceSessionResponse:
+      description: Caller voice-session lease, or null when inactive.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ActiveVoiceSessionPayload"
+
+    CallResponse:
+      description: Direct-message call returned successfully.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CallPayload"
+
+    CallJoinResponse:
+      description: Call state and short-lived LiveKit credentials.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CallJoinPayload"
 
     MembershipResponse:
       description: Membership returned successfully.
@@ -2203,6 +2470,10 @@ components:
           minLength: 1
           maxLength: 100
           pattern: ".*\\S.*"
+        kind:
+          type: string
+          enum: [TEXT, VOICE]
+          default: TEXT
         visibility:
           type: string
           enum: [PUBLIC, PRIVATE]
@@ -2254,9 +2525,16 @@ components:
         propertyName: type
 
     ChannelConversation:
+      oneOf:
+        - $ref: "#/components/schemas/TextChannelConversation"
+        - $ref: "#/components/schemas/VoiceChannelConversation"
+      discriminator:
+        propertyName: kind
+
+    ChannelConversationBase:
       type: object
       required:
-        [id, organizationId, categoryId, name, type, visibility, position, createdAt, updatedAt]
+        [id, organizationId, categoryId, name, type, kind, visibility, position, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2269,6 +2547,9 @@ components:
         type:
           type: string
           const: CHANNEL
+        kind:
+          type: string
+          enum: [TEXT, VOICE]
         visibility:
           type: string
           enum: [PUBLIC, PRIVATE]
@@ -2281,17 +2562,39 @@ components:
         updatedAt:
           type: string
           format: date-time
-        lastMessage:
-          oneOf:
-            - $ref: "#/components/schemas/MessageCore"
-            - type: "null"
-        unreadCount:
-          type: integer
-          minimum: 0
-        readReceipt:
-          oneOf:
-            - $ref: "#/components/schemas/ReadReceipt"
-            - type: "null"
+
+    TextChannelConversation:
+      allOf:
+        - $ref: "#/components/schemas/ChannelConversationBase"
+        - type: object
+          required: [kind, lastMessage, unreadCount, readReceipt]
+          properties:
+            kind:
+              type: string
+              const: TEXT
+            lastMessage:
+              oneOf:
+                - $ref: "#/components/schemas/MessageCore"
+                - type: "null"
+            unreadCount:
+              type: integer
+              minimum: 0
+            readReceipt:
+              oneOf:
+                - $ref: "#/components/schemas/ReadReceipt"
+                - type: "null"
+
+    VoiceChannelConversation:
+      allOf:
+        - $ref: "#/components/schemas/ChannelConversationBase"
+        - type: object
+          required: [kind, occupancy]
+          properties:
+            kind:
+              type: string
+              const: VOICE
+            occupancy:
+              $ref: "#/components/schemas/VoiceOccupancy"
 
     DirectConversation:
       type: object
@@ -2581,6 +2884,183 @@ components:
               pattern: ".*\\S.*"
             - type: "null"
 
+    JoinVoiceSessionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        replaceActiveSession:
+          type: boolean
+          default: false
+
+    VoiceCredentials:
+      type: object
+      additionalProperties: false
+      required: [serverUrl, token, expiresAt]
+      properties:
+        serverUrl:
+          type: string
+          format: uri
+          pattern: "^wss://"
+        token:
+          type: string
+          writeOnly: true
+        expiresAt:
+          type: string
+          format: date-time
+
+    VoiceSession:
+      type: object
+      additionalProperties: false
+      required:
+        [id, kind, organizationId, conversationId, callId, userId, connectedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [VOICE_CHANNEL, CALL]
+        organizationId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        conversationId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        callId:
+          oneOf:
+            - type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            - type: "null"
+        userId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        connectedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+
+    VoiceOccupancyParticipant:
+      type: object
+      additionalProperties: false
+      required: [userId, participantIdentity]
+      properties:
+        userId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        participantIdentity:
+          type: string
+          format: uuid
+
+    VoiceOccupancy:
+      type: object
+      additionalProperties: false
+      required: [conversationId, capacity, participantUserIds, participants]
+      properties:
+        conversationId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        capacity:
+          type: integer
+          const: 10
+        participantUserIds:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            pattern: "^[a-fA-F0-9]{24}$"
+        participants:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/VoiceOccupancyParticipant"
+
+    Call:
+      type: object
+      additionalProperties: false
+      required:
+        [id, organizationId, conversationId, callerUserId, recipientUserId, status, endReason, startedAt, answeredAt, endedAt, durationSeconds]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        organizationId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        conversationId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        callerUserId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        recipientUserId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        status:
+          type: string
+          enum: [RINGING, CONNECTING, ACTIVE, ENDED]
+        endReason:
+          oneOf:
+            - type: string
+              enum: [DECLINED, CANCELLED, MISSED, COMPLETED, FAILED, ACCESS_REVOKED]
+            - type: "null"
+        startedAt:
+          type: string
+          format: date-time
+        answeredAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        endedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        durationSeconds:
+          oneOf:
+            - type: integer
+              minimum: 0
+            - type: "null"
+
+    VoiceJoinPayload:
+      type: object
+      additionalProperties: false
+      required: [session, credentials]
+      properties:
+        session:
+          $ref: "#/components/schemas/VoiceSession"
+        credentials:
+          $ref: "#/components/schemas/VoiceCredentials"
+
+    ActiveVoiceSessionPayload:
+      type: object
+      additionalProperties: false
+      required: [session]
+      properties:
+        session:
+          oneOf:
+            - $ref: "#/components/schemas/VoiceSession"
+            - type: "null"
+
+    CallPayload:
+      type: object
+      additionalProperties: false
+      required: [call]
+      properties:
+        call:
+          $ref: "#/components/schemas/Call"
+
+    CallJoinPayload:
+      type: object
+      additionalProperties: false
+      required: [call, credentials]
+      properties:
+        call:
+          $ref: "#/components/schemas/Call"
+        credentials:
+          $ref: "#/components/schemas/VoiceCredentials"
+
     Attachment:
       type: object
       additionalProperties: false
@@ -2675,7 +3155,7 @@ components:
             - type: "null"
         messageType:
           type: string
-          enum: [TEXT, ATTACHMENT]
+          enum: [TEXT, ATTACHMENT, CALL]
         editedAt:
           oneOf:
             - type: string
@@ -2697,6 +3177,10 @@ components:
           maxItems: 5
           items:
             $ref: "#/components/schemas/Attachment"
+        call:
+          oneOf:
+            - $ref: "#/components/schemas/Call"
+            - type: "null"
 
     MessageReactionSummary:
       type: object
@@ -3353,6 +3837,10 @@ components:
                 - STORAGE_UNAVAILABLE
                 - EMAIL_VERIFICATION_REQUIRED
                 - INVALID_OR_EXPIRED_TOKEN
+                - VOICE_SESSION_ACTIVE
+                - VOICE_USER_BUSY
+                - VOICE_CAPACITY_REACHED
+                - VOICE_UNAVAILABLE
                 - INTERNAL_SERVER_ERROR
             message:
               type: string

@@ -68,6 +68,7 @@ const mocks = vi.hoisted(() => {
     joinConversation: vi.fn(() => Promise.resolve({ success: true })),
     leaveConversation: vi.fn(() => Promise.resolve({ success: true })),
     startTyping: vi.fn(),
+    startCall: vi.fn(() => Promise.resolve()),
     stopTyping: vi.fn(),
     routerReplace: vi.fn(),
     updateReadReceipt: vi.fn(() =>
@@ -120,6 +121,10 @@ vi.mock("@/lib/realtime/provider", () => ({
     stopTyping: mocks.stopTyping,
     typingUserIds: () => [],
   }),
+}));
+
+vi.mock("@/lib/voice/provider", () => ({
+  useVoice: () => ({ startCall: mocks.startCall }),
 }));
 
 vi.mock("@/lib/query/hooks", () => ({

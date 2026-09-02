@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api/client";
 import { AuthProvider } from "@/lib/auth/provider";
 import { RealtimeProvider } from "@/lib/realtime/provider";
 import { NotificationProvider } from "@/components/ui/toast";
+import { VoiceProvider } from "@/lib/voice/provider";
 
 const shouldRetry = (failureCount: number, error: Error) =>
   failureCount < 1 && (!(error instanceof ApiError) || error.status >= 500);
@@ -30,7 +31,9 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <NotificationProvider>
-          <RealtimeProvider>{children}</RealtimeProvider>
+          <RealtimeProvider>
+            <VoiceProvider>{children}</VoiceProvider>
+          </RealtimeProvider>
         </NotificationProvider>
       </AuthProvider>
     </QueryClientProvider>

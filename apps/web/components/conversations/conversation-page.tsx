@@ -8,6 +8,9 @@ import {
   MessageCircle,
   Pencil,
   Paperclip,
+  Phone,
+  PhoneCall,
+  PhoneMissed,
   RefreshCw,
   Send,
   Trash2,
@@ -99,12 +102,30 @@ import { hasReadMessage } from "@/lib/realtime/read-receipt-cache";
 import { mergeReactionState } from "@/lib/reactions/message-reaction-cache";
 import { cn } from "@/lib/utils";
 import { useUploadQueue } from "@/lib/uploads/use-upload-queue";
+import { useVoice } from "@/lib/voice/provider";
 
 const formatTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+
+const callLabel = (message: MessageDto, currentUserId?: string) => {
+  const call = message.call;
+  if (!call) return "Voice call";
+  if (call.status !== "ENDED") return "Voice call in progress";
+  if (call.endReason === "MISSED") {
+    return call.recipientUserId === currentUserId
+      ? "Missed voice call"
+      : "Voice call was not answered";
+  }
+  if (call.endReason === "DECLINED") return "Voice call declined";
+  if (call.endReason === "CANCELLED") return "Voice call cancelled";
+  if (call.endReason === "FAILED") return "Voice call failed";
+  if (call.endReason === "ACCESS_REVOKED") return "Voice call ended";
+  const duration = call.durationSeconds ?? 0;
+  return `Voice call - ${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}`;
+};
 
 const upsertCachedMessage = (
   data: InfiniteData<MessageListResponse> | undefined,
@@ -204,6 +225,7 @@ export function ConversationPage({
   const anchorMessageId = searchParams.get("messageId") ?? "";
   const { user } = useAuth();
   const realtime = useRealtime();
+  const voice = useVoice();
   const {
     connected,
     joinConversation,
@@ -307,7 +329,10 @@ export function ConversationPage({
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   const newestMessage = allMessages.at(-1);
   const latestOutgoingMessage = allMessages.findLast(
-    (message) => message.senderId === user?.id && !message.deletedAt,
+    (message) =>
+      message.senderId === user?.id &&
+      !message.deletedAt &&
+      message.messageType !== "CALL",
   );
   const channelReaderMessageId =
     conversation.data?.type === "CHANNEL" ? latestOutgoingMessage?.id : "";
@@ -419,13 +444,18 @@ export function ConversationPage({
     }
   }, [documentActive, newestMessageVisible]);
 
+  const currentReadReceipt =
+    conversation.data && "readReceipt" in conversation.data
+      ? conversation.data.readReceipt
+      : null;
+
   useEffect(() => {
     if (
       !newestMessage ||
       !atLatestMessage ||
       !documentActive ||
       !newestMessageVisible ||
-      hasReadMessage(conversation.data?.readReceipt, newestMessage.id) ||
+      hasReadMessage(currentReadReceipt, newestMessage.id) ||
       failedReceiptMessageIdRef.current === newestMessage.id ||
       pendingReceiptMessageIdRef.current === newestMessage.id
     ) {
@@ -446,7 +476,7 @@ export function ConversationPage({
       },
     });
   }, [
-    conversation.data?.readReceipt?.lastReadMessageId,
+    currentReadReceipt?.lastReadMessageId,
     documentActive,
     newestMessage,
     newestMessageVisible,
@@ -693,6 +723,20 @@ export function ConversationPage({
         }
         actions={
           <>
+            {conversation.data.type === "DIRECT" && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={voice.isTransitioning}
+                aria-label={`Call ${conversation.data.peer.displayName}`}
+                onClick={() => void voice.startCall(conversationId)}
+              >
+                <Phone />
+                <span className="hidden sm:inline">
+                  {voice.isTransitioning ? "Calling..." : "Call"}
+                </span>
+              </Button>
+            )}
             <ChatWallpaperDialog
               conversationId={conversationId}
               wallpaper={activeWallpaper}
@@ -789,6 +833,7 @@ export function ConversationPage({
                   const own = message.senderId === user?.id;
                   const canDelete =
                     !message.deletedAt &&
+                    message.messageType !== "CALL" &&
                     (own ||
                       (conversation.data.type === "CHANNEL" &&
                         organization.data.currentUserRole === "OWNER"));
@@ -821,38 +866,41 @@ export function ConversationPage({
                             </span>
                           )}
                           <div className="ml-auto flex gap-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
-                            {!message.deletedAt && (
-                              <MessageReactionPicker
-                                currentReaction={message.currentUserReaction}
-                                disabled={
-                                  mutateReaction.isPending &&
-                                  mutateReaction.variables?.messageId ===
-                                    message.id
-                                }
-                                onSelect={(emoji) =>
-                                  mutateReaction.mutate({
-                                    emoji,
-                                    messageId: message.id,
-                                    remove:
-                                      message.currentUserReaction === emoji,
-                                  })
-                                }
-                              />
-                            )}
-                            {own && !message.deletedAt && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-xs"
-                                aria-label="Edit message"
-                                onClick={() => {
-                                  setEditingId(message.id);
-                                  setEditingContent(message.content ?? "");
-                                }}
-                              >
-                                <Pencil />
-                              </Button>
-                            )}
+                            {!message.deletedAt &&
+                              message.messageType !== "CALL" && (
+                                <MessageReactionPicker
+                                  currentReaction={message.currentUserReaction}
+                                  disabled={
+                                    mutateReaction.isPending &&
+                                    mutateReaction.variables?.messageId ===
+                                      message.id
+                                  }
+                                  onSelect={(emoji) =>
+                                    mutateReaction.mutate({
+                                      emoji,
+                                      messageId: message.id,
+                                      remove:
+                                        message.currentUserReaction === emoji,
+                                    })
+                                  }
+                                />
+                              )}
+                            {own &&
+                              !message.deletedAt &&
+                              message.messageType !== "CALL" && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  aria-label="Edit message"
+                                  onClick={() => {
+                                    setEditingId(message.id);
+                                    setEditingContent(message.content ?? "");
+                                  }}
+                                >
+                                  <Pencil />
+                                </Button>
+                              )}
                             {canDelete && (
                               <Button
                                 type="button"
@@ -870,7 +918,29 @@ export function ConversationPage({
                             )}
                           </div>
                         </div>
-                        {editingId === message.id ? (
+                        {message.messageType === "CALL" ? (
+                          <div className="mt-3 flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 p-3">
+                            <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                              {message.call?.endReason === "MISSED" ? (
+                                <PhoneMissed />
+                              ) : message.call?.status === "ACTIVE" ? (
+                                <PhoneCall />
+                              ) : (
+                                <Phone />
+                              )}
+                            </span>
+                            <span>
+                              <strong className="block text-sm">
+                                {callLabel(message, user?.id)}
+                              </strong>
+                              <span className="text-xs text-muted-foreground">
+                                {message.call?.callerUserId === user?.id
+                                  ? "Outgoing"
+                                  : "Incoming"}
+                              </span>
+                            </span>
+                          </div>
+                        ) : editingId === message.id ? (
                           <form
                             className="mt-2 flex gap-2"
                             onSubmit={(event) => {
@@ -916,25 +986,28 @@ export function ConversationPage({
                               : message.content}
                           </p>
                         ) : null}
-                        {!message.deletedAt && (
-                          <MessageAttachments
-                            attachments={message.attachments}
+                        {!message.deletedAt &&
+                          message.messageType !== "CALL" && (
+                            <MessageAttachments
+                              attachments={message.attachments}
+                            />
+                          )}
+                        {message.messageType !== "CALL" && (
+                          <MessageReactionSummaries
+                            message={message}
+                            disabled={
+                              mutateReaction.isPending &&
+                              mutateReaction.variables?.messageId === message.id
+                            }
+                            onToggle={(emoji) =>
+                              mutateReaction.mutate({
+                                emoji,
+                                messageId: message.id,
+                                remove: message.currentUserReaction === emoji,
+                              })
+                            }
                           />
                         )}
-                        <MessageReactionSummaries
-                          message={message}
-                          disabled={
-                            mutateReaction.isPending &&
-                            mutateReaction.variables?.messageId === message.id
-                          }
-                          onToggle={(emoji) =>
-                            mutateReaction.mutate({
-                              emoji,
-                              messageId: message.id,
-                              remove: message.currentUserReaction === emoji,
-                            })
-                          }
-                        />
                         {own &&
                           conversation.data.type === "DIRECT" &&
                           message.id === latestOutgoingMessage?.id && (
@@ -1150,9 +1223,10 @@ export function ConversationPage({
                 <Send />
               </Button>
             </div>
-            {error && (
+            {(error ||
+              (conversation.data.type === "DIRECT" ? voice.error : null)) && (
               <div className="mt-2">
-                <FormError>{error}</FormError>
+                <FormError>{error ?? voice.error}</FormError>
               </div>
             )}
           </form>

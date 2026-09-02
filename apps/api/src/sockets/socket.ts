@@ -4,6 +4,7 @@ import {
   organizationSocketSchema,
   socketConnectionErrorSchema,
   socketHandshakeAuthSchema,
+  voiceHeartbeatSchema,
 } from "@intouch/shared/realtime";
 import { errorDtoSchema } from "@intouch/shared/common";
 
@@ -21,6 +22,7 @@ import type { ConversationService } from "../modules/conversations/conversation.
 import type { MembershipDirectoryService } from "../modules/memberships/membership-directory.service.js";
 import type { PresenceService } from "../modules/presence/presence.service.js";
 import type { TypingService } from "../modules/typing/typing.service.js";
+import type { VoiceService } from "../modules/voice/index.js";
 import { getLogger } from "../config/logger.js";
 import {
   organizationRoomName,
@@ -36,6 +38,7 @@ export interface SocketDomainServices {
     Partial<Pick<PresenceService, "refresh">>;
   rateLimits?: AuthenticatedRateLimiter;
   typing?: Pick<TypingService, "disconnect" | "start" | "stop">;
+  voice?: Pick<VoiceService, "heartbeat">;
 }
 
 const createConnectionError = (
@@ -418,6 +421,45 @@ const configureSocket = (
     });
     socket.on("typing:stop", (input, acknowledge) => {
       handleTyping(false, input, acknowledge);
+    });
+
+    socket.on("voice:heartbeat", (input, acknowledge) => {
+      if (typeof acknowledge !== "function") return;
+      enforceEventLimit(RateLimitAction.SOCKET_VOICE, acknowledge, () => {
+        const parsed = voiceHeartbeatSchema.safeParse(input);
+        if (!parsed.success || !services.voice) {
+          acknowledge({
+            success: false,
+            error: {
+              code: parsed.success
+                ? "INTERNAL_SERVER_ERROR"
+                : "VALIDATION_ERROR",
+              message: parsed.success
+                ? "Something went wrong"
+                : "Invalid voice session",
+            },
+          });
+          return;
+        }
+        void services.voice
+          .heartbeat(socket.data.userId, parsed.data.sessionId)
+          .then((active) => {
+            acknowledge(
+              active
+                ? { success: true }
+                : {
+                    success: false,
+                    error: {
+                      code: "NOT_FOUND",
+                      message: "Voice session is no longer active",
+                    },
+                  },
+            );
+          })
+          .catch((error: unknown) => {
+            acknowledge({ success: false, error: toSocketError(error) });
+          });
+      });
     });
 
     socket.on("disconnect", () => {
