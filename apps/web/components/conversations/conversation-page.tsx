@@ -63,6 +63,7 @@ import {
   MessageReactionSummaries,
 } from "@/components/conversations/message-reactions";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
+import { DirectCallPage } from "@/components/voice/direct-call-page";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -673,6 +674,18 @@ export function ConversationPage({
     ? members.data?.find((member) => member.user.id === directMessagePeerId)
         ?.user
     : undefined;
+  if (
+    conversation.data.type === "DIRECT" &&
+    voice.activeSession?.kind === "CALL" &&
+    voice.activeSession.conversationId === conversationId
+  ) {
+    return (
+      <DirectCallPage
+        conversation={conversation.data}
+        organizationName={organization.data.name}
+      />
+    );
+  }
   const typingNames = realtime
     .typingUserIds(conversationId)
     .filter((typingUserId) => typingUserId !== user?.id)

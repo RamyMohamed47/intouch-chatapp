@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
     conversationType: "CHANNEL" | "DIRECT";
     currentUserRole: "MEMBER" | "OWNER";
     messages: MessageDto[];
+    activeVoiceConversationId: string | null;
     anchorMessageId: string | null;
     contextHasLater: boolean;
     peerReadReceipt: {
@@ -54,6 +55,7 @@ const mocks = vi.hoisted(() => {
     conversationType: "CHANNEL",
     currentUserRole: "OWNER",
     messages: [],
+    activeVoiceConversationId: null,
     anchorMessageId: null,
     contextHasLater: false,
     peerReadReceipt: null,
@@ -98,6 +100,18 @@ vi.mock("@/components/memberships/invite-member-dialog", () => ({
   InviteMemberDialog: () => <button type="button">Invite member</button>,
 }));
 
+vi.mock("@/components/voice/direct-call-page", () => ({
+  DirectCallPage: ({
+    conversation,
+  }: {
+    conversation: { peer: { displayName: string } };
+  }) => (
+    <section aria-label="Dedicated direct call">
+      Calling {conversation.peer.displayName}
+    </section>
+  ),
+}));
+
 vi.mock("@/lib/auth/provider", () => ({
   useAuth: () => ({
     user: {
@@ -124,7 +138,18 @@ vi.mock("@/lib/realtime/provider", () => ({
 }));
 
 vi.mock("@/lib/voice/provider", () => ({
-  useVoice: () => ({ startCall: mocks.startCall }),
+  useVoice: () => ({
+    activeSession: mocks.state.activeVoiceConversationId
+      ? {
+          id: "00000000-0000-4000-8000-000000000001",
+          kind: "CALL",
+          organizationId: "64c000000000000000000001",
+          conversationId: mocks.state.activeVoiceConversationId,
+        }
+      : null,
+    isTransitioning: false,
+    startCall: mocks.startCall,
+  }),
 }));
 
 vi.mock("@/lib/query/hooks", () => ({
@@ -264,6 +289,7 @@ describe("ConversationPage interactions", () => {
     mocks.state.conversationType = "CHANNEL";
     mocks.state.currentUserRole = "OWNER";
     mocks.state.messages = [];
+    mocks.state.activeVoiceConversationId = null;
     mocks.state.anchorMessageId = null;
     mocks.state.contextHasLater = false;
     mocks.state.peerReadReceipt = null;
@@ -302,6 +328,19 @@ describe("ConversationPage interactions", () => {
     expect(
       screen.getByRole("status", { name: "Lina Hassan is online" }),
     ).toHaveTextContent("Online");
+  });
+
+  it("replaces the active direct-message timeline with its call surface", () => {
+    mocks.state.conversationType = "DIRECT";
+    mocks.state.activeVoiceConversationId = "64d000000000000000000001";
+    renderConversation();
+
+    expect(
+      screen.getByRole("region", { name: "Dedicated direct call" }),
+    ).toHaveTextContent("Calling Lina Hassan");
+    expect(
+      screen.queryByRole("textbox", { name: "Message content" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows Read under the latest outgoing DM even when a newer reply follows", () => {

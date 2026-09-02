@@ -39,7 +39,7 @@ export function VoiceSessionPanel({
     session.kind === "VOICE_CHANNEL"
       ? `/app/${session.organizationId}/channels/${session.conversationId}`
       : `/app/${session.organizationId}/direct-messages/${session.conversationId}`;
-  if (session.kind === "VOICE_CHANNEL" && pathname === href) return null;
+  if (pathname === href) return null;
 
   const sessionName =
     conversation.data?.type === "CHANNEL"

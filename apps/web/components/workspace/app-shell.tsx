@@ -196,6 +196,7 @@ function WorkspaceNavigation({
     organizationId,
     Boolean(organizationId),
   );
+  const members = useMembers(organizationId, Boolean(organizationId));
   const activeOrganization = organizations.data?.find(
     (organization) => organization.id === organizationId,
   );
@@ -394,6 +395,9 @@ function WorkspaceNavigation({
               <div className="grid gap-1">
                 {dms.map((conversation) => {
                   const href = `/app/${organizationId}/direct-messages/${conversation.id}`;
+                  const peerPresence = members.data?.find(
+                    (member) => member.user.id === conversation.peer.id,
+                  )?.user;
                   return (
                     <Link
                       key={conversation.id}
@@ -405,12 +409,22 @@ function WorkspaceNavigation({
                           "bg-sidebar-accent text-foreground",
                       )}
                     >
-                      <UserAvatar
-                        size="sm"
-                        displayName={conversation.peer.displayName}
-                        avatarAssetId={conversation.peer.avatarAssetId}
-                        avatarUrl={conversation.peer.avatarUrl}
-                      />
+                      <span className="relative shrink-0">
+                        <UserAvatar
+                          size="sm"
+                          displayName={conversation.peer.displayName}
+                          avatarAssetId={conversation.peer.avatarAssetId}
+                          avatarUrl={conversation.peer.avatarUrl}
+                        />
+                        {peerPresence && (
+                          <PresenceIndicator
+                            displayName={peerPresence.displayName}
+                            status={peerPresence.status}
+                            lastSeenAt={peerPresence.lastSeenAt}
+                            variant="compact"
+                          />
+                        )}
+                      </span>
                       <span className="truncate">
                         {conversation.peer.displayName}
                       </span>

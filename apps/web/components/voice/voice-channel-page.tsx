@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 
 import { InviteMemberDialog } from "@/components/memberships/invite-member-dialog";
 import { UserAvatar } from "@/components/users/user-avatar";
+import { SpeakingIndicator } from "@/components/voice/speaking-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/workspace/page-header";
@@ -67,7 +68,9 @@ export function VoiceChannelPage({
 
   useEffect(() => {
     if (!connectedHere) return;
-    void navigator.mediaDevices
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.enumerateDevices) return;
+    void mediaDevices
       .enumerateDevices()
       .then((items) =>
         setDevices(items.filter(({ kind }) => kind === "audioinput")),
@@ -135,7 +138,10 @@ export function VoiceChannelPage({
                         avatarUrl={user?.avatarUrl}
                       />
                       {activeSpeakerUserIds.includes(userId) && (
-                        <span className="absolute -right-1 -bottom-1 size-3 rounded-full border-2 border-card bg-[var(--status)]" />
+                        <SpeakingIndicator
+                          className="absolute -right-1 -bottom-1"
+                          displayName={user?.displayName ?? "Connected member"}
+                        />
                       )}
                     </div>
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">

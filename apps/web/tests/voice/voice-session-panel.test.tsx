@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => {
     voice: {
       activeSession: {
         id: "00000000-0000-4000-8000-000000000001",
-        kind: "VOICE_CHANNEL" as const,
+        kind: "VOICE_CHANNEL" as "VOICE_CHANNEL" | "CALL",
         organizationId,
         conversationId,
         callId: null,
@@ -74,6 +74,7 @@ describe("VoiceSessionPanel", () => {
     mocks.voice.error = null;
     mocks.voice.isTransitioning = false;
     mocks.voice.isPlaybackBlocked = false;
+    mocks.voice.activeSession.kind = "VOICE_CHANNEL";
     mocks.toggleDeafen.mockReset();
     mocks.toggleMute.mockReset();
   });
@@ -107,6 +108,18 @@ describe("VoiceSessionPanel", () => {
 
   it("hides the persistent panel on its active voice-channel page", () => {
     mocks.pathname = `/app/${organizationId}/channels/${conversationId}`;
+    render(<VoiceSessionPanel variant="sidebar" />);
+
+    expect(
+      screen.queryByRole("complementary", {
+        name: "Active voice session controls",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the persistent panel on its active direct-call page", () => {
+    mocks.voice.activeSession.kind = "CALL";
+    mocks.pathname = `/app/${organizationId}/direct-messages/${conversationId}`;
     render(<VoiceSessionPanel variant="sidebar" />);
 
     expect(
