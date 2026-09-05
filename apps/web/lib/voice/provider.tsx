@@ -42,8 +42,10 @@ import { useAuth } from "@/lib/auth/provider";
 import { voiceApi } from "@/lib/api/voice";
 import { queryKeys } from "@/lib/query/keys";
 import { useRealtime } from "@/lib/realtime/provider";
-
-export const CALL_NOTIFICATION_PREFERENCE = "intouch:call-notifications";
+import {
+  dismissIncomingCallNotification,
+  showIncomingCallNotification,
+} from "@/lib/voice/call-notifications";
 
 export interface ParticipantCameraTrack {
   identity: string;
@@ -553,17 +555,35 @@ export function VoiceProvider({
 
   useEffect(() => {
     if (!activeSession) return;
-    const timer = setInterval(() => {
+    let stopped = false;
+    let attempt = 0;
+    let consecutiveFailures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const heartbeat = () => {
       void realtime.heartbeatVoice(activeSession.id).then((result) => {
+        if (stopped) return;
         if (!result.success) {
-          disconnectRoom();
-          setActiveSession(null);
-          setActiveCall(null);
-          queryClient.setQueryData(queryKeys.voice.activeSession, null);
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= 3) {
+            disconnectRoom();
+            setActiveSession(null);
+            setActiveCall(null);
+            queryClient.setQueryData(queryKeys.voice.activeSession, null);
+            return;
+          }
+          timer = setTimeout(heartbeat, 3_000);
+          return;
         }
+        consecutiveFailures = 0;
+        attempt += 1;
+        timer = setTimeout(heartbeat, attempt < 4 ? 3_000 : 30_000);
       });
-    }, 30_000);
-    return () => clearInterval(timer);
+    };
+    heartbeat();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [activeSession, disconnectRoom, queryClient, realtime]);
 
   useEffect(() => {
@@ -580,18 +600,34 @@ export function VoiceProvider({
   useEffect(() => {
     const call = realtime.incomingCall;
     if (!call || document.visibilityState === "visible") return;
-    if (
-      localStorage.getItem(CALL_NOTIFICATION_PREFERENCE) === "enabled" &&
-      Notification.permission === "granted"
-    ) {
-      new Notification(
-        `Incoming InTouch ${call.mediaMode === "VIDEO" ? "video" : "voice"} call`,
-        {
-          body: `${resolveDisplayName(call.callerUserId)} is calling`,
-        },
-      );
-    }
+    void showIncomingCallNotification(
+      call,
+      resolveDisplayName(call.callerUserId),
+    ).catch((notificationError: unknown) => {
+      console.error("Incoming call notification could not be shown", {
+        cause:
+          notificationError instanceof Error
+            ? notificationError.message
+            : "Unknown notification error",
+      });
+    });
+
+    const dismissWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void dismissIncomingCallNotification(call.id);
+      }
+    };
+    document.addEventListener("visibilitychange", dismissWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", dismissWhenVisible);
+    };
   }, [realtime.incomingCall, resolveDisplayName]);
+
+  useEffect(() => {
+    const call = realtime.latestCall;
+    if (call?.status !== "ENDED") return;
+    void dismissIncomingCallNotification(call.id);
+  }, [realtime.latestCall]);
 
   useEffect(() => {
     if (!realtime.incomingCall) return;

@@ -683,8 +683,29 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
       await publishOccupancy(conversation, userId);
     },
 
-    heartbeat: (userId: string, sessionId: string) =>
-      dependencies.sessions.heartbeat(userId, sessionId),
+    async heartbeat(userId: string, sessionId: string) {
+      const session = await dependencies.sessions.getByUser(userId);
+      if (!session || session.id !== sessionId) return false;
+
+      if (session.connectedAt === null) {
+        try {
+          const providerParticipants =
+            await dependencies.media.listParticipantIdentities(
+              session.providerRoomId,
+            );
+          if (providerParticipants.includes(session.participantIdentity)) {
+            await activateProviderSession(session);
+          }
+        } catch (error) {
+          dependencies.logger.warn(
+            { err: error },
+            "Pending voice session reconciliation failed",
+          );
+        }
+      }
+
+      return dependencies.sessions.heartbeat(userId, sessionId);
+    },
 
     async closeConversation(conversationId: string, providerRoomId?: string) {
       const sessions =

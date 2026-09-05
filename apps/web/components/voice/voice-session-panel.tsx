@@ -17,6 +17,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { CallDuration } from "@/components/voice/call-duration";
 import { ParticipantVideo } from "@/components/voice/participant-video";
 import { useConversation } from "@/lib/query/hooks";
 import { cn } from "@/lib/utils";
@@ -63,6 +64,22 @@ export function VoiceSessionPanel({
     ? `${voice.participantIdentities.length} connected · ${voice.connectionQuality.toLowerCase()}`
     : "Connecting...";
   const visibleStatus = voice.error ?? status;
+  const answeredAt =
+    session.kind === "CALL" && voice.activeCall?.status === "ACTIVE"
+      ? voice.activeCall.answeredAt
+      : null;
+
+  const sessionStatus = (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{visibleStatus}</span>
+      {answeredAt && (
+        <>
+          <span aria-hidden="true">&middot;</span>
+          <CallDuration answeredAt={answeredAt} className="shrink-0" />
+        </>
+      )}
+    </span>
+  );
 
   const controls = (
     <>
@@ -167,7 +184,7 @@ export function VoiceSessionPanel({
               )}
               role={voice.error ? "alert" : undefined}
             >
-              {visibleStatus}
+              {sessionStatus}
             </span>
           </span>
         </Link>
@@ -215,7 +232,7 @@ export function VoiceSessionPanel({
             )}
             role={voice.error ? "alert" : undefined}
           >
-            {visibleStatus}
+            {sessionStatus}
           </span>
         </span>
       </Link>

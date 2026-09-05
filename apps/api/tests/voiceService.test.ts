@@ -7,7 +7,10 @@ import { VoiceCallJobKind } from "../src/modules/voice/voice-call.jobs.js";
 import createVoiceService, {
   type VoiceServiceDependencies,
 } from "../src/modules/voice/voice.service.js";
-import type { CallSessionRecord } from "../src/modules/voice/voice.types.js";
+import type {
+  CallSessionRecord,
+  VoiceSessionRecord,
+} from "../src/modules/voice/voice.types.js";
 
 const startedAt = new Date("2026-09-02T00:00:00.000Z");
 const call: CallSessionRecord = {
@@ -30,6 +33,46 @@ const call: CallSessionRecord = {
 };
 
 describe("voice service reconciliation", () => {
+  test("reconciles a pending provider participant during heartbeat", async () => {
+    const session: VoiceSessionRecord = {
+      id: "00000000-0000-4000-8000-000000000002",
+      kind: "CALL",
+      organizationId: call.organizationId,
+      conversationId: call.conversationId,
+      callId: call.id,
+      userId: call.callerUserId,
+      participantIdentity: "00000000-0000-4000-8000-000000000003",
+      providerRoomId: call.providerRoomId,
+      connectedAt: null,
+    };
+    let activatedSessionId: string | undefined;
+    let heartbeatSessionId: string | undefined;
+    const dependencies = {
+      calls: { findById: async () => call },
+      jobs: { setHandler() {} },
+      logger: { error() {}, warn() {} },
+      media: {
+        listParticipantIdentities: async () => [session.participantIdentity],
+      },
+      sessions: {
+        activate: async (_userId: string, sessionId: string) => {
+          activatedSessionId = sessionId;
+          return { ...session, connectedAt: new Date() };
+        },
+        getByUser: async () => session,
+        heartbeat: async (_userId: string, sessionId: string) => {
+          heartbeatSessionId = sessionId;
+          return true;
+        },
+      },
+    } as unknown as VoiceServiceDependencies;
+    const service = createVoiceService(dependencies);
+
+    assert.equal(await service.heartbeat(session.userId, session.id), true);
+    assert.equal(activatedSessionId, session.id);
+    assert.equal(heartbeatSessionId, session.id);
+  });
+
   test("ends ringing calls whose delayed timeout job was missed", async () => {
     let transitionInput:
       | {

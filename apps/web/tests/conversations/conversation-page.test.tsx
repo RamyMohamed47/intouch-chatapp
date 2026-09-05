@@ -65,6 +65,9 @@ const mocks = vi.hoisted(() => {
   return {
     createdMessage,
     createMessage: vi.fn(() => Promise.resolve(createdMessage)),
+    createDirectMessage: vi.fn(() =>
+      Promise.resolve({ id: "64d000000000000000000099" }),
+    ),
     removeMessage: vi.fn(() => Promise.resolve(undefined)),
     state,
     joinConversation: vi.fn(() => Promise.resolve({ success: true })),
@@ -73,6 +76,7 @@ const mocks = vi.hoisted(() => {
     startCall: vi.fn(() => Promise.resolve()),
     stopTyping: vi.fn(),
     routerReplace: vi.fn(),
+    routerPush: vi.fn(),
     updateReadReceipt: vi.fn(() =>
       Promise.resolve({
         id: "650000000000000000000001",
@@ -87,7 +91,10 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mocks.routerReplace }),
+  useRouter: () => ({
+    push: mocks.routerPush,
+    replace: mocks.routerReplace,
+  }),
   useSearchParams: () =>
     new URLSearchParams(
       mocks.state.anchorMessageId
@@ -267,21 +274,31 @@ vi.mock("@/lib/api/messages", () => ({
   },
 }));
 
+vi.mock("@/lib/api/conversations", () => ({
+  conversationsApi: {
+    createDirectMessage: mocks.createDirectMessage,
+  },
+}));
+
 import { ConversationPage } from "@/components/conversations/conversation-page";
 
 const renderConversation = () => {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
-  return render(
+  const ui = () => (
     <QueryClientProvider client={queryClient}>
       <ConversationPage
         organizationId="64c000000000000000000001"
         conversationId="64d000000000000000000001"
         expectedType={mocks.state.conversationType}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(ui());
+  return Object.assign(view, {
+    rerenderConversation: () => view.rerender(ui()),
+  });
 };
 
 describe("ConversationPage interactions", () => {
@@ -295,6 +312,8 @@ describe("ConversationPage interactions", () => {
     mocks.state.peerReadReceipt = null;
     mocks.state.channelReaderSummary = undefined;
     mocks.createMessage.mockClear();
+    mocks.createDirectMessage.mockClear();
+    mocks.routerPush.mockClear();
     mocks.removeMessage.mockReset();
     mocks.removeMessage.mockResolvedValue(undefined);
   });
@@ -330,6 +349,28 @@ describe("ConversationPage interactions", () => {
     ).toHaveTextContent("Online");
   });
 
+  it("opens a direct message from a channel sender", async () => {
+    mocks.state.messages = [
+      {
+        ...mocks.createdMessage,
+        senderId: "64b000000000000000000002",
+      },
+    ];
+    renderConversation();
+
+    await userEvent.click(screen.getByRole("button", { name: "Lina Hassan" }));
+
+    await waitFor(() =>
+      expect(mocks.createDirectMessage).toHaveBeenCalledWith(
+        "64c000000000000000000001",
+        { recipientUserId: "64b000000000000000000002" },
+      ),
+    );
+    expect(mocks.routerPush).toHaveBeenCalledWith(
+      "/app/64c000000000000000000001/direct-messages/64d000000000000000000099",
+    );
+  });
+
   it("replaces the active direct-message timeline with its call surface", () => {
     mocks.state.conversationType = "DIRECT";
     mocks.state.activeVoiceConversationId = "64d000000000000000000001";
@@ -341,6 +382,38 @@ describe("ConversationPage interactions", () => {
     expect(
       screen.queryByRole("textbox", { name: "Message content" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("scrolls to the latest message when returning from a direct call", () => {
+    const scrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollHeight",
+    );
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get: () => 900,
+    });
+    mocks.state.conversationType = "DIRECT";
+    mocks.state.activeVoiceConversationId = "64d000000000000000000001";
+    const view = renderConversation();
+
+    mocks.state.activeVoiceConversationId = null;
+    view.rerenderConversation();
+
+    const viewport = view.container.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    expect(viewport?.scrollTop).toBe(900);
+
+    if (scrollHeight) {
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "scrollHeight",
+        scrollHeight,
+      );
+    } else {
+      delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+    }
   });
 
   it("shows Read under the latest outgoing DM even when a newer reply follows", () => {

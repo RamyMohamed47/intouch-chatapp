@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ConnectionQuality, ConnectionState } from "livekit-client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   const initialSessionKind = (): "VOICE_CHANNEL" | "CALL" => "VOICE_CHANNEL";
@@ -18,7 +18,9 @@ const mocks = vi.hoisted(() => {
     toggleMute: vi.fn(),
     voice: {
       activeCall: null as {
+        answeredAt: string | null;
         mediaMode: "AUDIO" | "VIDEO";
+        status: "ACTIVE" | "CONNECTING";
       } | null,
       activeSession: {
         id: "00000000-0000-4000-8000-000000000001",
@@ -90,6 +92,10 @@ describe("VoiceSessionPanel", () => {
     mocks.toggleMute.mockReset();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("renders the active channel and controls in the workspace sidebar", async () => {
     render(<VoiceSessionPanel variant="sidebar" />);
 
@@ -146,11 +152,32 @@ describe("VoiceSessionPanel", () => {
 
   it("labels a persistent video call by its durable media mode", () => {
     mocks.voice.activeSession.kind = "CALL";
-    mocks.voice.activeCall = { mediaMode: "VIDEO" };
+    mocks.voice.activeCall = {
+      answeredAt: null,
+      mediaMode: "VIDEO",
+      status: "CONNECTING",
+    };
 
     render(<VoiceSessionPanel variant="sidebar" />);
 
     expect(screen.getByText("Video call")).toBeInTheDocument();
+  });
+
+  it("keeps the live direct-call duration visible after navigation", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-02T02:02:03.000Z"));
+    mocks.voice.activeSession.kind = "CALL";
+    mocks.voice.activeCall = {
+      answeredAt: "2026-09-02T01:00:00.000Z",
+      mediaMode: "AUDIO",
+      status: "ACTIVE",
+    };
+
+    render(<VoiceSessionPanel variant="sidebar" />);
+
+    expect(screen.getByText("1:02:03")).toHaveAccessibleName(
+      "Call duration 1 hour, 2 minutes, 3 seconds",
+    );
   });
 
   it("renders the compact mobile tray in document flow", () => {

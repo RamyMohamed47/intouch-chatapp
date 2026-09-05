@@ -10,16 +10,23 @@ const mocks = vi.hoisted(() => ({
   activeSession: vi.fn(),
   dismissIncomingCall: vi.fn(),
   heartbeatVoice: vi.fn(),
+  dismissIncomingCallNotification: vi.fn(),
   getCall: vi.fn(),
   joinChannel: vi.fn(),
   leave: vi.fn(),
   resume: vi.fn(),
   startCall: vi.fn(),
+  showIncomingCallNotification: vi.fn(),
   transition: vi.fn(),
   realtime: {
     incomingCall: null as CallDto | null,
     latestCall: null as CallDto | null,
   },
+}));
+
+vi.mock("@/lib/voice/call-notifications", () => ({
+  dismissIncomingCallNotification: mocks.dismissIncomingCallNotification,
+  showIncomingCallNotification: mocks.showIncomingCallNotification,
 }));
 
 vi.mock("@/lib/auth/provider", () => ({
@@ -201,15 +208,22 @@ describe("VoiceProvider", () => {
     mocks.accept.mockReset();
     mocks.activeSession.mockResolvedValue(null);
     mocks.dismissIncomingCall.mockReset();
+    mocks.dismissIncomingCallNotification.mockReset();
     mocks.heartbeatVoice.mockResolvedValue({ success: true });
     mocks.getCall.mockReset();
     mocks.joinChannel.mockReset();
     mocks.leave.mockResolvedValue(undefined);
     mocks.resume.mockReset();
     mocks.startCall.mockReset();
+    mocks.showIncomingCallNotification.mockReset();
+    mocks.showIncomingCallNotification.mockResolvedValue(undefined);
     mocks.transition.mockReset();
     mocks.realtime.incomingCall = null;
     mocks.realtime.latestCall = null;
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
   });
 
   it("joins and leaves a channel through one persistent media room", async () => {
@@ -379,6 +393,9 @@ describe("VoiceProvider", () => {
       screen.getByRole("button", { name: "Start test call" }),
     );
     await waitFor(() => expect(room.connect).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(mocks.heartbeatVoice).toHaveBeenCalledWith(callSession.id),
+    );
     await userEvent.click(
       screen.getByRole("button", { name: "Leave test channel" }),
     );
@@ -453,6 +470,24 @@ describe("VoiceProvider", () => {
 
     expect(mocks.transition).toHaveBeenCalledWith(incomingCall.id, "decline");
     expect(mocks.dismissIncomingCall).toHaveBeenCalled();
+  });
+
+  it("uses the service worker for incoming calls while the tab is hidden", async () => {
+    const room = new FakeRoom();
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    mocks.realtime.incomingCall = incomingCall;
+
+    renderProvider(room);
+
+    await waitFor(() =>
+      expect(mocks.showIncomingCallNotification).toHaveBeenCalledWith(
+        incomingCall,
+        "A teammate",
+      ),
+    );
   });
 
   it("resolves incoming caller names only from member-roster caches", async () => {

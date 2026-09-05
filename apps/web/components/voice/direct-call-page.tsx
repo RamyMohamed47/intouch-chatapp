@@ -21,6 +21,7 @@ import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/users/user-avatar";
+import { CallDuration } from "@/components/voice/call-duration";
 import { SpeakingIndicator } from "@/components/voice/speaking-indicator";
 import { ParticipantVideo } from "@/components/voice/participant-video";
 import { PageHeader } from "@/components/workspace/page-header";
@@ -109,6 +110,13 @@ export function DirectCallPage({
                 <h2 className="mt-2 text-balance text-2xl font-semibold">
                   {callStatus}
                 </h2>
+                {voice.activeCall?.status === "ACTIVE" &&
+                  voice.activeCall.answeredAt && (
+                    <CallDuration
+                      answeredAt={voice.activeCall.answeredAt}
+                      className="mt-3 inline-flex rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-sm font-semibold text-primary"
+                    />
+                  )}
                 <p className="mt-2 text-sm text-muted-foreground">
                   {peerConnected
                     ? "Your conversation is live and private."

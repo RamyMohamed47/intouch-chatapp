@@ -40,6 +40,20 @@ export default tseslint.config(
     },
   },
   {
+    files: ["apps/web/public/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+      },
+      parserOptions: {
+        projectService: false,
+      },
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+    },
+  },
+  {
     files: ["scripts/**/*.mjs"],
     languageOptions: {
       parserOptions: {

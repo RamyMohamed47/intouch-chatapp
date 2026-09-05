@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DirectConversationDto } from "@intouch/shared/conversations";
 import type { ConnectionQuality, ConnectionState } from "livekit-client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   const initialMediaMode = (): "AUDIO" | "VIDEO" => "AUDIO";
@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => {
         callerUserId: localUserId,
         mediaMode: initialMediaMode(),
         status: "ACTIVE" as const,
+        answeredAt: "2026-09-02T01:00:00.000Z",
       },
       activeSession: {
         id: sessionId,
@@ -142,6 +143,10 @@ describe("DirectCallPage", () => {
     mocks.voice.isPlaybackBlocked = false;
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("renders a dedicated call surface with participant state", () => {
     render(
       <DirectCallPage conversation={conversation} organizationName="InTouch" />,
@@ -186,5 +191,26 @@ describe("DirectCallPage", () => {
     );
 
     expect(screen.getByText("Live video call")).toBeInTheDocument();
+  });
+
+  it("shows a live duration anchored to the shared answered time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-02T01:01:05.000Z"));
+
+    render(
+      <DirectCallPage conversation={conversation} organizationName="InTouch" />,
+    );
+
+    expect(screen.getByText("01:05")).toHaveAccessibleName(
+      "Call duration 1 minute, 5 seconds",
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(screen.getByText("01:06")).toHaveAccessibleName(
+      "Call duration 1 minute, 6 seconds",
+    );
   });
 });

@@ -89,6 +89,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth/provider";
+import { conversationsApi } from "@/lib/api/conversations";
 import { messagesApi } from "@/lib/api/messages";
 import {
   useConversation,
@@ -265,6 +266,7 @@ export function ConversationPage({
   const failedReceiptMessageIdRef = useRef<string | null>(null);
   const pendingReceiptMessageIdRef = useRef<string | null>(null);
   const forceBottomScrollRef = useRef(false);
+  const directCallOpenRef = useRef(false);
   const scrollStateRef = useRef<{
     conversationId: string;
     initialized: boolean;
@@ -353,6 +355,30 @@ export function ConversationPage({
     : messages.isError;
   const atLatestMessage =
     !anchorMessageId || messageContext.data?.hasLater === false;
+  const directCallOpen = Boolean(
+    conversation.data?.type === "DIRECT" &&
+    voice.activeSession?.kind === "CALL" &&
+    voice.activeSession.conversationId === conversationId,
+  );
+
+  useLayoutEffect(() => {
+    const returningFromCall = directCallOpenRef.current && !directCallOpen;
+    directCallOpenRef.current = directCallOpen;
+    if (!returningFromCall) return;
+
+    scrollStateRef.current = {
+      conversationId,
+      initialized: true,
+      newestMessageId: newestMessage?.id ?? null,
+    };
+    const viewport = messageViewportRef.current;
+    if (!anchorMessageId && viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
+    isNearBottomRef.current = !anchorMessageId;
+    setNewestMessageVisible(!anchorMessageId);
+    forceBottomScrollRef.current = false;
+  }, [anchorMessageId, conversationId, directCallOpen, newestMessage?.id]);
 
   useLayoutEffect(() => {
     if (scrollStateRef.current.conversationId !== conversationId) {
@@ -540,6 +566,25 @@ export function ConversationPage({
       await refreshSummaries();
     },
   });
+  const openDirectMessage = useMutation({
+    mutationFn: (recipientUserId: string) =>
+      conversationsApi.createDirectMessage(organizationId, {
+        recipientUserId,
+      }),
+    onSuccess: (directConversation) => {
+      setError(null);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.directMessages(organizationId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.directMessagePreview(organizationId),
+      });
+      router.push(
+        `/app/${organizationId}/direct-messages/${directConversation.id}`,
+      );
+    },
+    onError: (requestError) => setError(requestError.message),
+  });
   const mutateReaction = useMutation({
     mutationFn: ({
       emoji,
@@ -677,11 +722,7 @@ export function ConversationPage({
     ? members.data?.find((member) => member.user.id === directMessagePeerId)
         ?.user
     : undefined;
-  if (
-    conversation.data.type === "DIRECT" &&
-    voice.activeSession?.kind === "CALL" &&
-    voice.activeSession.conversationId === conversationId
-  ) {
+  if (directCallOpen && conversation.data.type === "DIRECT") {
     return (
       <DirectCallPage
         conversation={conversation.data}
@@ -859,6 +900,8 @@ export function ConversationPage({
                     (member) => member.user.id === message.senderId,
                   )?.user;
                   const own = message.senderId === user?.id;
+                  const canOpenDirectMessage =
+                    !own && conversation.data.type === "CHANNEL" && sender;
                   const canDelete =
                     !message.deletedAt &&
                     message.messageType !== "CALL" &&
@@ -875,16 +918,47 @@ export function ConversationPage({
                           "bg-brand-orange/10 ring-2 ring-brand-orange/40 ring-offset-4 ring-offset-background",
                       )}
                     >
-                      <UserAvatar
-                        displayName={sender?.displayName ?? "User"}
-                        avatarAssetId={sender?.avatarAssetId}
-                        avatarUrl={sender?.avatarUrl}
-                      />
+                      {canOpenDirectMessage ? (
+                        <button
+                          type="button"
+                          aria-label={`Message ${sender.displayName}`}
+                          className="h-fit shrink-0 rounded-full outline-none transition hover:ring-2 hover:ring-primary/40 focus-visible:ring-2 focus-visible:ring-ring"
+                          disabled={openDirectMessage.isPending}
+                          onClick={() =>
+                            openDirectMessage.mutate(message.senderId)
+                          }
+                        >
+                          <UserAvatar
+                            displayName={sender.displayName}
+                            avatarAssetId={sender.avatarAssetId}
+                            avatarUrl={sender.avatarUrl}
+                          />
+                        </button>
+                      ) : (
+                        <UserAvatar
+                          displayName={sender?.displayName ?? "User"}
+                          avatarAssetId={sender?.avatarAssetId}
+                          avatarUrl={sender?.avatarUrl}
+                        />
+                      )}
                       <div className="min-w-0 flex-1 rounded-2xl border border-border bg-card/82 p-4 shadow-sm backdrop-blur-md">
                         <div className="flex items-center gap-2">
-                          <strong className="truncate text-sm">
-                            {sender?.displayName ?? "Member"}
-                          </strong>
+                          {canOpenDirectMessage ? (
+                            <button
+                              type="button"
+                              className="truncate rounded text-left text-sm font-semibold outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                              disabled={openDirectMessage.isPending}
+                              onClick={() =>
+                                openDirectMessage.mutate(message.senderId)
+                              }
+                            >
+                              {sender.displayName}
+                            </button>
+                          ) : (
+                            <strong className="truncate text-sm">
+                              {sender?.displayName ?? "Member"}
+                            </strong>
+                          )}
                           <span className="font-mono text-[10px] text-muted-foreground">
                             {formatTime(message.createdAt)}
                           </span>
