@@ -5,6 +5,7 @@ import {
   callResponseSchema,
   voiceJoinResponseSchema,
   type JoinVoiceSessionInput,
+  type StartCallInput,
 } from "@intouch/shared/voice";
 
 import UnauthorizedError from "../../errors/UnauthorizedError.js";
@@ -78,7 +79,7 @@ const createVoiceController = (service: VoiceService): VoiceController => ({
     const result = await service.startCall(
       getUserId(res.locals as AuthLocals),
       String(req.params.conversationId),
-      req.body as JoinVoiceSessionInput,
+      req.body as StartCallInput,
     );
     res.status(201).json(callJoinResponseSchema.parse(result));
   }),

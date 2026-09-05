@@ -15,6 +15,8 @@ import {
   Send,
   Trash2,
   Users,
+  Video,
+  VideoOff,
   X,
 } from "lucide-react";
 import {
@@ -113,19 +115,20 @@ const formatTime = (value: string) =>
 
 const callLabel = (message: MessageDto, currentUserId?: string) => {
   const call = message.call;
+  const mediaLabel = call?.mediaMode === "VIDEO" ? "Video" : "Voice";
   if (!call) return "Voice call";
-  if (call.status !== "ENDED") return "Voice call in progress";
+  if (call.status !== "ENDED") return `${mediaLabel} call in progress`;
   if (call.endReason === "MISSED") {
     return call.recipientUserId === currentUserId
-      ? "Missed voice call"
-      : "Voice call was not answered";
+      ? `Missed ${mediaLabel.toLowerCase()} call`
+      : `${mediaLabel} call was not answered`;
   }
-  if (call.endReason === "DECLINED") return "Voice call declined";
-  if (call.endReason === "CANCELLED") return "Voice call cancelled";
-  if (call.endReason === "FAILED") return "Voice call failed";
-  if (call.endReason === "ACCESS_REVOKED") return "Voice call ended";
+  if (call.endReason === "DECLINED") return `${mediaLabel} call declined`;
+  if (call.endReason === "CANCELLED") return `${mediaLabel} call cancelled`;
+  if (call.endReason === "FAILED") return `${mediaLabel} call failed`;
+  if (call.endReason === "ACCESS_REVOKED") return `${mediaLabel} call ended`;
   const duration = call.durationSeconds ?? 0;
-  return `Voice call - ${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}`;
+  return `${mediaLabel} call - ${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}`;
 };
 
 const upsertCachedMessage = (
@@ -737,18 +740,30 @@ export function ConversationPage({
         actions={
           <>
             {conversation.data.type === "DIRECT" && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={voice.isTransitioning}
-                aria-label={`Call ${conversation.data.peer.displayName}`}
-                onClick={() => void voice.startCall(conversationId)}
-              >
-                <Phone />
-                <span className="hidden sm:inline">
-                  {voice.isTransitioning ? "Calling..." : "Call"}
-                </span>
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={voice.isTransitioning}
+                  aria-label={`Call ${conversation.data.peer.displayName}`}
+                  onClick={() => void voice.startCall(conversationId)}
+                >
+                  <Phone />
+                  <span className="hidden sm:inline">
+                    {voice.isTransitioning ? "Calling..." : "Call"}
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={voice.isTransitioning}
+                  aria-label={`Video call ${conversation.data.peer.displayName}`}
+                  onClick={() => void voice.startCall(conversationId, "VIDEO")}
+                >
+                  <Video />
+                  <span className="hidden sm:inline">Video</span>
+                </Button>
+              </>
             )}
             <ChatWallpaperDialog
               conversationId={conversationId}
@@ -934,7 +949,13 @@ export function ConversationPage({
                         {message.messageType === "CALL" ? (
                           <div className="mt-3 flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 p-3">
                             <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-                              {message.call?.endReason === "MISSED" ? (
+                              {message.call?.mediaMode === "VIDEO" ? (
+                                message.call.endReason === "MISSED" ? (
+                                  <VideoOff />
+                                ) : (
+                                  <Video />
+                                )
+                              ) : message.call?.endReason === "MISSED" ? (
                                 <PhoneMissed />
                               ) : message.call?.status === "ACTIVE" ? (
                                 <PhoneCall />

@@ -1110,11 +1110,11 @@ paths:
   /conversations/{conversationId}/calls:
     post:
       tags: [Voice]
-      summary: Start a direct-message voice call
+      summary: Start a direct-message audio or video call
       parameters:
         - $ref: "#/components/parameters/ConversationId"
       requestBody:
-        $ref: "#/components/requestBodies/JoinVoiceSessionRequest"
+        $ref: "#/components/requestBodies/StartCallRequest"
       responses:
         "201":
           $ref: "#/components/responses/CallJoinResponse"
@@ -1843,6 +1843,14 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/JoinVoiceSessionInput"
+
+    StartCallRequest:
+      description: Start an audio or video call, optionally replacing the caller's active media session.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StartCallInput"
 
   responses:
 
@@ -2892,6 +2900,18 @@ components:
           type: boolean
           default: false
 
+    StartCallInput:
+      type: object
+      additionalProperties: false
+      properties:
+        replaceActiveSession:
+          type: boolean
+          default: false
+        mediaMode:
+          type: string
+          enum: [AUDIO, VIDEO]
+          default: AUDIO
+
     VoiceCredentials:
       type: object
       additionalProperties: false
@@ -2975,11 +2995,56 @@ components:
           items:
             $ref: "#/components/schemas/VoiceOccupancyParticipant"
 
+    CallSummary:
+      type: object
+      additionalProperties: false
+      required:
+        [id, callerUserId, recipientUserId, mediaMode, status, endReason, startedAt, answeredAt, endedAt, durationSeconds]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        callerUserId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        recipientUserId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        mediaMode:
+          type: string
+          enum: [AUDIO, VIDEO]
+        status:
+          type: string
+          enum: [RINGING, CONNECTING, ACTIVE, ENDED]
+        endReason:
+          oneOf:
+            - type: string
+              enum: [DECLINED, CANCELLED, MISSED, COMPLETED, FAILED, ACCESS_REVOKED]
+            - type: "null"
+        startedAt:
+          type: string
+          format: date-time
+        answeredAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        endedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        durationSeconds:
+          oneOf:
+            - type: integer
+              minimum: 0
+            - type: "null"
+
     Call:
       type: object
       additionalProperties: false
       required:
-        [id, organizationId, conversationId, callerUserId, recipientUserId, status, endReason, startedAt, answeredAt, endedAt, durationSeconds]
+        [id, organizationId, conversationId, callerUserId, recipientUserId, mediaMode, status, endReason, startedAt, answeredAt, endedAt, durationSeconds]
       properties:
         id:
           type: string
@@ -2996,6 +3061,9 @@ components:
         recipientUserId:
           type: string
           pattern: "^[a-fA-F0-9]{24}$"
+        mediaMode:
+          type: string
+          enum: [AUDIO, VIDEO]
         status:
           type: string
           enum: [RINGING, CONNECTING, ACTIVE, ENDED]
@@ -3179,7 +3247,7 @@ components:
             $ref: "#/components/schemas/Attachment"
         call:
           oneOf:
-            - $ref: "#/components/schemas/Call"
+            - $ref: "#/components/schemas/CallSummary"
             - type: "null"
 
     MessageReactionSummary:

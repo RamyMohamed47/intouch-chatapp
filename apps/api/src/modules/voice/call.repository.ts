@@ -22,6 +22,7 @@ const toRecord = (call: CallSessionDocument): CallSessionRecord => ({
   conversationId: call.conversationId.toString(),
   callerUserId: call.callerUserId.toString(),
   recipientUserId: call.recipientUserId.toString(),
+  mediaMode: call.mediaMode ?? "AUDIO",
   providerRoomId: call.providerRoomId,
   ...(call.timelineMessageId
     ? { timelineMessageId: call.timelineMessageId.toString() }

@@ -6,6 +6,7 @@ const callSummaryPayload = (call: CallSessionRecord) => ({
   id: call.id,
   callerUserId: call.callerUserId,
   recipientUserId: call.recipientUserId,
+  mediaMode: call.mediaMode,
   status: call.status,
   endReason: call.endReason,
   startedAt: call.startedAt,

@@ -4,7 +4,7 @@ import { buildContentSecurityPolicy } from "@/lib/security/csp";
 
 const securityHeaders = {
   "Permissions-Policy":
-    "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
+    "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "X-Content-Type-Options": "nosniff",
 } as const;

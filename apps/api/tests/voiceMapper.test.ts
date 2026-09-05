@@ -19,6 +19,7 @@ const call: CallSessionRecord = {
   conversationId: "507f1f77bcf86cd799439013",
   callerUserId: "507f1f77bcf86cd799439014",
   recipientUserId: "507f1f77bcf86cd799439015",
+  mediaMode: "VIDEO",
   providerRoomId: "00000000-0000-4000-8000-000000000001",
   timelineMessageId: "507f1f77bcf86cd799439016",
   status: "ENDED",
@@ -38,6 +39,7 @@ describe("voice DTO mappers", () => {
     assert.equal("organizationId" in summary, false);
     assert.equal("conversationId" in summary, false);
     assert.equal(summary.durationSeconds, 65);
+    assert.equal(summary.mediaMode, "VIDEO");
     assert.doesNotThrow(() =>
       messageEventSchema.parse({
         id: call.timelineMessageId,

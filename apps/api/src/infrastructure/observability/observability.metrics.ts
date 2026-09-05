@@ -296,7 +296,11 @@ class InTouchMetrics {
     this.backgroundJobDuration.record(input.durationSeconds, attributes);
   }
 
-  recordVoiceCall(input: { event: "ended" | "started"; outcome: string }) {
+  recordVoiceCall(input: {
+    event: "ended" | "started";
+    mediaMode: "audio" | "video";
+    outcome: string;
+  }) {
     this.voiceCalls.add(1, input);
   }
 

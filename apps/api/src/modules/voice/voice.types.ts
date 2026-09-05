@@ -1,5 +1,6 @@
 import type {
   CallEndReasonValue,
+  CallMediaModeValue,
   CallStatusValue,
   VoiceSessionKindValue,
 } from "@intouch/shared/voice";
@@ -10,6 +11,7 @@ export interface CallSession {
   conversationId: Types.ObjectId;
   callerUserId: Types.ObjectId;
   recipientUserId: Types.ObjectId;
+  mediaMode: CallMediaModeValue;
   providerRoomId: string;
   timelineMessageId?: Types.ObjectId;
   status: CallStatusValue;
@@ -28,6 +30,7 @@ export interface CallSessionRecord {
   conversationId: string;
   callerUserId: string;
   recipientUserId: string;
+  mediaMode: CallMediaModeValue;
   providerRoomId: string;
   timelineMessageId?: string;
   status: CallStatusValue;
@@ -46,6 +49,7 @@ export interface CreateCallSessionRecordInput {
   conversationId: string;
   callerUserId: string;
   recipientUserId: string;
+  mediaMode: CallMediaModeValue;
   providerRoomId: string;
   startedAt: Date;
 }

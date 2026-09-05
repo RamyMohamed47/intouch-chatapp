@@ -16,7 +16,8 @@
     "migrate:remove-user-status": "tsx src/migrations/removeLegacyUserStatus.ts",
     "migrate:remove-organization-logo-urls": "tsx src/migrations/removeLegacyOrganizationLogoUrls.ts",
     "migrate:verify-existing-users": "tsx src/migrations/verifyExistingUsers.ts",
-    "migrate:channel-kinds": "tsx src/migrations/backfillChannelKinds.ts"
+    "migrate:channel-kinds": "tsx src/migrations/backfillChannelKinds.ts",
+    "migrate:call-media-modes": "tsx src/migrations/backfillCallMediaModes.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.922.0",

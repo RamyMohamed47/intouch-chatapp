@@ -157,6 +157,7 @@ erDiagram
         ObjectId conversationId
         ObjectId callerUserId
         ObjectId recipientUserId
+        enum mediaMode
         string providerRoomId
         ObjectId timelineMessageId
         enum status
@@ -462,6 +463,8 @@ are backfilled to `TEXT`; voice channels own an opaque provider room ID and do
 not have message history, unread state, or read receipts. `CallSession` stores
 the durable direct-message call lifecycle and links exactly one immutable
 `Message.messageType = CALL` timeline entry. Provider room IDs are selected out
-of normal queries and never enter public DTOs. Live occupancy, participant
+of normal queries and never enter public DTOs. `CallSession.mediaMode` records
+whether the call began as `AUDIO` or `VIDEO`; current camera state is ephemeral.
+Live occupancy, participant
 identities, connection leases, and webhook deduplication remain expiring Redis
 state rather than MongoDB entities.

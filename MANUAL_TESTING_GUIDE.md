@@ -464,13 +464,21 @@ chat` is pressed.
 - Create both public and private voice channels. Confirm they render as voice
   lounges, never expose message history, and retain their kind after edits.
 - Join a voice channel from two browsers. Verify participant count, active
-  speaker indication, mute, deafen, microphone selection, and owner-only
+  speaker indication, mute, deafen, microphone selection, optional camera,
+  camera selection, responsive video tiles, and owner-only
   server mute/disconnect. A remotely muted user must unmute themselves.
 - Fill a voice channel with ten users or test clients. The eleventh join must
   return `409 VOICE_CAPACITY_REACHED`, including during simultaneous joins.
-- Start a DM call and verify outgoing ringing, recipient-only incoming dialog,
+- Start both audio and video DM calls and verify outgoing ringing, mode-specific
+  recipient-only incoming dialogs and timeline labels,
   accept, decline, cancel, missed timeout, hang-up, and completed duration.
   Busy recipients must return `409 VOICE_USER_BUSY` without a timeline entry.
+- Verify video calls attempt camera-on for both participants. Deny camera access
+  and confirm the call continues with audio and a retryable error. Audio calls
+  and voice-channel joins must start camera-off.
+- Navigate away while publishing video and confirm the persistent session panel
+  shows a mirrored self-preview and camera toggle. Reload and confirm the media
+  session resumes with camera off until the user enables it again.
 - Reload during an active session and confirm authorized resume. Attempt to
   join another room and confirm switching requires explicit confirmation.
 - Use two tabs for one account. Confirm there is still only one logical voice

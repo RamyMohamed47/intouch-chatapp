@@ -1,5 +1,9 @@
 import { Schema, model } from "mongoose";
-import { CallEndReason, CallStatus } from "@intouch/shared/voice";
+import {
+  CallEndReason,
+  CallMediaMode,
+  CallStatus,
+} from "@intouch/shared/voice";
 
 import type { CallSession } from "./voice.types.js";
 
@@ -19,6 +23,12 @@ const callSessionSchema = new Schema<CallSession>(
     recipientUserId: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      required: true,
+    },
+    mediaMode: {
+      type: String,
+      enum: Object.values(CallMediaMode),
+      default: CallMediaMode.AUDIO,
       required: true,
     },
     providerRoomId: {

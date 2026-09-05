@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   callDtoSchema,
   joinVoiceSessionSchema,
+  startCallSchema,
   voiceHeartbeatSchema,
   voiceOccupancyDtoSchema,
 } from "../voice/index.js";
@@ -22,6 +23,15 @@ describe("voice contracts", () => {
       }),
     );
     assert.throws(() => voiceHeartbeatSchema.parse({ sessionId: objectId }));
+    assert.deepEqual(startCallSchema.parse({}), {
+      replaceActiveSession: false,
+      mediaMode: "AUDIO",
+    });
+    assert.equal(
+      startCallSchema.parse({ mediaMode: "VIDEO" }).mediaMode,
+      "VIDEO",
+    );
+    assert.throws(() => startCallSchema.parse({ mediaMode: "SCREEN" }));
   });
 
   test("requires strict authorized occupancy mappings", () => {
@@ -52,6 +62,7 @@ describe("voice contracts", () => {
       conversationId: objectId,
       callerUserId: objectId,
       recipientUserId: objectId,
+      mediaMode: "VIDEO",
       status: "ENDED",
       endReason: "COMPLETED",
       startedAt: "2026-09-01T00:00:00.000Z",

@@ -16,6 +16,7 @@ const call: CallSessionRecord = {
   conversationId: "507f1f77bcf86cd799439013",
   callerUserId: "507f1f77bcf86cd799439014",
   recipientUserId: "507f1f77bcf86cd799439015",
+  mediaMode: "AUDIO",
   providerRoomId: "00000000-0000-4000-8000-000000000001",
   timelineMessageId: "507f1f77bcf86cd799439016",
   status: CallStatus.RINGING,

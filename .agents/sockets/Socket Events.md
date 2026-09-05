@@ -170,8 +170,9 @@ events never become the durable source of truth.
 ## Voice Runtime
 
 Socket.IO transports call lifecycle, occupancy invalidation, and voice-session
-heartbeats only. LiveKit Cloud transports encrypted WebRTC audio and signaling.
-InTouch issues five-minute audio-only initial-connect credentials and never
+heartbeats only. LiveKit Cloud transports encrypted WebRTC audio, camera video,
+and signaling. InTouch issues five-minute initial-connect credentials limited
+to microphone and camera publication and never
 places user IDs, names, or conversation IDs in provider room or participant
 identities. Signed LiveKit webhooks activate/release Redis leases; BullMQ
 provides ringing, connection, and disconnect deadlines when webhooks are late.
@@ -180,5 +181,6 @@ Every user has at most one reserved voice session across calls and voice
 channels. DM ringing reserves both participants, while voice channels enforce
 an atomic capacity of ten in the shared Redis store. Membership, private
 participant, channel, and organization lifecycle changes revoke provider
-participants and Redis leases after the MongoDB mutation commits. Audio is
-never broadcast through Socket.IO or persisted by InTouch.
+participants and Redis leases after the MongoDB mutation commits. Call events
+include the durable initial `AUDIO | VIDEO` mode; live camera state remains in
+LiveKit and is never broadcast through Socket.IO or persisted by InTouch.

@@ -89,7 +89,7 @@ export const createLiveKitVoiceMediaProvider = (
         roomJoin: true,
         canPublish: true,
         canPublishData: false,
-        canPublishSources: [TrackSource.MICROPHONE],
+        canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA],
         canSubscribe: true,
       });
       return {

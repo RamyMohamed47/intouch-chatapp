@@ -1,6 +1,7 @@
 export {
   callIdParamsSchema,
   joinVoiceSessionSchema,
+  startCallSchema,
   voiceHeartbeatSchema,
   voiceParticipantParamsSchema,
   voiceSessionIdParamsSchema,
@@ -8,12 +9,15 @@ export {
 export type {
   CallIdParams,
   JoinVoiceSessionInput,
+  StartCallInput,
   VoiceHeartbeatInput,
   VoiceParticipantParams,
 } from "./voice.schema.js";
 export {
   activeVoiceSessionResponseSchema,
   CallEndReason,
+  CallMediaMode,
+  callMediaModeSchema,
   callEndReasonSchema,
   CallStatus,
   callDtoSchema,
@@ -35,6 +39,7 @@ export type {
   ActiveVoiceSessionResponse,
   CallDto,
   CallEndReasonValue,
+  CallMediaModeValue,
   CallIncomingEvent,
   CallJoinResponse,
   CallResponse,

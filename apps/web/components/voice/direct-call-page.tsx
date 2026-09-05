@@ -4,12 +4,15 @@ import type { DirectConversationDto } from "@intouch/shared/conversations";
 import { ConnectionState } from "livekit-client";
 import {
   AudioLines,
+  Camera,
+  CameraOff,
   HeadphoneOff,
   Headphones,
   Mic,
   MicOff,
   PhoneOff,
   Signal,
+  Video,
   Volume2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -19,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/users/user-avatar";
 import { SpeakingIndicator } from "@/components/voice/speaking-indicator";
+import { ParticipantVideo } from "@/components/voice/participant-video";
 import { PageHeader } from "@/components/workspace/page-header";
 import { useAuth } from "@/lib/auth/provider";
 import { useMembers } from "@/lib/query/hooks";
@@ -50,15 +54,18 @@ export function DirectCallPage({
   const peerConnected = voice.participantIdentities.some(
     (identity) => identity !== localIdentity,
   );
+  const localCamera = voice.cameraTracks.find(({ isLocal }) => isLocal);
+  const peerCamera = voice.cameraTracks.find(({ isLocal }) => !isLocal);
+  const audioInputs = devices.filter(({ kind }) => kind === "audioinput");
+  const videoInputs = devices.filter(({ kind }) => kind === "videoinput");
+  const isVideoCall = voice.activeCall?.mediaMode === "VIDEO";
 
   useEffect(() => {
     const mediaDevices = navigator.mediaDevices;
     if (!mediaDevices?.enumerateDevices) return;
     void mediaDevices
       .enumerateDevices()
-      .then((items) =>
-        setDevices(items.filter(({ kind }) => kind === "audioinput")),
-      )
+      .then(setDevices)
       .catch(() => setDevices([]));
   }, []);
 
@@ -76,12 +83,17 @@ export function DirectCallPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        eyebrow="Direct voice call"
+        eyebrow={`Direct ${isVideoCall ? "video" : "voice"} call`}
         title={conversation.peer.displayName}
-        description={`Private audio call in ${organizationName}`}
+        description={`Private audio and video call in ${organizationName}`}
         actions={
           <Badge variant="outline">
-            <AudioLines aria-hidden="true" /> Live call
+            {isVideoCall ? (
+              <Video aria-hidden="true" />
+            ) : (
+              <AudioLines aria-hidden="true" />
+            )}
+            Live {isVideoCall ? "video" : "voice"} call
           </Badge>
         }
       />
@@ -105,58 +117,73 @@ export function DirectCallPage({
               </div>
 
               <div className="mx-auto mt-9 grid max-w-2xl gap-4 sm:grid-cols-2">
-                <div className="flex min-w-0 flex-col items-center rounded-[1.75rem] border border-border bg-background/45 p-6 text-center">
-                  <div className="relative">
+                <div className="relative flex aspect-video min-w-0 flex-col items-center justify-center overflow-hidden rounded-[1.75rem] border border-border bg-background/45 text-center">
+                  {localCamera ? (
+                    <ParticipantVideo
+                      displayName={user?.displayName ?? "You"}
+                      isLocal
+                      track={localCamera.track}
+                    />
+                  ) : (
                     <UserAvatar
                       className="size-24 text-xl sm:size-28"
                       displayName={user?.displayName ?? "You"}
                       avatarAssetId={user?.avatarAssetId}
                       avatarUrl={user?.avatarUrl}
                     />
-                    {localSpeaking && (
-                      <SpeakingIndicator
-                        className="absolute right-0 bottom-0 size-7 [&_svg]:size-3.5"
-                        displayName={user?.displayName ?? "You"}
-                      />
-                    )}
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-3 text-white">
+                    <span className="min-w-0 truncate text-sm font-medium">
+                      {user?.displayName ?? "You"} (You)
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      {!localCamera && <CameraOff className="size-4" />}
+                      {localSpeaking && (
+                        <SpeakingIndicator
+                          className="size-7 [&_svg]:size-3.5"
+                          displayName={user?.displayName ?? "You"}
+                        />
+                      )}
+                    </span>
                   </div>
-                  <strong className="mt-4 max-w-full truncate text-base">
-                    {user?.displayName ?? "You"}
-                  </strong>
-                  <span className="mt-1 text-xs text-muted-foreground">
-                    You
-                  </span>
                 </div>
 
                 <div
                   className={cn(
-                    "flex min-w-0 flex-col items-center rounded-[1.75rem] border border-border bg-background/45 p-6 text-center transition-opacity",
+                    "relative flex aspect-video min-w-0 flex-col items-center justify-center overflow-hidden rounded-[1.75rem] border border-border bg-background/45 text-center transition-opacity",
                     !peerConnected && "opacity-65",
                   )}
                 >
-                  <div className="relative">
+                  {peerCamera ? (
+                    <ParticipantVideo
+                      displayName={conversation.peer.displayName}
+                      track={peerCamera.track}
+                    />
+                  ) : (
                     <UserAvatar
                       className="size-24 text-xl sm:size-28"
                       displayName={conversation.peer.displayName}
                       avatarAssetId={conversation.peer.avatarAssetId}
                       avatarUrl={conversation.peer.avatarUrl}
                     />
-                    {peerSpeaking && (
-                      <SpeakingIndicator
-                        className="absolute right-0 bottom-0 size-7 [&_svg]:size-3.5"
-                        displayName={conversation.peer.displayName}
-                      />
-                    )}
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-3 text-white">
+                    <span className="min-w-0 truncate text-sm font-medium">
+                      {conversation.peer.displayName}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      {!peerCamera && <CameraOff className="size-4" />}
+                      {peerSpeaking && (
+                        <SpeakingIndicator
+                          className="size-7 [&_svg]:size-3.5"
+                          displayName={conversation.peer.displayName}
+                        />
+                      )}
+                    </span>
                   </div>
-                  <strong className="mt-4 max-w-full truncate text-base">
-                    {conversation.peer.displayName}
-                  </strong>
-                  <span className="mt-1 text-xs text-muted-foreground">
-                    {peerConnected ? "Connected" : "Waiting to join"}
-                  </span>
                   {peerPresence && (
                     <PresenceIndicator
-                      className="mt-2 text-xs"
+                      className="absolute top-3 right-3 rounded-full bg-background/80 px-2 py-1 text-xs backdrop-blur"
                       displayName={peerPresence.displayName}
                       status={peerPresence.status}
                       lastSeenAt={peerPresence.lastSeenAt}
@@ -194,7 +221,7 @@ export function DirectCallPage({
                     <Volume2 /> Enable audio
                   </Button>
                 )}
-                <div className="grid min-w-0 grid-cols-2 gap-2">
+                <div className="grid min-w-0 grid-cols-3 gap-2">
                   <Button
                     className="min-w-0"
                     variant="outline"
@@ -217,8 +244,19 @@ export function DirectCallPage({
                       {voice.isDeafened ? "Listen" : "Deafen"}
                     </span>
                   </Button>
+                  <Button
+                    className="min-w-0"
+                    variant="outline"
+                    disabled={voice.isCameraTransitioning}
+                    onClick={() => void voice.toggleCamera()}
+                  >
+                    {voice.isCameraEnabled ? <CameraOff /> : <Camera />}
+                    <span className="truncate">
+                      {voice.isCameraEnabled ? "Stop" : "Camera"}
+                    </span>
+                  </Button>
                 </div>
-                {devices.length > 0 && (
+                {audioInputs.length > 0 && (
                   <label className="grid min-w-0 gap-2 text-xs text-muted-foreground">
                     Microphone
                     <select
@@ -229,9 +267,28 @@ export function DirectCallPage({
                         void voice.setInputDevice(event.target.value)
                       }
                     >
-                      {devices.map((device, index) => (
+                      {audioInputs.map((device, index) => (
                         <option key={device.deviceId} value={device.deviceId}>
                           {device.label || `Microphone ${index + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {videoInputs.length > 0 && (
+                  <label className="grid min-w-0 gap-2 text-xs text-muted-foreground">
+                    Camera
+                    <select
+                      name="direct-call-video-device"
+                      disabled={voice.isCameraTransitioning}
+                      className="block h-9 w-full min-w-0 max-w-full truncate rounded-xl border border-border bg-background px-3 text-sm text-foreground"
+                      onChange={(event) =>
+                        void voice.setVideoDevice(event.target.value)
+                      }
+                    >
+                      {videoInputs.map((device, index) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Camera ${index + 1}`}
                         </option>
                       ))}
                     </select>

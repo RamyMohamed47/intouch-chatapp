@@ -1,9 +1,17 @@
 import { z } from "zod";
 
 import { identifierDtoSchema } from "../common/index.js";
+import { CallMediaMode, callMediaModeSchema } from "./voice.dto.js";
 
 export const joinVoiceSessionSchema = z
   .object({ replaceActiveSession: z.boolean().default(false) })
+  .strict();
+
+export const startCallSchema = z
+  .object({
+    replaceActiveSession: z.boolean().default(false),
+    mediaMode: callMediaModeSchema.default(CallMediaMode.AUDIO),
+  })
   .strict();
 
 export const voiceSessionIdParamsSchema = z
@@ -26,6 +34,7 @@ export const voiceHeartbeatSchema = z
   .strict();
 
 export type JoinVoiceSessionInput = z.infer<typeof joinVoiceSessionSchema>;
+export type StartCallInput = z.infer<typeof startCallSchema>;
 export type CallIdParams = z.infer<typeof callIdParamsSchema>;
 export type VoiceHeartbeatInput = z.infer<typeof voiceHeartbeatSchema>;
 export type VoiceParticipantParams = z.infer<

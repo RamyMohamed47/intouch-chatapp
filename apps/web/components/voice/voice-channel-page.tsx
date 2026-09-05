@@ -3,6 +3,8 @@
 import type { VoiceChannelConversationDto } from "@intouch/shared/conversations";
 import { ConnectionState } from "livekit-client";
 import {
+  Camera,
+  CameraOff,
   Headphones,
   HeadphoneOff,
   Mic,
@@ -19,6 +21,7 @@ import { useEffect, useState } from "react";
 
 import { InviteMemberDialog } from "@/components/memberships/invite-member-dialog";
 import { UserAvatar } from "@/components/users/user-avatar";
+import { ParticipantVideo } from "@/components/voice/participant-video";
 import { SpeakingIndicator } from "@/components/voice/speaking-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -72,16 +75,27 @@ export function VoiceChannelPage({
     if (!mediaDevices?.enumerateDevices) return;
     void mediaDevices
       .enumerateDevices()
-      .then((items) =>
-        setDevices(items.filter(({ kind }) => kind === "audioinput")),
-      )
+      .then(setDevices)
       .catch(() => setDevices([]));
   }, [connectedHere]);
 
-  const participantMembers = participantIds.map((userId) => ({
-    userId,
-    user: members.data?.find((member) => member.user.id === userId)?.user,
-  }));
+  const audioInputs = devices.filter(({ kind }) => kind === "audioinput");
+  const videoInputs = devices.filter(({ kind }) => kind === "videoinput");
+  const participantMembers = participantIds.map((userId) => {
+    const identity =
+      userId === voice.activeSession?.userId
+        ? voice.activeSession.id
+        : conversation.occupancy.participants.find(
+            (participant) => participant.userId === userId,
+          )?.participantIdentity;
+    return {
+      userId,
+      user: members.data?.find((member) => member.user.id === userId)?.user,
+      camera: voice.cameraTracks.find(
+        (cameraTrack) => cameraTrack.identity === identity,
+      ),
+    };
+  });
   const owner = organization.data?.currentUserRole === "OWNER";
 
   return (
@@ -125,82 +139,96 @@ export function VoiceChannelPage({
                 </span>
               </div>
 
-              <div className="mt-7 grid gap-3 sm:grid-cols-2">
-                {participantMembers.map(({ userId, user }) => (
+              <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {participantMembers.map(({ userId, user, camera }) => (
                   <div
                     key={userId}
-                    className="flex min-w-0 items-center gap-3 rounded-2xl border border-border bg-background/45 p-4"
+                    className="relative flex aspect-video min-w-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-background/45"
                   >
-                    <div className="relative shrink-0">
+                    {camera ? (
+                      <ParticipantVideo
+                        displayName={user?.displayName ?? "Connected member"}
+                        isLocal={camera.isLocal}
+                        track={camera.track}
+                      />
+                    ) : (
                       <UserAvatar
+                        className="size-20 text-lg"
                         displayName={user?.displayName ?? "Member"}
                         avatarAssetId={user?.avatarAssetId}
                         avatarUrl={user?.avatarUrl}
                       />
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 flex min-w-0 items-center gap-2 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-3 text-white">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {user?.displayName ?? "Connected member"}
+                        {userId === voice.activeSession?.userId ? " (You)" : ""}
+                      </span>
+                      {!camera && <CameraOff className="size-4 shrink-0" />}
                       {activeSpeakerUserIds.includes(userId) && (
                         <SpeakingIndicator
-                          className="absolute -right-1 -bottom-1"
+                          className="shrink-0"
                           displayName={user?.displayName ?? "Connected member"}
                         />
                       )}
+                      {owner &&
+                        connectedHere &&
+                        userId !== voice.activeSession?.userId && (
+                          <div className="flex shrink-0 gap-1">
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label={`Mute ${user?.displayName ?? "participant"}`}
+                              disabled={pendingUserId === userId}
+                              onClick={() => {
+                                setModerationError(null);
+                                setPendingUserId(userId);
+                                void voiceApi
+                                  .muteParticipant(conversation.id, userId)
+                                  .catch((actionError: unknown) =>
+                                    setModerationError(
+                                      actionError instanceof Error
+                                        ? actionError.message
+                                        : "Could not mute the participant",
+                                    ),
+                                  )
+                                  .finally(() => setPendingUserId(null));
+                              }}
+                            >
+                              <VolumeX />
+                            </Button>
+                            <Button
+                              size="icon-sm"
+                              variant="destructive"
+                              aria-label={`Disconnect ${user?.displayName ?? "participant"}`}
+                              disabled={pendingUserId === userId}
+                              onClick={() => {
+                                setModerationError(null);
+                                setPendingUserId(userId);
+                                void voiceApi
+                                  .disconnectParticipant(
+                                    conversation.id,
+                                    userId,
+                                  )
+                                  .catch((actionError: unknown) =>
+                                    setModerationError(
+                                      actionError instanceof Error
+                                        ? actionError.message
+                                        : "Could not disconnect the participant",
+                                    ),
+                                  )
+                                  .finally(() => setPendingUserId(null));
+                              }}
+                            >
+                              <UserMinus />
+                            </Button>
+                          </div>
+                        )}
                     </div>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                      {user?.displayName ?? "Connected member"}
-                    </span>
-                    {owner &&
-                      connectedHere &&
-                      userId !== voice.activeSession?.userId && (
-                        <div className="flex shrink-0 gap-1">
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={`Mute ${user?.displayName ?? "participant"}`}
-                            disabled={pendingUserId === userId}
-                            onClick={() => {
-                              setModerationError(null);
-                              setPendingUserId(userId);
-                              void voiceApi
-                                .muteParticipant(conversation.id, userId)
-                                .catch((actionError: unknown) =>
-                                  setModerationError(
-                                    actionError instanceof Error
-                                      ? actionError.message
-                                      : "Could not mute the participant",
-                                  ),
-                                )
-                                .finally(() => setPendingUserId(null));
-                            }}
-                          >
-                            <VolumeX />
-                          </Button>
-                          <Button
-                            size="icon-sm"
-                            variant="destructive"
-                            aria-label={`Disconnect ${user?.displayName ?? "participant"}`}
-                            disabled={pendingUserId === userId}
-                            onClick={() => {
-                              setModerationError(null);
-                              setPendingUserId(userId);
-                              void voiceApi
-                                .disconnectParticipant(conversation.id, userId)
-                                .catch((actionError: unknown) =>
-                                  setModerationError(
-                                    actionError instanceof Error
-                                      ? actionError.message
-                                      : "Could not disconnect the participant",
-                                  ),
-                                )
-                                .finally(() => setPendingUserId(null));
-                            }}
-                          >
-                            <UserMinus />
-                          </Button>
-                        </div>
-                      )}
                   </div>
                 ))}
                 {participantMembers.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground sm:col-span-2">
+                  <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">
                     No one is connected yet. Start the room when you are ready.
                   </div>
                 )}
@@ -238,7 +266,7 @@ export function VoiceChannelPage({
                       <Volume2 /> Enable audio
                     </Button>
                   )}
-                  <div className="grid min-w-0 grid-cols-2 gap-2">
+                  <div className="grid min-w-0 grid-cols-3 gap-2">
                     <Button
                       className="min-w-0"
                       variant="outline"
@@ -261,8 +289,19 @@ export function VoiceChannelPage({
                         {voice.isDeafened ? "Listen" : "Deafen"}
                       </span>
                     </Button>
+                    <Button
+                      className="min-w-0"
+                      variant="outline"
+                      disabled={voice.isCameraTransitioning}
+                      onClick={() => void voice.toggleCamera()}
+                    >
+                      {voice.isCameraEnabled ? <CameraOff /> : <Camera />}
+                      <span className="truncate">
+                        {voice.isCameraEnabled ? "Stop" : "Camera"}
+                      </span>
+                    </Button>
                   </div>
-                  {devices.length > 0 && (
+                  {audioInputs.length > 0 && (
                     <label className="grid min-w-0 gap-2 text-xs text-muted-foreground">
                       Microphone
                       <select
@@ -273,9 +312,28 @@ export function VoiceChannelPage({
                           void voice.setInputDevice(event.target.value)
                         }
                       >
-                        {devices.map((device, index) => (
+                        {audioInputs.map((device, index) => (
                           <option key={device.deviceId} value={device.deviceId}>
                             {device.label || `Microphone ${index + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {videoInputs.length > 0 && (
+                    <label className="grid min-w-0 gap-2 text-xs text-muted-foreground">
+                      Camera
+                      <select
+                        name="voice-video-device"
+                        disabled={voice.isCameraTransitioning}
+                        className="block h-9 w-full min-w-0 max-w-full truncate rounded-xl border border-border bg-background px-3 text-sm text-foreground"
+                        onChange={(event) =>
+                          void voice.setVideoDevice(event.target.value)
+                        }
+                      >
+                        {videoInputs.map((device, index) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label || `Camera ${index + 1}`}
                           </option>
                         ))}
                       </select>

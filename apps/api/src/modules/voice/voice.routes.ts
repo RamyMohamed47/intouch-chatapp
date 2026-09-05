@@ -2,6 +2,7 @@ import express, { type RequestHandler } from "express";
 import {
   callIdParamsSchema,
   joinVoiceSessionSchema,
+  startCallSchema,
   voiceParticipantParamsSchema,
 } from "@intouch/shared/voice";
 
@@ -43,7 +44,7 @@ export const createConversationVoiceRouter = (
     "/:conversationId/calls",
     joinLimit,
     validateParams(conversationParamsSchema),
-    validateBody(joinVoiceSessionSchema),
+    validateBody(startCallSchema),
     controller.startCall,
   );
   return router;

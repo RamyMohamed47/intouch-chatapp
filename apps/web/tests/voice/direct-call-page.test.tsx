@@ -5,6 +5,7 @@ import type { ConnectionQuality, ConnectionState } from "livekit-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
+  const initialMediaMode = (): "AUDIO" | "VIDEO" => "AUDIO";
   const localUserId = "507f1f77bcf86cd799439011";
   const peerUserId = "507f1f77bcf86cd799439012";
   const conversationId = "507f1f77bcf86cd799439013";
@@ -21,12 +22,15 @@ const mocks = vi.hoisted(() => {
     remoteIdentity,
     sessionId,
     setInputDevice: vi.fn(),
+    setVideoDevice: vi.fn(),
+    toggleCamera: vi.fn(),
     toggleDeafen: vi.fn(),
     toggleMute: vi.fn(),
     voice: {
       activeCall: {
         id: "507f1f77bcf86cd799439015",
         callerUserId: localUserId,
+        mediaMode: initialMediaMode(),
         status: "ACTIVE" as const,
       },
       activeSession: {
@@ -39,10 +43,13 @@ const mocks = vi.hoisted(() => {
         connectedAt: "2026-09-02T01:00:00.000Z",
       },
       activeSpeakerIdentities: [remoteIdentity],
+      cameraTracks: [],
       connectionQuality: "excellent" as ConnectionQuality,
       connectionState: "connected" as ConnectionState,
       error: null as string | null,
       isDeafened: false,
+      isCameraEnabled: false,
+      isCameraTransitioning: false,
       isMuted: false,
       isPlaybackBlocked: false,
       isTransitioning: false,
@@ -51,14 +58,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-const {
-  conversationId,
-  localUserId,
-  organizationId,
-  peerUserId,
-  remoteIdentity,
-  sessionId,
-} = mocks;
+const { conversationId, organizationId, peerUserId, remoteIdentity } = mocks;
 
 vi.mock("@/lib/auth/provider", () => ({
   useAuth: () => ({
@@ -103,6 +103,8 @@ vi.mock("@/lib/voice/provider", () => ({
     enablePlayback: mocks.enablePlayback,
     endSession: mocks.endSession,
     setInputDevice: mocks.setInputDevice,
+    setVideoDevice: mocks.setVideoDevice,
+    toggleCamera: mocks.toggleCamera,
     toggleDeafen: mocks.toggleDeafen,
     toggleMute: mocks.toggleMute,
   }),
@@ -133,8 +135,10 @@ describe("DirectCallPage", () => {
     mocks.enablePlayback.mockReset();
     mocks.endSession.mockReset();
     mocks.toggleDeafen.mockReset();
+    mocks.toggleCamera.mockReset();
     mocks.toggleMute.mockReset();
     mocks.voice.activeSpeakerIdentities = [remoteIdentity];
+    mocks.voice.activeCall.mediaMode = "AUDIO";
     mocks.voice.isPlaybackBlocked = false;
   });
 
@@ -164,11 +168,23 @@ describe("DirectCallPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Enable audio" }));
     await userEvent.click(screen.getByRole("button", { name: "Mute" }));
     await userEvent.click(screen.getByRole("button", { name: "Deafen" }));
+    await userEvent.click(screen.getByRole("button", { name: "Camera" }));
     await userEvent.click(screen.getByRole("button", { name: "End call" }));
 
     expect(mocks.enablePlayback).toHaveBeenCalledOnce();
     expect(mocks.toggleMute).toHaveBeenCalledOnce();
     expect(mocks.toggleDeafen).toHaveBeenCalledOnce();
+    expect(mocks.toggleCamera).toHaveBeenCalledOnce();
     expect(mocks.endSession).toHaveBeenCalledOnce();
+  });
+
+  it("labels calls that started in video mode", () => {
+    mocks.voice.activeCall.mediaMode = "VIDEO";
+
+    render(
+      <DirectCallPage conversation={conversation} organizationName="InTouch" />,
+    );
+
+    expect(screen.getByText("Live video call")).toBeInTheDocument();
   });
 });

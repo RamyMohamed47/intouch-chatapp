@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   activeSession: vi.fn(),
   dismissIncomingCall: vi.fn(),
   heartbeatVoice: vi.fn(),
+  getCall: vi.fn(),
   joinChannel: vi.fn(),
   leave: vi.fn(),
   resume: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("@/lib/api/voice", () => ({
   voiceApi: {
     accept: mocks.accept,
     activeSession: mocks.activeSession,
+    getCall: mocks.getCall,
     joinChannel: mocks.joinChannel,
     leave: mocks.leave,
     resume: mocks.resume,
@@ -78,6 +80,7 @@ const incomingCall: CallDto = {
   conversationId,
   callerUserId,
   recipientUserId,
+  mediaMode: "AUDIO",
   status: "RINGING",
   endReason: null,
   startedAt: "2026-09-01T00:00:00.000Z",
@@ -109,6 +112,12 @@ class FakeRoom {
   });
   readonly localParticipant = {
     identity: session.id,
+    isCameraEnabled: false,
+    getTrackPublication: vi.fn(() => undefined),
+    setCameraEnabled: vi.fn((enabled: boolean) => {
+      this.localParticipant.isCameraEnabled = enabled;
+      return Promise.resolve();
+    }),
     setMicrophoneEnabled: vi.fn().mockResolvedValue(undefined),
   };
   readonly remoteParticipants = new Map();
@@ -138,6 +147,7 @@ function Probe() {
       <span>
         {voice.isPlaybackBlocked ? "playback-blocked" : "playback-ready"}
       </span>
+      <span>{voice.isCameraEnabled ? "camera-on" : "camera-off"}</span>
       <button
         type="button"
         onClick={() => void voice.joinChannel(conversationId)}
@@ -152,6 +162,15 @@ function Probe() {
         onClick={() => void voice.startCall(conversationId)}
       >
         Start test call
+      </button>
+      <button
+        type="button"
+        onClick={() => void voice.startCall(conversationId, "VIDEO")}
+      >
+        Start test video call
+      </button>
+      <button type="button" onClick={() => void voice.toggleCamera()}>
+        Toggle test camera
       </button>
       <button type="button" onClick={() => void voice.enablePlayback()}>
         Enable test audio
@@ -183,6 +202,7 @@ describe("VoiceProvider", () => {
     mocks.activeSession.mockResolvedValue(null);
     mocks.dismissIncomingCall.mockReset();
     mocks.heartbeatVoice.mockResolvedValue({ success: true });
+    mocks.getCall.mockReset();
     mocks.joinChannel.mockReset();
     mocks.leave.mockResolvedValue(undefined);
     mocks.resume.mockReset();
@@ -364,6 +384,55 @@ describe("VoiceProvider", () => {
     );
 
     expect(mocks.transition).toHaveBeenCalledWith(incomingCall.id, "cancel");
+  });
+
+  it("starts video calls with camera enabled", async () => {
+    const room = new FakeRoom();
+    const videoCall = { ...incomingCall, mediaMode: "VIDEO" as const };
+    mocks.activeSession
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(callSession);
+    mocks.startCall.mockResolvedValue({ call: videoCall, credentials });
+    renderProvider(room);
+    await waitFor(() => expect(mocks.activeSession).toHaveBeenCalledOnce());
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Start test video call" }),
+    );
+
+    await waitFor(() =>
+      expect(room.localParticipant.setCameraEnabled).toHaveBeenCalled(),
+    );
+    expect(room.localParticipant.setCameraEnabled.mock.calls[0]?.[0]).toBe(
+      true,
+    );
+    expect(mocks.startCall).toHaveBeenCalledWith(conversationId, {
+      replaceActiveSession: false,
+      mediaMode: "VIDEO",
+    });
+    expect(screen.getByText("camera-on")).toBeInTheDocument();
+  });
+
+  it("keeps an audio session active when video capture fails", async () => {
+    const room = new FakeRoom();
+    const videoCall = { ...incomingCall, mediaMode: "VIDEO" as const };
+    room.localParticipant.setCameraEnabled.mockRejectedValueOnce(
+      new Error("Camera permission denied"),
+    );
+    mocks.activeSession
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(callSession);
+    mocks.startCall.mockResolvedValue({ call: videoCall, credentials });
+    renderProvider(room);
+    await waitFor(() => expect(mocks.activeSession).toHaveBeenCalledOnce());
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Start test video call" }),
+    );
+
+    expect(await screen.findByText(callSession.id)).toBeInTheDocument();
+    expect(screen.getByText("Camera permission denied")).toBeInTheDocument();
+    expect(screen.getByText("camera-off")).toBeInTheDocument();
   });
 
   it("renders and declines an incoming call", async () => {

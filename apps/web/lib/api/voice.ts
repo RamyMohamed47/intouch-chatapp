@@ -4,6 +4,7 @@ import {
   callResponseSchema,
   voiceJoinResponseSchema,
   type JoinVoiceSessionInput,
+  type StartCallInput,
 } from "@intouch/shared/voice";
 
 import { apiRequest, noContentSchema } from "@/lib/api/client";
@@ -36,7 +37,7 @@ export const voiceApi = {
       { method: "POST", body: JSON.stringify(input) },
     );
   },
-  startCall(conversationId: string, input: JoinVoiceSessionInput) {
+  startCall(conversationId: string, input: StartCallInput) {
     return apiRequest(
       `/api/v1/conversations/${conversationId}/calls`,
       callJoinResponseSchema,

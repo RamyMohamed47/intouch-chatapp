@@ -8,6 +8,7 @@ import {
   voiceCredentialsDtoSchema,
   voiceSessionDtoSchema,
   type JoinVoiceSessionInput,
+  type StartCallInput,
   type VoiceOccupancyDto,
 } from "@intouch/shared/voice";
 import type { Logger } from "pino";
@@ -62,7 +63,11 @@ const sessionDto = (session: VoiceSessionRecord) =>
   });
 
 export interface VoiceTelemetry {
-  recordVoiceCall(input: { event: "ended" | "started"; outcome: string }): void;
+  recordVoiceCall(input: {
+    event: "ended" | "started";
+    mediaMode: "audio" | "video";
+    outcome: string;
+  }): void;
   recordVoiceJoin(input: {
     durationSeconds: number;
     kind: "call" | "voice_channel";
@@ -202,6 +207,7 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
     if (ended) {
       dependencies.telemetry?.recordVoiceCall({
         event: "ended",
+        mediaMode: call.mediaMode.toLowerCase() as "audio" | "video",
         outcome: reason.toLowerCase(),
       });
     }
@@ -395,7 +401,7 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
     async startCall(
       userId: string,
       conversationId: string,
-      input: JoinVoiceSessionInput,
+      input: StartCallInput,
     ) {
       const conversation = await dependencies.conversations.getAccessible(
         userId,
@@ -474,6 +480,7 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
             conversationId,
             callerUserId: userId,
             recipientUserId: recipient.userId,
+            mediaMode: input.mediaMode,
             providerRoomId,
             startedAt,
           });
@@ -512,6 +519,7 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
       const dto = toCallDto(result.call);
       dependencies.telemetry?.recordVoiceCall({
         event: "started",
+        mediaMode: result.call.mediaMode.toLowerCase() as "audio" | "video",
         outcome: "started",
       });
       try {

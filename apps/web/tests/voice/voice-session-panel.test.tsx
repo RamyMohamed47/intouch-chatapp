@@ -4,6 +4,7 @@ import type { ConnectionQuality, ConnectionState } from "livekit-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
+  const initialSessionKind = (): "VOICE_CHANNEL" | "CALL" => "VOICE_CHANNEL";
   const organizationId = "507f1f77bcf86cd799439013";
   const conversationId = "507f1f77bcf86cd799439012";
   return {
@@ -13,11 +14,15 @@ const mocks = vi.hoisted(() => {
     organizationId,
     pathname: "/app",
     toggleDeafen: vi.fn(),
+    toggleCamera: vi.fn(),
     toggleMute: vi.fn(),
     voice: {
+      activeCall: null as {
+        mediaMode: "AUDIO" | "VIDEO";
+      } | null,
       activeSession: {
         id: "00000000-0000-4000-8000-000000000001",
-        kind: "VOICE_CHANNEL" as "VOICE_CHANNEL" | "CALL",
+        kind: initialSessionKind(),
         organizationId,
         conversationId,
         callId: null,
@@ -26,7 +31,10 @@ const mocks = vi.hoisted(() => {
       },
       connectionQuality: "excellent" as ConnectionQuality,
       connectionState: "connected" as ConnectionState,
+      cameraTracks: [],
       isDeafened: false,
+      isCameraEnabled: false,
+      isCameraTransitioning: false,
       isMuted: false,
       isPlaybackBlocked: false,
       isTransitioning: false,
@@ -60,6 +68,7 @@ vi.mock("@/lib/voice/provider", () => ({
     enablePlayback: mocks.enablePlayback,
     endSession: mocks.endSession,
     toggleDeafen: mocks.toggleDeafen,
+    toggleCamera: mocks.toggleCamera,
     toggleMute: mocks.toggleMute,
   }),
 }));
@@ -75,7 +84,9 @@ describe("VoiceSessionPanel", () => {
     mocks.voice.isTransitioning = false;
     mocks.voice.isPlaybackBlocked = false;
     mocks.voice.activeSession.kind = "VOICE_CHANNEL";
+    mocks.voice.activeCall = null;
     mocks.toggleDeafen.mockReset();
+    mocks.toggleCamera.mockReset();
     mocks.toggleMute.mockReset();
   });
 
@@ -98,11 +109,15 @@ describe("VoiceSessionPanel", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Deafen" }));
     await userEvent.click(
+      screen.getByRole("button", { name: "Turn camera on" }),
+    );
+    await userEvent.click(
       screen.getByRole("button", { name: "Leave voice session" }),
     );
 
     expect(mocks.toggleMute).toHaveBeenCalledOnce();
     expect(mocks.toggleDeafen).toHaveBeenCalledOnce();
+    expect(mocks.toggleCamera).toHaveBeenCalledOnce();
     expect(mocks.endSession).toHaveBeenCalledOnce();
   });
 
@@ -127,6 +142,15 @@ describe("VoiceSessionPanel", () => {
         name: "Active voice session controls",
       }),
     ).not.toBeInTheDocument();
+  });
+
+  it("labels a persistent video call by its durable media mode", () => {
+    mocks.voice.activeSession.kind = "CALL";
+    mocks.voice.activeCall = { mediaMode: "VIDEO" };
+
+    render(<VoiceSessionPanel variant="sidebar" />);
+
+    expect(screen.getByText("Video call")).toBeInTheDocument();
   });
 
   it("renders the compact mobile tray in document flow", () => {

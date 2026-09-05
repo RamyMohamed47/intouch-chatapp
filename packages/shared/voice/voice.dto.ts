@@ -18,6 +18,11 @@ export const CallEndReason = {
   ACCESS_REVOKED: "ACCESS_REVOKED",
 } as const;
 
+export const CallMediaMode = {
+  AUDIO: "AUDIO",
+  VIDEO: "VIDEO",
+} as const;
+
 export const VoiceSessionKind = {
   CALL: "CALL",
   VOICE_CHANNEL: "VOICE_CHANNEL",
@@ -25,6 +30,7 @@ export const VoiceSessionKind = {
 
 export const callStatusSchema = z.enum(CallStatus);
 export const callEndReasonSchema = z.enum(CallEndReason);
+export const callMediaModeSchema = z.enum(CallMediaMode);
 export const voiceSessionKindSchema = z.enum(VoiceSessionKind);
 
 export const callSummaryDtoSchema = z
@@ -32,6 +38,7 @@ export const callSummaryDtoSchema = z
     id: identifierDtoSchema,
     callerUserId: identifierDtoSchema,
     recipientUserId: identifierDtoSchema,
+    mediaMode: callMediaModeSchema,
     status: callStatusSchema,
     endReason: callEndReasonSchema.nullable(),
     startedAt: dateTimeDtoSchema,
@@ -134,6 +141,7 @@ export const voiceOccupancyUpdatedEventSchema = voiceOccupancyDtoSchema;
 
 export type CallStatusValue = z.infer<typeof callStatusSchema>;
 export type CallEndReasonValue = z.infer<typeof callEndReasonSchema>;
+export type CallMediaModeValue = z.infer<typeof callMediaModeSchema>;
 export type VoiceSessionKindValue = z.infer<typeof voiceSessionKindSchema>;
 export type CallSummaryDto = z.infer<typeof callSummaryDtoSchema>;
 export type CallDto = z.infer<typeof callDtoSchema>;

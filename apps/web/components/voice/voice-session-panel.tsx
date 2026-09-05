@@ -2,6 +2,8 @@
 
 import { ConnectionState } from "livekit-client";
 import {
+  Camera,
+  CameraOff,
   Headphones,
   HeadphoneOff,
   Mic,
@@ -15,6 +17,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { ParticipantVideo } from "@/components/voice/participant-video";
 import { useConversation } from "@/lib/query/hooks";
 import { cn } from "@/lib/utils";
 import { useVoice } from "@/lib/voice/provider";
@@ -35,6 +38,10 @@ export function VoiceSessionPanel({
 
   if (!session) return null;
 
+  const localCamera = voice.cameraTracks.find(({ isLocal }) => isLocal);
+  const isVideoCall =
+    session.kind === "CALL" && voice.activeCall?.mediaMode === "VIDEO";
+
   const href =
     session.kind === "VOICE_CHANNEL"
       ? `/app/${session.organizationId}/channels/${session.conversationId}`
@@ -47,7 +54,9 @@ export function VoiceSessionPanel({
       : conversation.data?.type === "DIRECT"
         ? conversation.data.peer.displayName
         : session.kind === "CALL"
-          ? "Voice call"
+          ? isVideoCall
+            ? "Video call"
+            : "Voice call"
           : "Voice channel";
   const connected = voice.connectionState === ConnectionState.Connected;
   const status = connected
@@ -79,6 +88,23 @@ export function VoiceSessionPanel({
         {voice.isMuted ? <MicOff /> : <Mic />}
         {variant === "sidebar" && (
           <span className="truncate">{voice.isMuted ? "Unmute" : "Mute"}</span>
+        )}
+      </Button>
+      <Button
+        className={cn(variant === "sidebar" && "min-w-0")}
+        size={variant === "sidebar" ? "sm" : "icon"}
+        variant="outline"
+        disabled={voice.isCameraTransitioning}
+        aria-label={
+          voice.isCameraEnabled ? "Turn camera off" : "Turn camera on"
+        }
+        onClick={() => void voice.toggleCamera()}
+      >
+        {voice.isCameraEnabled ? <CameraOff /> : <Camera />}
+        {variant === "sidebar" && (
+          <span className="truncate">
+            {voice.isCameraEnabled ? "Stop" : "Camera"}
+          </span>
         )}
       </Button>
       <Button
@@ -119,8 +145,18 @@ export function VoiceSessionPanel({
           onClick={onNavigate}
           className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-            {session.kind === "CALL" ? <Phone /> : <Radio />}
+          <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-primary">
+            {localCamera ? (
+              <ParticipantVideo
+                displayName="You"
+                isLocal
+                track={localCamera.track}
+              />
+            ) : session.kind === "CALL" ? (
+              <Phone />
+            ) : (
+              <Radio />
+            )}
           </span>
           <span className="min-w-0 flex-1">
             <strong className="block truncate text-xs">{sessionName}</strong>
@@ -150,12 +186,26 @@ export function VoiceSessionPanel({
         onClick={onNavigate}
         className="flex min-w-0 items-center gap-2 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-          {session.kind === "CALL" ? <Phone /> : <Radio />}
+        <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-primary">
+          {localCamera ? (
+            <ParticipantVideo
+              displayName="You"
+              isLocal
+              track={localCamera.track}
+            />
+          ) : session.kind === "CALL" ? (
+            <Phone />
+          ) : (
+            <Radio />
+          )}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-primary">
-            {session.kind === "CALL" ? "Voice call" : "Voice connected"}
+            {session.kind === "CALL"
+              ? isVideoCall
+                ? "Video call"
+                : "Voice call"
+              : "Voice connected"}
           </span>
           <strong className="block truncate text-xs">{sessionName}</strong>
           <span
@@ -180,7 +230,7 @@ export function VoiceSessionPanel({
           <Volume2 /> Enable audio
         </Button>
       )}
-      <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
+      <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
         {controls}
       </div>
     </aside>

@@ -108,7 +108,9 @@ describe("frontend content security policy", () => {
       "strict-origin-when-cross-origin",
     );
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(response.headers.get("permissions-policy")).toContain("camera=()");
+    expect(response.headers.get("permissions-policy")).toContain(
+      "camera=(self)",
+    );
     expect(response.headers.get("permissions-policy")).toContain(
       "microphone=(self)",
     );

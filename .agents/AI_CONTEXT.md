@@ -97,17 +97,19 @@ Single Database + organizationId
 
 ## Voice Communication
 
-- LiveKit Cloud carries audio and WebRTC signaling. InTouch remains
+- LiveKit Cloud carries audio, camera video, and WebRTC signaling. InTouch remains
   authoritative for membership, call lifecycle, occupancy, history, and
   moderation.
 - Voice channels are persistent `VOICE` conversations with a capacity of ten;
   existing channels are migrated to `TEXT`.
 - Direct-message calls create immutable `CALL` timeline messages and use
   BullMQ for ringing, connection, disconnect-grace, and reconciliation jobs.
+- Direct calls persist their initial `AUDIO | VIDEO` mode. Cameras are
+  participant-controlled ephemeral tracks and remain optional in voice channels.
 - Redis enforces one active voice session per user across API replicas and
   stores only opaque participant identities and ephemeral leases.
 - Socket.IO carries call lifecycle and occupancy events only. It never carries
-  audio, provider credentials, or WebRTC signaling.
+  media, provider credentials, or WebRTC signaling.
 
 ## Coding Standards
 

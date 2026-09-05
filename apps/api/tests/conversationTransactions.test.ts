@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, describe, test } from "node:test";
 
 import {
@@ -51,6 +52,8 @@ import ConversationReadStateModel from "../src/modules/read-receipts/read-receip
 import createMongooseConversationReadStateRepository from "../src/modules/read-receipts/read-receipt.repository.js";
 import { createMongooseMailOutboxRepository } from "../src/modules/mail/index.js";
 import { backfillChannelKinds } from "../src/migrations/backfillChannelKinds.js";
+import { backfillCallMediaModes } from "../src/migrations/backfillCallMediaModes.js";
+import CallSessionModel from "../src/modules/voice/call.model.js";
 
 const ownerId = "507f1f77bcf86cd799439011";
 const memberId = "507f1f77bcf86cd799439012";
@@ -70,6 +73,7 @@ before(async () => {
     ConversationReadStateModel.syncIndexes(),
     ChatWallpaperPreferenceModel.syncIndexes(),
     UserModel.syncIndexes(),
+    CallSessionModel.syncIndexes(),
   ]);
 });
 
@@ -85,6 +89,7 @@ beforeEach(async () => {
     ConversationReadStateModel.deleteMany({}).exec(),
     ChatWallpaperPreferenceModel.deleteMany({}).exec(),
     UserModel.deleteMany({}).exec(),
+    CallSessionModel.deleteMany({}).exec(),
   ]);
 });
 
@@ -852,5 +857,31 @@ describe("category and conversation transactions", () => {
     assert.equal(first.modifiedCount, 1);
     assert.equal(second.modifiedCount, 0);
     assert.equal(migrated?.kind, ChannelKind.TEXT);
+  });
+
+  test("backfills legacy calls as audio idempotently", async () => {
+    const id = new mongoose.Types.ObjectId();
+    await CallSessionModel.collection.insertOne({
+      _id: id,
+      organizationId: new mongoose.Types.ObjectId(),
+      conversationId: new mongoose.Types.ObjectId(),
+      callerUserId: new mongoose.Types.ObjectId(),
+      recipientUserId: new mongoose.Types.ObjectId(),
+      providerRoomId: randomUUID(),
+      status: "ENDED",
+      endReason: "COMPLETED",
+      startedAt: new Date(),
+      endedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const first = await backfillCallMediaModes();
+    const second = await backfillCallMediaModes();
+    const migrated = await CallSessionModel.collection.findOne({ _id: id });
+
+    assert.equal(first.modifiedCount, 1);
+    assert.equal(second.modifiedCount, 0);
+    assert.equal(migrated?.mediaMode, "AUDIO");
   });
 });
