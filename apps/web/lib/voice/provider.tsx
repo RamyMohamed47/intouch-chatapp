@@ -243,7 +243,7 @@ export function VoiceProvider({
     setIsCameraEnabled(room.localParticipant.isCameraEnabled);
   }, []);
 
-  const disconnectRoom = useCallback(() => {
+  const disconnectRoom = useCallback(async () => {
     const room = roomRef.current;
     roomRef.current = null;
     attachedAudioTracksRef.current.forEach((track) => {
@@ -251,7 +251,6 @@ export function VoiceProvider({
     });
     attachedAudioTracksRef.current.clear();
     audioContainerRef.current?.replaceChildren();
-    if (room) void room.disconnect();
     setConnectionState(ConnectionState.Disconnected);
     setConnectionQuality(ConnectionQuality.Unknown);
     setParticipantIdentities([]);
@@ -262,11 +261,12 @@ export function VoiceProvider({
     setIsMuted(false);
     setIsDeafened(false);
     setIsPlaybackBlocked(false);
+    if (room) await room.disconnect();
   }, []);
 
   const connect = useCallback(
     async (result: VoiceJoinResponse, call?: CallDto, enableCamera = false) => {
-      disconnectRoom();
+      await disconnectRoom();
       setError(null);
       const room = roomFactory();
       roomRef.current = room;
@@ -338,7 +338,7 @@ export function VoiceProvider({
         setActiveCall(call ?? null);
         queryClient.setQueryData(queryKeys.voice.activeSession, result.session);
       } catch (connectionError) {
-        disconnectRoom();
+        await disconnectRoom();
         setError(
           connectionError instanceof Error
             ? connectionError.message
@@ -360,7 +360,7 @@ export function VoiceProvider({
     if (!activeSession) return true;
     if (!shouldReplaceSession(activeSession)) return false;
     await voiceApi.leave();
-    disconnectRoom();
+    await disconnectRoom();
     setActiveSession(null);
     setActiveCall(null);
     return true;
@@ -441,7 +441,7 @@ export function VoiceProvider({
       } else {
         await voiceApi.leave();
       }
-      disconnectRoom();
+      await disconnectRoom();
       setActiveSession(null);
       setActiveCall(null);
       queryClient.setQueryData(queryKeys.voice.activeSession, null);
@@ -565,7 +565,7 @@ export function VoiceProvider({
         if (!result.success) {
           consecutiveFailures += 1;
           if (consecutiveFailures >= 3) {
-            disconnectRoom();
+            void disconnectRoom();
             setActiveSession(null);
             setActiveCall(null);
             queryClient.setQueryData(queryKeys.voice.activeSession, null);
@@ -591,7 +591,7 @@ export function VoiceProvider({
     if (!call) return;
     if (activeCall?.id === call.id) setActiveCall(call);
     if (call.status === "ENDED" && activeCall?.id === call.id) {
-      disconnectRoom();
+      void disconnectRoom();
       setActiveSession(null);
       queryClient.setQueryData(queryKeys.voice.activeSession, null);
     }
@@ -664,12 +664,17 @@ export function VoiceProvider({
 
   useEffect(() => {
     if (status === "authenticated") return;
-    disconnectRoom();
+    void disconnectRoom();
     setActiveSession(null);
     setActiveCall(null);
   }, [disconnectRoom, status]);
 
-  useEffect(() => () => disconnectRoom(), [disconnectRoom]);
+  useEffect(
+    () => () => {
+      void disconnectRoom();
+    },
+    [disconnectRoom],
+  );
 
   const incoming = realtime.incomingCall;
   return (

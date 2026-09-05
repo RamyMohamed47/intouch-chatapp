@@ -62,8 +62,9 @@ describe("call notifications", () => {
   it("registers the worker before persisting the preference", async () => {
     await enableCallNotifications();
 
-    expect(register).toHaveBeenCalledWith("/call-notifications-sw.js", {
+    expect(register).toHaveBeenCalledWith("/sw.js", {
       scope: "/",
+      updateViaCache: "none",
     });
     expect(localStorage.getItem(CALL_NOTIFICATION_PREFERENCE)).toBe("enabled");
   });

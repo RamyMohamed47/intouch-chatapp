@@ -2,7 +2,7 @@ import type { CallDto } from "@intouch/shared/voice";
 
 export const CALL_NOTIFICATION_PREFERENCE = "intouch:call-notifications";
 
-const SERVICE_WORKER_PATH = "/call-notifications-sw.js";
+const SERVICE_WORKER_PATH = "/sw.js";
 const SERVICE_WORKER_SCOPE = "/";
 
 const assertNotificationSupport = () => {
@@ -22,13 +22,10 @@ const assertNotificationSupport = () => {
 };
 
 const readyRegistration = async () => {
-  const existing =
-    await navigator.serviceWorker.getRegistration(SERVICE_WORKER_SCOPE);
-  if (!existing?.active) {
-    await navigator.serviceWorker.register(SERVICE_WORKER_PATH, {
-      scope: SERVICE_WORKER_SCOPE,
-    });
-  }
+  await navigator.serviceWorker.register(SERVICE_WORKER_PATH, {
+    scope: SERVICE_WORKER_SCOPE,
+    updateViaCache: "none",
+  });
   return navigator.serviceWorker.ready;
 };
 
