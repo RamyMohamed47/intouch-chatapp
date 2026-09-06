@@ -168,9 +168,12 @@ describe("DirectCallPage", () => {
       screen.getByRole("heading", { name: "Lina Hassan" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Call connected")).toBeInTheDocument();
-    expect(
-      screen.getByRole("img", { name: "Lina Hassan is speaking" }),
-    ).toBeInTheDocument();
+    const speakingIndicator = screen.getByRole("img", {
+      name: "Lina Hassan is speaking",
+    });
+    expect(speakingIndicator).toHaveClass("size-5");
+    expect(speakingIndicator).not.toHaveClass("size-7");
+    expect(speakingIndicator.parentElement).toHaveClass("h-5");
     expect(
       screen.getByRole("status", { name: "Lina Hassan is online" }),
     ).toBeInTheDocument();

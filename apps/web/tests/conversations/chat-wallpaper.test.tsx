@@ -100,4 +100,24 @@ describe("ChatWallpaperSurface", () => {
         .querySelector(".chat-wallpaper-art"),
     ).not.toBeNull();
   });
+
+  it("uses a dark dimming layer in light and dark themes", () => {
+    render(
+      <div data-theme="cloud">
+        <ChatWallpaperSurface
+          wallpaper={{
+            wallpaperId: ChatWallpaperId.SCENERY_MOUNTAINS,
+            dimming: 35,
+          }}
+        />
+      </div>,
+    );
+
+    expect(screen.getByTestId("chat-wallpaper-dimming")).toHaveClass(
+      "bg-black",
+    );
+    expect(screen.getByTestId("chat-wallpaper-dimming")).toHaveStyle({
+      opacity: 0.35,
+    });
+  });
 });

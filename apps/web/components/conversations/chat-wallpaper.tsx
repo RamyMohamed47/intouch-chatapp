@@ -207,7 +207,8 @@ export function ChatWallpaperSurface({
       )}
       {!noWallpaper && wallpaper.dimming > 0 && (
         <div
-          className="absolute inset-0 bg-background"
+          className="absolute inset-0 bg-black"
+          data-testid="chat-wallpaper-dimming"
           style={{ opacity: wallpaper.dimming / 100 }}
         />
       )}

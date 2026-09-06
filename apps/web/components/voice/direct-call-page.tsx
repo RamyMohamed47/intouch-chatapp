@@ -168,11 +168,11 @@ export function DirectCallPage({
                     <span className="min-w-0 truncate text-sm font-medium">
                       {user?.displayName ?? "You"} (You)
                     </span>
-                    <span className="flex shrink-0 items-center gap-2">
+                    <span className="flex h-5 shrink-0 items-center gap-2">
                       {!localCamera && <CameraOff className="size-4" />}
                       {localSpeaking && (
                         <SpeakingIndicator
-                          className="size-7 [&_svg]:size-3.5"
+                          className="shrink-0"
                           displayName={user?.displayName ?? "You"}
                         />
                       )}
@@ -203,11 +203,11 @@ export function DirectCallPage({
                     <span className="min-w-0 truncate text-sm font-medium">
                       {conversation.peer.displayName}
                     </span>
-                    <span className="flex shrink-0 items-center gap-2">
+                    <span className="flex h-5 shrink-0 items-center gap-2">
                       {!peerCamera && <CameraOff className="size-4" />}
                       {peerSpeaking && (
                         <SpeakingIndicator
-                          className="size-7 [&_svg]:size-3.5"
+                          className="shrink-0"
                           displayName={conversation.peer.displayName}
                         />
                       )}

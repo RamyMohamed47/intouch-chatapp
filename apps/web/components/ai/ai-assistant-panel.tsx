@@ -17,7 +17,14 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 
@@ -118,6 +125,7 @@ export function AiAssistantPanel({
 }) {
   const queryClient = useQueryClient();
   const inputId = useId();
+  const messageViewportRef = useRef<HTMLDivElement | null>(null);
   const settings = useAiSettings(organizationId);
   const conversation = useConversation(conversationId);
   const generation = useAiGeneration(organizationId);
@@ -245,6 +253,25 @@ export function AiAssistantPanel({
 
   const enabled = settings.data?.organizationEnabled;
   const consented = settings.data?.userConsentAccepted;
+
+  const setMessageViewportRef = useCallback(
+    (viewport: HTMLDivElement | null) => {
+      messageViewportRef.current = viewport;
+      if (viewport && open && enabled && consented) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    },
+    [consented, enabled, open],
+  );
+
+  useEffect(() => {
+    if (!open || !enabled || !consented) return;
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = messageViewportRef.current;
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [consented, enabled, open]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -400,7 +427,10 @@ export function AiAssistantPanel({
                 </div>
               )}
             </div>
-            <ScrollArea className="min-h-0 flex-1">
+            <ScrollArea
+              className="min-h-0 flex-1"
+              viewportRef={setMessageViewportRef}
+            >
               <div className="grid gap-4 p-4">
                 {messages.length === 0 && !generation.text && (
                   <div className="rounded-2xl border border-dashed border-border p-5 text-sm leading-6 text-muted-foreground">
