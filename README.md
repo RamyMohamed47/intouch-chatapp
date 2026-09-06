@@ -582,10 +582,12 @@ using voice channels against an existing database. LiveKit hosts WebRTC media,
 so Railway needs no UDP or TURN configuration.
 
 Direct calls support durable `AUDIO` and `VIDEO` modes, while voice channels
-allow optional participant cameras. Run `npm run migrate:call-media-modes` once
-after deploying video support to backfill existing call history as audio. No new
-LiveKit or Railway variables are required; credentials permit microphone and
-camera publication but continue to reject screen sharing.
+allow optional participant cameras. Participants can share screens in calls and
+voice channels while keeping their cameras active; compatible browser surfaces
+may also publish shared audio. Run `npm run migrate:call-media-modes` once after
+deploying video support to backfill existing call history as audio. Screen
+sharing requires no new LiveKit or Railway variables and is never persisted or
+resumed automatically after a reload.
 
 Railway plans that block outbound SMTP must configure `MAIL_PROVIDER=brevo`
 with `BREVO_API_KEY` and a Brevo-verified `MAIL_FROM_ADDRESS`. Upgrading to a

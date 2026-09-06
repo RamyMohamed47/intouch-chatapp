@@ -23,4 +23,27 @@ describe("ParticipantVideo", () => {
 
     expect(detach).toHaveBeenCalledWith(video);
   });
+
+  it("renders shared screens without cropping or mirroring", () => {
+    const track = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+    } as unknown as LocalVideoTrack;
+
+    render(
+      <ParticipantVideo
+        displayName="Ramy"
+        isLocal
+        mediaKind="screen"
+        track={track}
+      />,
+    );
+
+    expect(screen.getByLabelText("Ramy's screen")).toHaveClass(
+      "object-contain",
+    );
+    expect(screen.getByLabelText("Ramy's screen")).not.toHaveClass(
+      "-scale-x-100",
+    );
+  });
 });

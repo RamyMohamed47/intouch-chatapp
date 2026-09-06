@@ -9,10 +9,12 @@ import {
   HeadphoneOff,
   Mic,
   MicOff,
+  MonitorUp,
   PhoneCall,
   PhoneOff,
   Radio,
   Signal,
+  SquareStop,
   UserMinus,
   Volume2,
   VolumeX,
@@ -22,6 +24,7 @@ import { useEffect, useState } from "react";
 import { InviteMemberDialog } from "@/components/memberships/invite-member-dialog";
 import { UserAvatar } from "@/components/users/user-avatar";
 import { ParticipantVideo } from "@/components/voice/participant-video";
+import { ScreenShareStage } from "@/components/voice/screen-share-stage";
 import { SpeakingIndicator } from "@/components/voice/speaking-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -96,6 +99,25 @@ export function VoiceChannelPage({
       ),
     };
   });
+  const screenPresenters = connectedHere
+    ? voice.screenShareTracks.map((share) => {
+        const userId = share.isLocal
+          ? voice.activeSession?.userId
+          : conversation.occupancy.participants.find(
+              ({ participantIdentity }) =>
+                participantIdentity === share.identity,
+            )?.userId;
+        const user = members.data?.find(
+          (member) => member.user.id === userId,
+        )?.user;
+        return {
+          ...share,
+          displayName:
+            user?.displayName ?? (share.isLocal ? "You" : "Connected member"),
+          userId,
+        };
+      })
+    : [];
   const owner = organization.data?.currentUserRole === "OWNER";
 
   return (
@@ -139,7 +161,48 @@ export function VoiceChannelPage({
                 </span>
               </div>
 
-              <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {screenPresenters.length > 0 && (
+                <ScreenShareStage
+                  className="mt-7"
+                  shares={screenPresenters}
+                  action={(share) =>
+                    owner && connectedHere && !share.isLocal && share.userId ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={pendingUserId === share.userId}
+                        onClick={() => {
+                          setModerationError(null);
+                          setPendingUserId(share.userId ?? null);
+                          void voiceApi
+                            .stopScreenShare(
+                              conversation.id,
+                              String(share.userId),
+                            )
+                            .catch((actionError: unknown) =>
+                              setModerationError(
+                                actionError instanceof Error
+                                  ? actionError.message
+                                  : "Could not stop the screen share",
+                              ),
+                            )
+                            .finally(() => setPendingUserId(null));
+                        }}
+                      >
+                        <SquareStop /> Stop share
+                      </Button>
+                    ) : null
+                  }
+                />
+              )}
+
+              <div
+                className={
+                  screenPresenters.length > 0
+                    ? "mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                    : "mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                }
+              >
                 {participantMembers.map(({ userId, user, camera }) => (
                   <div
                     key={userId}
@@ -266,7 +329,7 @@ export function VoiceChannelPage({
                       <Volume2 /> Enable audio
                     </Button>
                   )}
-                  <div className="grid min-w-0 grid-cols-3 gap-2">
+                  <div className="grid min-w-0 grid-cols-2 gap-2">
                     <Button
                       className="min-w-0"
                       variant="outline"
@@ -300,7 +363,35 @@ export function VoiceChannelPage({
                         {voice.isCameraEnabled ? "Stop" : "Camera"}
                       </span>
                     </Button>
+                    <Button
+                      className="min-w-0"
+                      variant="outline"
+                      disabled={
+                        voice.isScreenShareTransitioning ||
+                        (!voice.canScreenShare && !voice.isScreenShareEnabled)
+                      }
+                      aria-label={
+                        voice.isScreenShareEnabled
+                          ? "Stop sharing"
+                          : "Share screen"
+                      }
+                      onClick={() => void voice.toggleScreenShare()}
+                    >
+                      {voice.isScreenShareEnabled ? (
+                        <SquareStop />
+                      ) : (
+                        <MonitorUp />
+                      )}
+                      <span className="truncate">
+                        {voice.isScreenShareEnabled ? "Stop sharing" : "Share"}
+                      </span>
+                    </Button>
                   </div>
+                  {!voice.canScreenShare && !voice.isScreenShareEnabled && (
+                    <p className="text-xs text-muted-foreground">
+                      Screen sharing is unavailable on this browser or device.
+                    </p>
+                  )}
                   {audioInputs.length > 0 && (
                     <label className="grid min-w-0 gap-2 text-xs text-muted-foreground">
                       Microphone

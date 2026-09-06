@@ -24,6 +24,7 @@ export {
   typingEventSchema,
   callIncomingEventSchema,
   callUpdatedEventSchema,
+  screenShareStopRequestedEventSchema,
   voiceOccupancyUpdatedEventSchema,
 } from "./realtime.dto.js";
 export {
@@ -47,6 +48,7 @@ export type {
   TypingEvent,
   CallIncomingEvent,
   CallUpdatedEvent,
+  ScreenShareStopRequestedEvent,
   VoiceOccupancyUpdatedEvent,
 } from "./realtime.dto.js";
 export { voiceHeartbeatSchema } from "../voice/index.js";

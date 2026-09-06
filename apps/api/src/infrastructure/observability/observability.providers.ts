@@ -83,4 +83,8 @@ export const instrumentVoiceMediaProvider = (
     timed(provider, "voice.remove_participant", () =>
       media.removeParticipant(providerRoomId, participantIdentity),
     ),
+  stopScreenShare: (providerRoomId, participantIdentity) =>
+    timed(provider, "voice.stop_screen_share", () =>
+      media.stopScreenShare(providerRoomId, participantIdentity),
+    ),
 });

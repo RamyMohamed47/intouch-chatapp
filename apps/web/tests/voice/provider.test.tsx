@@ -21,6 +21,10 @@ const mocks = vi.hoisted(() => ({
   realtime: {
     incomingCall: null as CallDto | null,
     latestCall: null as CallDto | null,
+    screenShareStopRequest: null as {
+      sessionId: string;
+      conversationId: string;
+    } | null,
   },
 }));
 
@@ -120,12 +124,29 @@ class FakeRoom {
   readonly localParticipant = {
     identity: session.id,
     isCameraEnabled: false,
-    getTrackPublication: vi.fn(() => undefined),
+    isScreenShareEnabled: false,
+    getTrackPublication: vi.fn((source: Track.Source) => {
+      if (
+        source === Track.Source.ScreenShare &&
+        this.localParticipant.isScreenShareEnabled
+      ) {
+        return {
+          isMuted: false,
+          trackSid: "screen-track",
+          videoTrack: { attach: vi.fn(), detach: vi.fn() },
+        };
+      }
+      return undefined;
+    }),
     setCameraEnabled: vi.fn((enabled: boolean) => {
       this.localParticipant.isCameraEnabled = enabled;
       return Promise.resolve();
     }),
     setMicrophoneEnabled: vi.fn().mockResolvedValue(undefined),
+    setScreenShareEnabled: vi.fn((enabled: boolean) => {
+      this.localParticipant.isScreenShareEnabled = enabled;
+      return Promise.resolve();
+    }),
   };
   readonly remoteParticipants = new Map();
   readonly switchActiveDevice = vi.fn().mockResolvedValue(true);
@@ -155,6 +176,9 @@ function Probe() {
         {voice.isPlaybackBlocked ? "playback-blocked" : "playback-ready"}
       </span>
       <span>{voice.isCameraEnabled ? "camera-on" : "camera-off"}</span>
+      <span>
+        {voice.isScreenShareEnabled ? "screen-share-on" : "screen-share-off"}
+      </span>
       <button
         type="button"
         onClick={() => void voice.joinChannel(conversationId)}
@@ -178,6 +202,9 @@ function Probe() {
       </button>
       <button type="button" onClick={() => void voice.toggleCamera()}>
         Toggle test camera
+      </button>
+      <button type="button" onClick={() => void voice.toggleScreenShare()}>
+        Toggle test screen share
       </button>
       <button type="button" onClick={() => void voice.enablePlayback()}>
         Enable test audio
@@ -220,6 +247,15 @@ describe("VoiceProvider", () => {
     mocks.transition.mockReset();
     mocks.realtime.incomingCall = null;
     mocks.realtime.latestCall = null;
+    mocks.realtime.screenShareStopRequest = null;
+    Object.defineProperty(window, "isSecureContext", {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getDisplayMedia: vi.fn() },
+    });
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
       value: "visible",
@@ -257,9 +293,11 @@ describe("VoiceProvider", () => {
     const audio = document.createElement("audio");
     const track = {
       kind: Track.Kind.Audio,
+      source: Track.Source.Microphone,
       attach: vi.fn(() => audio),
       detach: vi.fn(() => [audio]),
     };
+    const publication = { setEnabled: vi.fn() };
     mocks.joinChannel.mockResolvedValue({ session, credentials });
     renderProvider(room);
 
@@ -268,7 +306,7 @@ describe("VoiceProvider", () => {
     );
     await screen.findByText(session.id);
 
-    act(() => room.emit(RoomEvent.TrackSubscribed, track));
+    act(() => room.emit(RoomEvent.TrackSubscribed, track, publication));
     expect(track.attach).toHaveBeenCalledOnce();
     expect(audio.autoplay).toBe(true);
     expect(audio).toHaveAttribute("aria-hidden", "true");
@@ -305,9 +343,11 @@ describe("VoiceProvider", () => {
     const audio = document.createElement("audio");
     const track = {
       kind: Track.Kind.Audio,
+      source: Track.Source.Microphone,
       attach: vi.fn(() => audio),
       detach: vi.fn(() => [audio]),
     };
+    const publication = { setEnabled: vi.fn() };
     mocks.joinChannel.mockResolvedValue({ session, credentials });
     const view = renderProvider(room);
 
@@ -315,7 +355,7 @@ describe("VoiceProvider", () => {
       screen.getByRole("button", { name: "Join test channel" }),
     );
     await screen.findByText(session.id);
-    act(() => room.emit(RoomEvent.TrackSubscribed, track));
+    act(() => room.emit(RoomEvent.TrackSubscribed, track, publication));
 
     view.unmount();
     expect(track.detach).toHaveBeenCalledOnce();
@@ -428,6 +468,39 @@ describe("VoiceProvider", () => {
       mediaMode: "VIDEO",
     });
     expect(screen.getByText("camera-on")).toBeInTheDocument();
+  });
+
+  it("starts and stops screen sharing without changing camera state", async () => {
+    const room = new FakeRoom();
+    mocks.joinChannel.mockResolvedValue({ session, credentials });
+    renderProvider(room);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Join test channel" }),
+    );
+    await screen.findByText(session.id);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Toggle test screen share" }),
+    );
+
+    expect(room.localParticipant.setScreenShareEnabled).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        audio: true,
+        contentHint: "detail",
+        systemAudio: "include",
+      }),
+    );
+    expect(screen.getByText("screen-share-on")).toBeInTheDocument();
+    expect(screen.getByText("camera-off")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Toggle test screen share" }),
+    );
+    expect(
+      room.localParticipant.setScreenShareEnabled,
+    ).toHaveBeenLastCalledWith(false);
+    expect(screen.getByText("screen-share-off")).toBeInTheDocument();
   });
 
   it("keeps an audio session active when video capture fails", async () => {

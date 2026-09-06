@@ -9,11 +9,13 @@ export function ParticipantVideo({
   className,
   displayName,
   isLocal = false,
+  mediaKind = "camera",
   track,
 }: {
   className?: string;
   displayName: string;
   isLocal?: boolean;
+  mediaKind?: "camera" | "screen";
   track: LocalVideoTrack | RemoteVideoTrack;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -30,13 +32,14 @@ export function ParticipantVideo({
   return (
     <video
       ref={videoRef}
-      aria-label={`${displayName}'s camera`}
+      aria-label={`${displayName}'s ${mediaKind === "screen" ? "screen" : "camera"}`}
       autoPlay
       muted
       playsInline
       className={cn(
-        "size-full bg-black object-cover",
-        isLocal && "-scale-x-100",
+        "size-full bg-black",
+        mediaKind === "screen" ? "object-contain" : "object-cover",
+        isLocal && mediaKind === "camera" && "-scale-x-100",
         className,
       )}
     />

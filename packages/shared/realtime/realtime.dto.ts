@@ -15,6 +15,7 @@ import {
 import {
   callIncomingEventSchema,
   callUpdatedEventSchema,
+  screenShareStopRequestedEventSchema,
   voiceOccupancyUpdatedEventSchema,
 } from "../voice/index.js";
 
@@ -100,6 +101,7 @@ export const channelReadReceiptsChangedEventSchema = conversationSocketSchema;
 export {
   callIncomingEventSchema,
   callUpdatedEventSchema,
+  screenShareStopRequestedEventSchema,
   voiceOccupancyUpdatedEventSchema,
 };
 
@@ -130,6 +132,9 @@ export type ChannelReadReceiptsChangedEvent = z.infer<
 >;
 export type CallIncomingEvent = z.infer<typeof callIncomingEventSchema>;
 export type CallUpdatedEvent = z.infer<typeof callUpdatedEventSchema>;
+export type ScreenShareStopRequestedEvent = z.infer<
+  typeof screenShareStopRequestedEventSchema
+>;
 export type VoiceOccupancyUpdatedEvent = z.infer<
   typeof voiceOccupancyUpdatedEventSchema
 >;

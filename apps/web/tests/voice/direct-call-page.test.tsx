@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     toggleCamera: vi.fn(),
     toggleDeafen: vi.fn(),
     toggleMute: vi.fn(),
+    toggleScreenShare: vi.fn(),
     voice: {
       activeCall: {
         id: "507f1f77bcf86cd799439015",
@@ -45,6 +46,8 @@ const mocks = vi.hoisted(() => {
       },
       activeSpeakerIdentities: [remoteIdentity],
       cameraTracks: [],
+      screenShareTracks: [],
+      canScreenShare: true,
       connectionQuality: "excellent" as ConnectionQuality,
       connectionState: "connected" as ConnectionState,
       error: null as string | null,
@@ -53,6 +56,8 @@ const mocks = vi.hoisted(() => {
       isCameraTransitioning: false,
       isMuted: false,
       isPlaybackBlocked: false,
+      isScreenShareEnabled: false,
+      isScreenShareTransitioning: false,
       isTransitioning: false,
       participantIdentities: [sessionId, remoteIdentity],
     },
@@ -108,6 +113,7 @@ vi.mock("@/lib/voice/provider", () => ({
     toggleCamera: mocks.toggleCamera,
     toggleDeafen: mocks.toggleDeafen,
     toggleMute: mocks.toggleMute,
+    toggleScreenShare: mocks.toggleScreenShare,
   }),
 }));
 
@@ -138,6 +144,7 @@ describe("DirectCallPage", () => {
     mocks.toggleDeafen.mockReset();
     mocks.toggleCamera.mockReset();
     mocks.toggleMute.mockReset();
+    mocks.toggleScreenShare.mockReset();
     mocks.voice.activeSpeakerIdentities = [remoteIdentity];
     mocks.voice.activeCall.mediaMode = "AUDIO";
     mocks.voice.isPlaybackBlocked = false;
@@ -174,12 +181,14 @@ describe("DirectCallPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Mute" }));
     await userEvent.click(screen.getByRole("button", { name: "Deafen" }));
     await userEvent.click(screen.getByRole("button", { name: "Camera" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share screen" }));
     await userEvent.click(screen.getByRole("button", { name: "End call" }));
 
     expect(mocks.enablePlayback).toHaveBeenCalledOnce();
     expect(mocks.toggleMute).toHaveBeenCalledOnce();
     expect(mocks.toggleDeafen).toHaveBeenCalledOnce();
     expect(mocks.toggleCamera).toHaveBeenCalledOnce();
+    expect(mocks.toggleScreenShare).toHaveBeenCalledOnce();
     expect(mocks.endSession).toHaveBeenCalledOnce();
   });
 

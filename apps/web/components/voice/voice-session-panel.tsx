@@ -8,9 +8,11 @@ import {
   HeadphoneOff,
   Mic,
   MicOff,
+  MonitorUp,
   Phone,
   PhoneOff,
   Radio,
+  SquareStop,
   Volume2,
 } from "lucide-react";
 import Link from "next/link";
@@ -61,7 +63,7 @@ export function VoiceSessionPanel({
           : "Voice channel";
   const connected = voice.connectionState === ConnectionState.Connected;
   const status = connected
-    ? `${voice.participantIdentities.length} connected · ${voice.connectionQuality.toLowerCase()}`
+    ? `${voice.participantIdentities.length} connected · ${voice.connectionQuality.toLowerCase()}${voice.isScreenShareEnabled ? " · sharing your screen" : ""}`
     : "Connecting...";
   const visibleStatus = voice.error ?? status;
   const answeredAt =
@@ -96,7 +98,7 @@ export function VoiceSessionPanel({
       )}
       <Button
         className={cn(variant === "sidebar" && "min-w-0")}
-        size={variant === "sidebar" ? "sm" : "icon"}
+        size={variant === "sidebar" ? "sm" : "icon-sm"}
         variant="outline"
         disabled={voice.isTransitioning}
         aria-label={voice.isMuted ? "Unmute microphone" : "Mute microphone"}
@@ -109,7 +111,7 @@ export function VoiceSessionPanel({
       </Button>
       <Button
         className={cn(variant === "sidebar" && "min-w-0")}
-        size={variant === "sidebar" ? "sm" : "icon"}
+        size={variant === "sidebar" ? "sm" : "icon-sm"}
         variant="outline"
         disabled={voice.isCameraTransitioning}
         aria-label={
@@ -126,7 +128,36 @@ export function VoiceSessionPanel({
       </Button>
       <Button
         className={cn(variant === "sidebar" && "min-w-0")}
-        size={variant === "sidebar" ? "sm" : "icon"}
+        size={variant === "sidebar" ? "sm" : "icon-sm"}
+        variant="outline"
+        title={
+          !voice.canScreenShare && !voice.isScreenShareEnabled
+            ? "Screen sharing is unavailable on this browser or device"
+            : undefined
+        }
+        disabled={
+          voice.isScreenShareTransitioning ||
+          (!voice.canScreenShare && !voice.isScreenShareEnabled)
+        }
+        aria-label={
+          voice.isScreenShareEnabled
+            ? "Stop sharing"
+            : voice.canScreenShare
+              ? "Share screen"
+              : "Screen sharing is unavailable on this browser or device"
+        }
+        onClick={() => void voice.toggleScreenShare()}
+      >
+        {voice.isScreenShareEnabled ? <SquareStop /> : <MonitorUp />}
+        {variant === "sidebar" && (
+          <span className="truncate">
+            {voice.isScreenShareEnabled ? "Stop sharing" : "Share"}
+          </span>
+        )}
+      </Button>
+      <Button
+        className={cn(variant === "sidebar" && "min-w-0")}
+        size={variant === "sidebar" ? "sm" : "icon-sm"}
         variant="outline"
         disabled={voice.isTransitioning}
         aria-label={voice.isDeafened ? "Undeafen" : "Deafen"}
@@ -140,13 +171,15 @@ export function VoiceSessionPanel({
         )}
       </Button>
       <Button
-        size={variant === "sidebar" ? "icon-sm" : "icon"}
+        className={cn(variant === "sidebar" && "col-span-2 w-full")}
+        size={variant === "sidebar" ? "sm" : "icon-sm"}
         variant="destructive"
         disabled={voice.isTransitioning}
         aria-label="Leave voice session"
         onClick={() => void voice.endSession()}
       >
         <PhoneOff />
+        {variant === "sidebar" && <span>Leave</span>}
       </Button>
     </>
   );
@@ -247,9 +280,7 @@ export function VoiceSessionPanel({
           <Volume2 /> Enable audio
         </Button>
       )}
-      <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
-        {controls}
-      </div>
+      <div className="mt-3 grid min-w-0 grid-cols-2 gap-1.5">{controls}</div>
     </aside>
   );
 }

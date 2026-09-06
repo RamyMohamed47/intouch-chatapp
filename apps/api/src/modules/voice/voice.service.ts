@@ -840,6 +840,43 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
       );
     },
 
+    async stopScreenShare(
+      ownerUserId: string,
+      conversationId: string,
+      participantUserId: string,
+    ) {
+      const conversation = assertVoiceChannel(
+        await dependencies.conversations.getAccessible(
+          ownerUserId,
+          conversationId,
+        ),
+      );
+      const membership = await dependencies.memberships.findForUser(
+        ownerUserId,
+        conversation.organizationId,
+      );
+      dependencies.conversationPolicy.assertOwner(conversation, membership);
+      const session = await dependencies.sessions.getByUser(participantUserId);
+      if (!session || session.conversationId !== conversationId) {
+        throw new ConversationNotFoundError();
+      }
+      await dependencies.media.stopScreenShare(
+        conversation.voiceRoomId as string,
+        session.participantIdentity,
+      );
+      try {
+        dependencies.realtime.screenShareStopRequested(participantUserId, {
+          sessionId: session.id,
+          conversationId,
+        });
+      } catch (error) {
+        dependencies.logger.error(
+          { err: error },
+          "Screen share stop delivery failed",
+        );
+      }
+    },
+
     async disconnectParticipant(
       ownerUserId: string,
       conversationId: string,

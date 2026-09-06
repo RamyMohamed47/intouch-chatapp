@@ -35,6 +35,12 @@ export const createConversationVoiceRouter = (
     controller.muteParticipant,
   );
   router.delete(
+    "/:conversationId/voice/participants/:userId/screen-share",
+    moderateLimit,
+    validateParams(voiceParticipantParamsSchema),
+    controller.stopScreenShare,
+  );
+  router.delete(
     "/:conversationId/voice/participants/:userId",
     moderateLimit,
     validateParams(voiceParticipantParamsSchema),

@@ -465,8 +465,20 @@ chat` is pressed.
   lounges, never expose message history, and retain their kind after edits.
 - Join a voice channel from two browsers. Verify participant count, active
   speaker indication, mute, deafen, microphone selection, optional camera,
-  camera selection, responsive video tiles, and owner-only
-  server mute/disconnect. A remotely muted user must unmute themselves.
+  camera selection, responsive video tiles, and owner-only server
+  mute/disconnect. A remotely muted user must unmute themselves.
+- Share a window, screen, and browser tab from direct audio/video calls and a
+  voice channel. Camera video must remain active, screen content must be
+  uncropped and unmirrored, and selecting the browser audio option must make
+  supported tab/system audio audible to other participants.
+- Start shares from multiple participants. The newest share should take the
+  stage, presenter controls should allow manual switching, and ending the
+  selected share should fall back to another share or the normal participant
+  grid.
+- As an organization owner, stop another voice-channel participant's share.
+  Confirm their screen video and audio stop, their browser capture closes, they
+  remain connected, and they may start another share later. Members must not
+  receive this control.
 - Fill a voice channel with ten users or test clients. The eleventh join must
   return `409 VOICE_CAPACITY_REACHED`, including during simultaneous joins.
 - Start both audio and video DM calls and verify outgoing ringing, mode-specific
@@ -477,8 +489,13 @@ chat` is pressed.
   and confirm the call continues with audio and a retryable error. Audio calls
   and voice-channel joins must start camera-off.
 - Navigate away while publishing video and confirm the persistent session panel
-  shows a mirrored self-preview and camera toggle. Reload and confirm the media
-  session resumes with camera off until the user enables it again.
+  shows a mirrored self-preview plus camera and screen-share controls. While
+  sharing, it should announce that state. Reload and confirm the media session
+  resumes with camera and screen sharing off until the user enables them again.
+- Test an unsupported mobile browser or insecure non-local origin. The screen
+  control must remain visibly disabled with an explanation, and the audio call
+  must continue normally. Cancel the browser picker and confirm the cancellation
+  appears as a normal UI error rather than an unhandled rejection.
 - Reload during an active session and confirm authorized resume. Attempt to
   join another room and confirm switching requires explicit confirmation.
 - Use two tabs for one account. Confirm there is still only one logical voice

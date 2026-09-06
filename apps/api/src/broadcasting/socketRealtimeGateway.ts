@@ -12,6 +12,7 @@ import {
   typingEventSchema,
   callIncomingEventSchema,
   callUpdatedEventSchema,
+  screenShareStopRequestedEventSchema,
   voiceOccupancyUpdatedEventSchema,
 } from "@intouch/shared/realtime";
 import type { InTouchSocketServer } from "../contracts/socket.js";
@@ -152,6 +153,13 @@ const createSocketRealtimeGateway = (): SocketRealtimeGateway => {
       const rooms = [...new Set(userIds)].map(userRoomName);
       if (rooms.length === 0) return;
       io?.to(rooms).emit("call:updated", callUpdatedEventSchema.parse(event));
+    },
+
+    screenShareStopRequested(recipientUserId, event) {
+      io?.to(userRoomName(recipientUserId)).emit(
+        "screen-share:stop-requested",
+        screenShareStopRequestedEventSchema.parse(event),
+      );
     },
 
     voiceOccupancyUpdated(userIds, event) {

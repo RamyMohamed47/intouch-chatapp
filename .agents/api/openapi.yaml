@@ -1087,6 +1087,28 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /conversations/{conversationId}/voice/participants/{userId}/screen-share:
+    delete:
+      tags: [Voice]
+      summary: Stop a voice-channel participant's current screen share
+      description: Owner-only. The participant remains connected and may share again later.
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Current screen video and shared audio stopped, or no share was active
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /conversations/{conversationId}/voice/participants/{userId}:
     delete:
       tags: [Voice]

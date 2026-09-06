@@ -26,6 +26,10 @@ export interface VoiceMediaProvider {
     providerRoomId: string,
     participantIdentity: string,
   ): Promise<void>;
+  stopScreenShare(
+    providerRoomId: string,
+    participantIdentity: string,
+  ): Promise<void>;
   parseWebhook(
     body: string,
     authorization?: string,
@@ -46,6 +50,7 @@ export const createDisabledVoiceMediaProvider = (): VoiceMediaProvider => {
     muteParticipant: () => unavailable(),
     parseWebhook: () => unavailable(),
     removeParticipant: () => unavailable(),
+    stopScreenShare: () => unavailable(),
   };
 };
 
@@ -89,7 +94,12 @@ export const createLiveKitVoiceMediaProvider = (
         roomJoin: true,
         canPublish: true,
         canPublishData: false,
-        canPublishSources: [TrackSource.MICROPHONE, TrackSource.CAMERA],
+        canPublishSources: [
+          TrackSource.MICROPHONE,
+          TrackSource.CAMERA,
+          TrackSource.SCREEN_SHARE,
+          TrackSource.SCREEN_SHARE_AUDIO,
+        ],
         canSubscribe: true,
       });
       return {
@@ -144,6 +154,29 @@ export const createLiveKitVoiceMediaProvider = (
           ),
         ),
       );
+    },
+    async stopScreenShare(providerRoomId, participantIdentity) {
+      const participant = await rooms.getParticipant(
+        providerRoomId,
+        participantIdentity,
+      );
+      const screenTracks = participant.tracks
+        .filter(
+          ({ source }) =>
+            source === TrackSource.SCREEN_SHARE_AUDIO ||
+            source === TrackSource.SCREEN_SHARE,
+        )
+        .sort(({ source }) =>
+          source === TrackSource.SCREEN_SHARE_AUDIO ? -1 : 1,
+        );
+      for (const { sid } of screenTracks) {
+        await rooms.mutePublishedTrack(
+          providerRoomId,
+          participantIdentity,
+          sid,
+          true,
+        );
+      }
     },
     async closeRoom(providerRoomId) {
       try {

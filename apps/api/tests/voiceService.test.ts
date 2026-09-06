@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { ChannelKind, ConversationType } from "@intouch/shared/conversations";
 import { CallEndReason, CallStatus } from "@intouch/shared/voice";
 
 import { VoiceCallJobKind } from "../src/modules/voice/voice-call.jobs.js";
@@ -33,6 +34,73 @@ const call: CallSessionRecord = {
 };
 
 describe("voice service reconciliation", () => {
+  test("lets an owner stop a participant screen share without releasing the session", async () => {
+    const ownerUserId = "507f1f77bcf86cd799439017";
+    const participantUserId = "507f1f77bcf86cd799439018";
+    const providerRoomId = "00000000-0000-4000-8000-000000000004";
+    const session: VoiceSessionRecord = {
+      id: "00000000-0000-4000-8000-000000000005",
+      kind: "VOICE_CHANNEL",
+      organizationId: call.organizationId,
+      conversationId: call.conversationId,
+      callId: null,
+      userId: participantUserId,
+      participantIdentity: "00000000-0000-4000-8000-000000000006",
+      providerRoomId,
+      connectedAt: startedAt,
+    };
+    let stoppedIdentity: string | undefined;
+    let deliveredSessionId: string | undefined;
+    const dependencies = {
+      conversationPolicy: { assertOwner() {} },
+      conversations: {
+        getAccessible: async () => ({
+          id: call.conversationId,
+          organizationId: call.organizationId,
+          categoryId: "507f1f77bcf86cd799439019",
+          kind: ChannelKind.VOICE,
+          voiceRoomId: providerRoomId,
+          name: "Standup",
+          type: ConversationType.CHANNEL,
+          visibility: "PUBLIC",
+          position: 0,
+          createdAt: startedAt,
+          updatedAt: startedAt,
+        }),
+      },
+      jobs: { setHandler() {} },
+      logger: { error() {}, warn() {} },
+      media: {
+        stopScreenShare: async (
+          _providerRoomId: string,
+          participantIdentity: string,
+        ) => {
+          stoppedIdentity = participantIdentity;
+        },
+      },
+      memberships: { findForUser: async () => ({ role: "OWNER" }) },
+      realtime: {
+        screenShareStopRequested: (
+          _userId: string,
+          event: { sessionId: string },
+        ) => {
+          deliveredSessionId = event.sessionId;
+        },
+      },
+      sessions: { getByUser: async () => session },
+    } as unknown as VoiceServiceDependencies;
+    const service = createVoiceService(dependencies);
+
+    await service.stopScreenShare(
+      ownerUserId,
+      call.conversationId,
+      participantUserId,
+    );
+
+    assert.equal(stoppedIdentity, session.participantIdentity);
+    assert.equal(deliveredSessionId, session.id);
+  });
+
   test("reconciles a pending provider participant during heartbeat", async () => {
     const session: VoiceSessionRecord = {
       id: "00000000-0000-4000-8000-000000000002",

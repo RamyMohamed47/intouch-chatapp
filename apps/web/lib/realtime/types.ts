@@ -15,6 +15,7 @@ import type {
   VoiceHeartbeatInput,
   CallIncomingEvent,
   CallUpdatedEvent,
+  ScreenShareStopRequestedEvent,
   VoiceOccupancyUpdatedEvent,
 } from "@intouch/shared/realtime";
 
@@ -41,6 +42,7 @@ export interface ServerToClientEvents {
   "read-receipt:updated": (receipt: ReadReceiptEvent) => void;
   "call:incoming": (event: CallIncomingEvent) => void;
   "call:updated": (event: CallUpdatedEvent) => void;
+  "screen-share:stop-requested": (event: ScreenShareStopRequestedEvent) => void;
   "voice-channel:occupancy-updated": (
     event: VoiceOccupancyUpdatedEvent,
   ) => void;

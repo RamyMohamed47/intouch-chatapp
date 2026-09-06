@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
     toggleDeafen: vi.fn(),
     toggleCamera: vi.fn(),
     toggleMute: vi.fn(),
+    toggleScreenShare: vi.fn(),
     voice: {
       activeCall: null as {
         answeredAt: string | null;
@@ -34,11 +35,15 @@ const mocks = vi.hoisted(() => {
       connectionQuality: "excellent" as ConnectionQuality,
       connectionState: "connected" as ConnectionState,
       cameraTracks: [],
+      screenShareTracks: [],
+      canScreenShare: true,
       isDeafened: false,
       isCameraEnabled: false,
       isCameraTransitioning: false,
       isMuted: false,
       isPlaybackBlocked: false,
+      isScreenShareEnabled: false,
+      isScreenShareTransitioning: false,
       isTransitioning: false,
       error: null as string | null,
       participantIdentities: ["local-participant"],
@@ -72,6 +77,7 @@ vi.mock("@/lib/voice/provider", () => ({
     toggleDeafen: mocks.toggleDeafen,
     toggleCamera: mocks.toggleCamera,
     toggleMute: mocks.toggleMute,
+    toggleScreenShare: mocks.toggleScreenShare,
   }),
 }));
 
@@ -90,6 +96,7 @@ describe("VoiceSessionPanel", () => {
     mocks.toggleDeafen.mockReset();
     mocks.toggleCamera.mockReset();
     mocks.toggleMute.mockReset();
+    mocks.toggleScreenShare.mockReset();
   });
 
   afterEach(() => {
@@ -117,6 +124,7 @@ describe("VoiceSessionPanel", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Turn camera on" }),
     );
+    await userEvent.click(screen.getByRole("button", { name: "Share screen" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Leave voice session" }),
     );
@@ -124,6 +132,7 @@ describe("VoiceSessionPanel", () => {
     expect(mocks.toggleMute).toHaveBeenCalledOnce();
     expect(mocks.toggleDeafen).toHaveBeenCalledOnce();
     expect(mocks.toggleCamera).toHaveBeenCalledOnce();
+    expect(mocks.toggleScreenShare).toHaveBeenCalledOnce();
     expect(mocks.endSession).toHaveBeenCalledOnce();
   });
 

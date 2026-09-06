@@ -9,6 +9,7 @@ import {
   messageReactionsChangedEventSchema,
   organizationSocketSchema,
   presenceEventSchema,
+  screenShareStopRequestedEventSchema,
   socketConnectionErrorSchema,
 } from "../realtime/index.js";
 
@@ -152,6 +153,21 @@ describe("shared realtime schemas", () => {
       messageReactionsChangedEventSchema.safeParse({
         ...event,
         userId: "507f1f77bcf86cd799439013",
+      }).success,
+      false,
+    );
+  });
+
+  test("validates strict screen-share stop requests", () => {
+    const event = {
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      conversationId: "507f1f77bcf86cd799439011",
+    };
+    assert.deepEqual(screenShareStopRequestedEventSchema.parse(event), event);
+    assert.equal(
+      screenShareStopRequestedEventSchema.safeParse({
+        ...event,
+        participantIdentity: "must-not-leak",
       }).success,
       false,
     );

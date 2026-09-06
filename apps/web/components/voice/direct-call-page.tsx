@@ -10,8 +10,10 @@ import {
   Headphones,
   Mic,
   MicOff,
+  MonitorUp,
   PhoneOff,
   Signal,
+  SquareStop,
   Video,
   Volume2,
 } from "lucide-react";
@@ -24,6 +26,7 @@ import { UserAvatar } from "@/components/users/user-avatar";
 import { CallDuration } from "@/components/voice/call-duration";
 import { SpeakingIndicator } from "@/components/voice/speaking-indicator";
 import { ParticipantVideo } from "@/components/voice/participant-video";
+import { ScreenShareStage } from "@/components/voice/screen-share-stage";
 import { PageHeader } from "@/components/workspace/page-header";
 import { useAuth } from "@/lib/auth/provider";
 import { useMembers } from "@/lib/query/hooks";
@@ -42,6 +45,8 @@ export function DirectCallPage({
   const voice = useVoice();
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const session = voice.activeSession;
+  const connectedHere =
+    session?.kind === "CALL" && session.conversationId === conversation.id;
   const peerPresence = members.data?.find(
     (member) => member.user.id === conversation.peer.id,
   )?.user;
@@ -57,6 +62,14 @@ export function DirectCallPage({
   );
   const localCamera = voice.cameraTracks.find(({ isLocal }) => isLocal);
   const peerCamera = voice.cameraTracks.find(({ isLocal }) => !isLocal);
+  const screenPresenters = connectedHere
+    ? voice.screenShareTracks.map((share) => ({
+        ...share,
+        displayName: share.isLocal
+          ? (user?.displayName ?? "You")
+          : conversation.peer.displayName,
+      }))
+    : [];
   const audioInputs = devices.filter(({ kind }) => kind === "audioinput");
   const videoInputs = devices.filter(({ kind }) => kind === "videoinput");
   const isVideoCall = voice.activeCall?.mediaMode === "VIDEO";
@@ -124,7 +137,18 @@ export function DirectCallPage({
                 </p>
               </div>
 
-              <div className="mx-auto mt-9 grid max-w-2xl gap-4 sm:grid-cols-2">
+              {screenPresenters.length > 0 && (
+                <ScreenShareStage className="mt-8" shares={screenPresenters} />
+              )}
+
+              <div
+                className={cn(
+                  "mx-auto grid gap-4 sm:grid-cols-2",
+                  screenPresenters.length > 0
+                    ? "mt-4 max-w-lg"
+                    : "mt-9 max-w-2xl",
+                )}
+              >
                 <div className="relative flex aspect-video min-w-0 flex-col items-center justify-center overflow-hidden rounded-[1.75rem] border border-border bg-background/45 text-center">
                   {localCamera ? (
                     <ParticipantVideo
@@ -229,7 +253,7 @@ export function DirectCallPage({
                     <Volume2 /> Enable audio
                   </Button>
                 )}
-                <div className="grid min-w-0 grid-cols-3 gap-2">
+                <div className="grid min-w-0 grid-cols-2 gap-2">
                   <Button
                     className="min-w-0"
                     variant="outline"
@@ -263,7 +287,35 @@ export function DirectCallPage({
                       {voice.isCameraEnabled ? "Stop" : "Camera"}
                     </span>
                   </Button>
+                  <Button
+                    className="min-w-0"
+                    variant="outline"
+                    disabled={
+                      voice.isScreenShareTransitioning ||
+                      (!voice.canScreenShare && !voice.isScreenShareEnabled)
+                    }
+                    aria-label={
+                      voice.isScreenShareEnabled
+                        ? "Stop sharing"
+                        : "Share screen"
+                    }
+                    onClick={() => void voice.toggleScreenShare()}
+                  >
+                    {voice.isScreenShareEnabled ? (
+                      <SquareStop />
+                    ) : (
+                      <MonitorUp />
+                    )}
+                    <span className="truncate">
+                      {voice.isScreenShareEnabled ? "Stop sharing" : "Share"}
+                    </span>
+                  </Button>
                 </div>
+                {!voice.canScreenShare && !voice.isScreenShareEnabled && (
+                  <p className="text-xs text-muted-foreground">
+                    Screen sharing is unavailable on this browser or device.
+                  </p>
+                )}
                 {audioInputs.length > 0 && (
                   <label className="grid min-w-0 gap-2 text-xs text-muted-foreground">
                     Microphone

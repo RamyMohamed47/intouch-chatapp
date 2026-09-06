@@ -31,6 +31,7 @@ export interface VoiceController {
   muteParticipant: RequestHandler;
   resumeSession: RequestHandler;
   startCall: RequestHandler;
+  stopScreenShare: RequestHandler;
   webhook: RequestHandler;
 }
 
@@ -61,6 +62,14 @@ const createVoiceController = (service: VoiceService): VoiceController => ({
   }),
   muteParticipant: catchAsync(async (req, res) => {
     await service.muteParticipant(
+      getUserId(res.locals as AuthLocals),
+      String(req.params.conversationId),
+      String(req.params.userId),
+    );
+    res.status(204).send();
+  }),
+  stopScreenShare: catchAsync(async (req, res) => {
+    await service.stopScreenShare(
       getUserId(res.locals as AuthLocals),
       String(req.params.conversationId),
       String(req.params.userId),

@@ -12,6 +12,7 @@ import {
   ConnectionQuality,
   ConnectionState,
   type LocalVideoTrack,
+  type Participant,
   type RemoteVideoTrack,
   Room,
   RoomEvent,
@@ -54,6 +55,16 @@ export interface ParticipantCameraTrack {
   track: LocalVideoTrack | RemoteVideoTrack;
 }
 
+export interface ParticipantScreenShareTrack {
+  hasAudio: boolean;
+  id: string;
+  identity: string;
+  isLocal: boolean;
+  observedOrder: number;
+  source: "screen_share";
+  track: LocalVideoTrack | RemoteVideoTrack;
+}
+
 interface VoiceContextValue {
   activeCall: CallDto | null;
   activeSession: VoiceSessionDto | null;
@@ -66,9 +77,13 @@ interface VoiceContextValue {
   isCameraTransitioning: boolean;
   isMuted: boolean;
   isPlaybackBlocked: boolean;
+  canScreenShare: boolean;
+  isScreenShareEnabled: boolean;
+  isScreenShareTransitioning: boolean;
   isTransitioning: boolean;
   participantIdentities: string[];
   cameraTracks: ParticipantCameraTrack[];
+  screenShareTracks: ParticipantScreenShareTrack[];
   acceptCall(callId: string): Promise<void>;
   declineCall(callId: string): Promise<void>;
   enablePlayback(): Promise<void>;
@@ -83,6 +98,7 @@ interface VoiceContextValue {
   toggleCamera(): Promise<void>;
   toggleDeafen(): void;
   toggleMute(): Promise<void>;
+  toggleScreenShare(): Promise<void>;
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
@@ -114,6 +130,24 @@ const cameraErrorMessage = (error: unknown, fallback: string) => {
   return voiceErrorMessage(error, fallback);
 };
 
+const screenShareErrorMessage = (error: unknown) => {
+  if (error instanceof DOMException) {
+    if (["AbortError", "NotAllowedError"].includes(error.name)) {
+      return "Screen sharing was cancelled or denied.";
+    }
+    if (error.name === "NotReadableError") {
+      return "The selected screen cannot be captured. Close other capture tools and retry.";
+    }
+    if (error.name === "NotSupportedError") {
+      return "Screen sharing is not supported by this browser or device.";
+    }
+  }
+  return voiceErrorMessage(
+    error,
+    "Could not share your screen. Check browser permissions and retry.",
+  );
+};
+
 export function VoiceProvider({
   children,
   roomFactory = createLiveKitRoom,
@@ -129,6 +163,10 @@ export function VoiceProvider({
   const attachedAudioTracksRef = useRef(new Set<Track>());
   const transitionInFlightRef = useRef(false);
   const cameraTransitionInFlightRef = useRef(false);
+  const screenShareTransitionInFlightRef = useRef(false);
+  const screenShareOrderRef = useRef(new Map<string, number>());
+  const nextScreenShareOrderRef = useRef(0);
+  const isDeafenedRef = useRef(false);
   const [activeSession, setActiveSession] = useState<VoiceSessionDto | null>(
     null,
   );
@@ -150,11 +188,25 @@ export function VoiceProvider({
   );
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isCameraTransitioning, setIsCameraTransitioning] = useState(false);
+  const [screenShareTracks, setScreenShareTracks] = useState<
+    ParticipantScreenShareTrack[]
+  >([]);
+  const [canScreenShare, setCanScreenShare] = useState(false);
+  const [isScreenShareEnabled, setIsScreenShareEnabled] = useState(false);
+  const [isScreenShareTransitioning, setIsScreenShareTransitioning] =
+    useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCanScreenShare(
+      window.isSecureContext &&
+        typeof navigator.mediaDevices?.getDisplayMedia === "function",
+    );
+  }, []);
 
   const runTransition = useCallback(
     async (work: () => Promise<void>, fallback: string) => {
@@ -243,6 +295,83 @@ export function VoiceProvider({
     setIsCameraEnabled(room.localParticipant.isCameraEnabled);
   }, []);
 
+  const syncScreenShareTracks = useCallback((room: Room) => {
+    const next: ParticipantScreenShareTrack[] = [];
+    const appendTrack = (
+      identity: string,
+      isLocal: boolean,
+      participant: Participant,
+    ) => {
+      const publication = participant.getTrackPublication(
+        Track.Source.ScreenShare,
+      );
+      const track = publication?.videoTrack;
+      if (!publication || !track || publication.isMuted) return;
+      const id = publication.trackSid;
+      let observedOrder = screenShareOrderRef.current.get(id);
+      if (observedOrder === undefined) {
+        nextScreenShareOrderRef.current += 1;
+        observedOrder = nextScreenShareOrderRef.current;
+        screenShareOrderRef.current.set(id, observedOrder);
+      }
+      const audioPublication = participant.getTrackPublication(
+        Track.Source.ScreenShareAudio,
+      );
+      next.push({
+        hasAudio: Boolean(audioPublication && !audioPublication.isMuted),
+        id,
+        identity,
+        isLocal,
+        observedOrder,
+        source: "screen_share",
+        track,
+      });
+    };
+
+    appendTrack(room.localParticipant.identity, true, room.localParticipant);
+    room.remoteParticipants.forEach((participant) => {
+      appendTrack(participant.identity, false, participant);
+    });
+    next.sort((left, right) => left.observedOrder - right.observedOrder);
+    const activeIds = new Set(next.map(({ id }) => id));
+    for (const id of screenShareOrderRef.current.keys()) {
+      if (!activeIds.has(id)) screenShareOrderRef.current.delete(id);
+    }
+    setScreenShareTracks((current) => {
+      const unchanged =
+        current.length === next.length &&
+        current.every(
+          (entry, index) =>
+            entry.id === next[index]?.id &&
+            entry.track === next[index]?.track &&
+            entry.hasAudio === next[index]?.hasAudio,
+        );
+      return unchanged ? current : next;
+    });
+    const localPublication = room.localParticipant.getTrackPublication(
+      Track.Source.ScreenShare,
+    );
+    setIsScreenShareEnabled(
+      Boolean(localPublication?.videoTrack && !localPublication.isMuted),
+    );
+  }, []);
+
+  const stopLocalScreenShare = useCallback(
+    async (room: Room) => {
+      if (screenShareTransitionInFlightRef.current) return;
+      screenShareTransitionInFlightRef.current = true;
+      setIsScreenShareTransitioning(true);
+      try {
+        await room.localParticipant.setScreenShareEnabled(false);
+      } finally {
+        syncScreenShareTracks(room);
+        screenShareTransitionInFlightRef.current = false;
+        setIsScreenShareTransitioning(false);
+      }
+    },
+    [syncScreenShareTracks],
+  );
+
   const disconnectRoom = useCallback(async () => {
     const room = roomRef.current;
     roomRef.current = null;
@@ -256,12 +385,30 @@ export function VoiceProvider({
     setParticipantIdentities([]);
     setActiveSpeakerIdentities([]);
     setCameraTracks([]);
+    setScreenShareTracks([]);
+    screenShareOrderRef.current.clear();
+    nextScreenShareOrderRef.current = 0;
     setIsCameraEnabled(false);
     setIsCameraTransitioning(false);
+    cameraTransitionInFlightRef.current = false;
+    setIsScreenShareEnabled(false);
+    setIsScreenShareTransitioning(false);
+    screenShareTransitionInFlightRef.current = false;
     setIsMuted(false);
     setIsDeafened(false);
+    isDeafenedRef.current = false;
     setIsPlaybackBlocked(false);
-    if (room) await room.disconnect();
+    if (room) {
+      try {
+        if (room.localParticipant.isScreenShareEnabled) {
+          await room.localParticipant.setScreenShareEnabled(false);
+        }
+      } catch {
+        // Disconnecting the room still stops every local media track.
+      } finally {
+        await room.disconnect();
+      }
+    }
   }, []);
 
   const connect = useCallback(
@@ -274,10 +421,12 @@ export function VoiceProvider({
       room.on(RoomEvent.ParticipantConnected, () => {
         syncParticipants(room);
         syncCameraTracks(room);
+        syncScreenShareTracks(room);
       });
       room.on(RoomEvent.ParticipantDisconnected, () => {
         syncParticipants(room);
         syncCameraTracks(room);
+        syncScreenShareTracks(room);
       });
       room.on(RoomEvent.ActiveSpeakersChanged, (speakers) =>
         setActiveSpeakerIdentities(speakers.map(({ identity }) => identity)),
@@ -285,29 +434,62 @@ export function VoiceProvider({
       room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
         if (participant.isLocal) setConnectionQuality(quality);
       });
-      room.on(RoomEvent.TrackSubscribed, (track) => {
+      room.on(RoomEvent.TrackSubscribed, (track, publication) => {
         if (track.kind === Track.Kind.Audio) {
+          if (isDeafenedRef.current) publication.setEnabled(false);
           const element = track.attach();
           element.autoplay = true;
           element.setAttribute("aria-hidden", "true");
           audioContainerRef.current?.appendChild(element);
           attachedAudioTracksRef.current.add(track);
+          if (track.source === Track.Source.ScreenShareAudio) {
+            syncScreenShareTracks(room);
+          }
         } else if (track.source === Track.Source.Camera) {
           syncCameraTracks(room);
+        } else if (track.source === Track.Source.ScreenShare) {
+          syncScreenShareTracks(room);
         }
       });
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
         if (track.kind === Track.Kind.Audio) {
           track.detach().forEach((element) => element.remove());
           attachedAudioTracksRef.current.delete(track);
+          if (track.source === Track.Source.ScreenShareAudio) {
+            syncScreenShareTracks(room);
+          }
         } else if (track.source === Track.Source.Camera) {
           syncCameraTracks(room);
+        } else if (track.source === Track.Source.ScreenShare) {
+          syncScreenShareTracks(room);
         }
       });
-      room.on(RoomEvent.TrackMuted, () => syncCameraTracks(room));
-      room.on(RoomEvent.TrackUnmuted, () => syncCameraTracks(room));
-      room.on(RoomEvent.LocalTrackPublished, () => syncCameraTracks(room));
-      room.on(RoomEvent.LocalTrackUnpublished, () => syncCameraTracks(room));
+      room.on(RoomEvent.TrackMuted, (publication, participant) => {
+        syncCameraTracks(room);
+        syncScreenShareTracks(room);
+        if (
+          participant.isLocal &&
+          publication.source === Track.Source.ScreenShare
+        ) {
+          void stopLocalScreenShare(room).catch(() => {
+            setError(
+              "Your screen share was stopped, but browser capture could not be closed.",
+            );
+          });
+        }
+      });
+      room.on(RoomEvent.TrackUnmuted, () => {
+        syncCameraTracks(room);
+        syncScreenShareTracks(room);
+      });
+      room.on(RoomEvent.LocalTrackPublished, () => {
+        syncCameraTracks(room);
+        syncScreenShareTracks(room);
+      });
+      room.on(RoomEvent.LocalTrackUnpublished, () => {
+        syncCameraTracks(room);
+        syncScreenShareTracks(room);
+      });
       room.on(RoomEvent.AudioPlaybackStatusChanged, (canPlay) => {
         setIsPlaybackBlocked(!canPlay);
       });
@@ -334,6 +516,7 @@ export function VoiceProvider({
         setIsPlaybackBlocked(!room.canPlaybackAudio);
         syncParticipants(room);
         syncCameraTracks(room);
+        syncScreenShareTracks(room);
         setActiveSession(result.session);
         setActiveCall(call ?? null);
         queryClient.setQueryData(queryKeys.voice.activeSession, result.session);
@@ -351,8 +534,10 @@ export function VoiceProvider({
       disconnectRoom,
       queryClient,
       roomFactory,
+      stopLocalScreenShare,
       syncCameraTracks,
       syncParticipants,
+      syncScreenShareTracks,
     ],
   );
 
@@ -483,6 +668,42 @@ export function VoiceProvider({
     }
   }, [syncCameraTracks]);
 
+  const toggleScreenShare = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room || screenShareTransitionInFlightRef.current) return;
+    if (room.localParticipant.isScreenShareEnabled) {
+      try {
+        setError(null);
+        await stopLocalScreenShare(room);
+      } catch (screenError) {
+        setError(screenShareErrorMessage(screenError));
+      }
+      return;
+    }
+    if (!canScreenShare) {
+      setError("Screen sharing is not supported by this browser or device.");
+      return;
+    }
+    screenShareTransitionInFlightRef.current = true;
+    setIsScreenShareTransitioning(true);
+    setError(null);
+    try {
+      await room.localParticipant.setScreenShareEnabled(true, {
+        audio: true,
+        contentHint: "detail",
+        selfBrowserSurface: "exclude",
+        surfaceSwitching: "include",
+        systemAudio: "include",
+      });
+      syncScreenShareTracks(room);
+    } catch (screenError) {
+      setError(screenShareErrorMessage(screenError));
+    } finally {
+      screenShareTransitionInFlightRef.current = false;
+      setIsScreenShareTransitioning(false);
+    }
+  }, [canScreenShare, stopLocalScreenShare, syncScreenShareTracks]);
+
   const enablePlayback = useCallback(async () => {
     await runTransition(async () => {
       const room = roomRef.current;
@@ -499,6 +720,7 @@ export function VoiceProvider({
     if (transitionInFlightRef.current) return;
     setError(null);
     const next = !isDeafened;
+    isDeafenedRef.current = next;
     roomRef.current?.remoteParticipants.forEach((participant) => {
       participant.audioTrackPublications.forEach((publication) =>
         publication.setEnabled(!next),
@@ -598,6 +820,29 @@ export function VoiceProvider({
   }, [activeCall?.id, disconnectRoom, queryClient, realtime.latestCall]);
 
   useEffect(() => {
+    const request = realtime.screenShareStopRequest;
+    const room = roomRef.current;
+    if (
+      !request ||
+      !room ||
+      request.sessionId !== activeSession?.id ||
+      request.conversationId !== activeSession.conversationId
+    ) {
+      return;
+    }
+    void stopLocalScreenShare(room)
+      .then(() => setError("Your screen share was stopped by an owner."))
+      .catch((screenError: unknown) =>
+        setError(screenShareErrorMessage(screenError)),
+      );
+  }, [
+    activeSession?.conversationId,
+    activeSession?.id,
+    realtime.screenShareStopRequest,
+    stopLocalScreenShare,
+  ]);
+
+  useEffect(() => {
     const call = realtime.incomingCall;
     if (!call || document.visibilityState === "visible") return;
     void showIncomingCallNotification(
@@ -684,6 +929,8 @@ export function VoiceProvider({
         activeSession,
         activeSpeakerIdentities,
         cameraTracks,
+        screenShareTracks,
+        canScreenShare,
         connectionQuality,
         connectionState,
         error,
@@ -692,6 +939,8 @@ export function VoiceProvider({
         isCameraTransitioning,
         isMuted,
         isPlaybackBlocked,
+        isScreenShareEnabled,
+        isScreenShareTransitioning,
         isTransitioning,
         participantIdentities,
         acceptCall,
@@ -705,6 +954,7 @@ export function VoiceProvider({
         toggleCamera,
         toggleDeafen,
         toggleMute,
+        toggleScreenShare,
       }}
     >
       {children}

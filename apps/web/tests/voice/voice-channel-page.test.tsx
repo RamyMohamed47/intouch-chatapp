@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { VoiceChannelConversationDto } from "@intouch/shared/conversations";
 import type { ConnectionQuality, ConnectionState } from "livekit-client";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   const localUserId = "507f1f77bcf86cd799439011";
@@ -13,6 +14,8 @@ const mocks = vi.hoisted(() => {
     localUserId,
     remoteIdentity,
     remoteUserId,
+    role: "MEMBER",
+    stopScreenShare: vi.fn(),
     voice: {
       activeSession: {
         id: localIdentity,
@@ -25,6 +28,20 @@ const mocks = vi.hoisted(() => {
       },
       activeSpeakerIdentities: [remoteIdentity],
       cameraTracks: [],
+      screenShareTracks: [] as Array<{
+        displayName?: string;
+        hasAudio: boolean;
+        id: string;
+        identity: string;
+        isLocal: boolean;
+        observedOrder: number;
+        source: "screen_share";
+        track: {
+          attach: ReturnType<typeof vi.fn>;
+          detach: ReturnType<typeof vi.fn>;
+        };
+      }>,
+      canScreenShare: true,
       connectionQuality: "excellent" as ConnectionQuality,
       connectionState: "connected" as ConnectionState,
       enablePlayback: vi.fn(),
@@ -35,6 +52,8 @@ const mocks = vi.hoisted(() => {
       isCameraTransitioning: false,
       isMuted: false,
       isPlaybackBlocked: false,
+      isScreenShareEnabled: false,
+      isScreenShareTransitioning: false,
       isTransitioning: false,
       joinChannel: vi.fn(),
       participantIdentities: [localIdentity, remoteIdentity],
@@ -43,6 +62,7 @@ const mocks = vi.hoisted(() => {
       toggleCamera: vi.fn(),
       toggleDeafen: vi.fn(),
       toggleMute: vi.fn(),
+      toggleScreenShare: vi.fn(),
     },
   };
 });
@@ -75,8 +95,16 @@ vi.mock("@/lib/query/hooks", () => ({
     ],
   }),
   useOrganization: () => ({
-    data: { name: "InTouch", currentUserRole: "MEMBER" },
+    data: { name: "InTouch", currentUserRole: mocks.role },
   }),
+}));
+
+vi.mock("@/lib/api/voice", () => ({
+  voiceApi: {
+    disconnectParticipant: vi.fn(),
+    muteParticipant: vi.fn(),
+    stopScreenShare: mocks.stopScreenShare,
+  },
 }));
 
 vi.mock("@/lib/voice/provider", () => ({
@@ -114,6 +142,13 @@ const conversation: VoiceChannelConversationDto = {
 };
 
 describe("VoiceChannelPage", () => {
+  beforeEach(() => {
+    mocks.role = "MEMBER";
+    mocks.stopScreenShare.mockReset();
+    mocks.stopScreenShare.mockResolvedValue(undefined);
+    mocks.voice.screenShareTracks = [];
+  });
+
   it("uses a speaker icon for an active participant", () => {
     render(
       <VoiceChannelPage
@@ -125,5 +160,33 @@ describe("VoiceChannelPage", () => {
     expect(
       screen.getByRole("img", { name: "Lina Hassan is speaking" }),
     ).toBeInTheDocument();
+  });
+
+  it("lets owners stop a remote participant's selected share", async () => {
+    mocks.role = "OWNER";
+    mocks.voice.screenShareTracks = [
+      {
+        hasAudio: true,
+        id: "remote-screen",
+        identity: mocks.remoteIdentity,
+        isLocal: false,
+        observedOrder: 1,
+        source: "screen_share",
+        track: { attach: vi.fn(), detach: vi.fn() },
+      },
+    ];
+
+    render(
+      <VoiceChannelPage
+        organizationId={conversation.organizationId}
+        conversation={conversation}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Stop share" }));
+
+    expect(mocks.stopScreenShare).toHaveBeenCalledWith(
+      conversation.id,
+      mocks.remoteUserId,
+    );
   });
 });

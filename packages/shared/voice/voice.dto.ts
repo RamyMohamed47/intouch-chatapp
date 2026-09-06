@@ -139,6 +139,13 @@ export const callUpdatedEventSchema = z
 
 export const voiceOccupancyUpdatedEventSchema = voiceOccupancyDtoSchema;
 
+export const screenShareStopRequestedEventSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    conversationId: identifierDtoSchema,
+  })
+  .strict();
+
 export type CallStatusValue = z.infer<typeof callStatusSchema>;
 export type CallEndReasonValue = z.infer<typeof callEndReasonSchema>;
 export type CallMediaModeValue = z.infer<typeof callMediaModeSchema>;
@@ -158,4 +165,7 @@ export type CallIncomingEvent = z.infer<typeof callIncomingEventSchema>;
 export type CallUpdatedEvent = z.infer<typeof callUpdatedEventSchema>;
 export type VoiceOccupancyUpdatedEvent = z.infer<
   typeof voiceOccupancyUpdatedEventSchema
+>;
+export type ScreenShareStopRequestedEvent = z.infer<
+  typeof screenShareStopRequestedEventSchema
 >;

@@ -169,10 +169,11 @@ events never become the durable source of truth.
 
 ## Voice Runtime
 
-Socket.IO transports call lifecycle, occupancy invalidation, and voice-session
-heartbeats only. LiveKit Cloud transports encrypted WebRTC audio, camera video,
-and signaling. InTouch issues five-minute initial-connect credentials limited
-to microphone and camera publication and never
+Socket.IO transports call lifecycle, occupancy invalidation, voice-session
+heartbeats, and targeted moderation requests only. LiveKit Cloud transports
+encrypted WebRTC audio, camera video, screen video/audio, and signaling. InTouch
+issues five-minute initial-connect credentials limited to microphone, camera,
+screen-share, and screen-share-audio publication and never
 places user IDs, names, or conversation IDs in provider room or participant
 identities. Signed LiveKit webhooks activate/release Redis leases; BullMQ
 provides ringing, connection, and disconnect deadlines when webhooks are late.
@@ -184,3 +185,11 @@ participant, channel, and organization lifecycle changes revoke provider
 participants and Redis leases after the MongoDB mutation commits. Call events
 include the durable initial `AUDIO | VIDEO` mode; live camera state remains in
 LiveKit and is never broadcast through Socket.IO or persisted by InTouch.
+
+`screen-share:stop-requested` is a strict server-to-client event containing
+`{ sessionId, conversationId }`. It is sent only to the targeted participant
+after an owner successfully server-mutes that participant's current screen
+video and shared audio. The client then unpublishes its capture so the browser
+sharing indicator closes. Normal share publication and selection remain entirely
+inside LiveKit and do not create Socket.IO activity. Screen sharing is never
+persisted or silently resumed after reload or a full media reconnection.

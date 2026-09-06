@@ -71,6 +71,13 @@ export const voiceApi = {
       { method: "POST" },
     );
   },
+  stopScreenShare(conversationId: string, userId: string) {
+    return apiRequest(
+      `/api/v1/conversations/${conversationId}/voice/participants/${userId}/screen-share`,
+      noContentSchema,
+      { method: "DELETE" },
+    );
+  },
   disconnectParticipant(conversationId: string, userId: string) {
     return apiRequest(
       `/api/v1/conversations/${conversationId}/voice/participants/${userId}`,

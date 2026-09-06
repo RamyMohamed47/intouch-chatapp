@@ -19,8 +19,10 @@ import {
   typingEventSchema,
   callIncomingEventSchema,
   callUpdatedEventSchema,
+  screenShareStopRequestedEventSchema,
   voiceOccupancyUpdatedEventSchema,
   type MessageEvent,
+  type ScreenShareStopRequestedEvent,
   type SocketAcknowledgementResult,
 } from "@intouch/shared/realtime";
 import {
@@ -81,6 +83,7 @@ interface RealtimeContextValue {
   stopTyping: (conversationId: string) => void;
   incomingCall: CallDto | null;
   latestCall: CallDto | null;
+  screenShareStopRequest: ScreenShareStopRequestedEvent | null;
   dismissIncomingCall: () => void;
   heartbeatVoice: (sessionId: string) => Promise<SocketAcknowledgementResult>;
 }
@@ -184,6 +187,8 @@ export function RealtimeProvider({
   >(null);
   const [incomingCall, setIncomingCall] = useState<CallDto | null>(null);
   const [latestCall, setLatestCall] = useState<CallDto | null>(null);
+  const [screenShareStopRequest, setScreenShareStopRequest] =
+    useState<ScreenShareStopRequestedEvent | null>(null);
   const joinedConversationIdsRef = useRef(new Set<string>());
   const {
     applyTypingUpdate,
@@ -200,6 +205,7 @@ export function RealtimeProvider({
       clearAllTyping();
       setIncomingCall(null);
       setLatestCall(null);
+      setScreenShareStopRequest(null);
       setSocket((current) => {
         current?.disconnect();
         return null;
@@ -248,6 +254,7 @@ export function RealtimeProvider({
     nextSocket.on("disconnect", (reason) => {
       setConnected(false);
       clearAllTyping();
+      setScreenShareStopRequest(null);
       joinedConversationIdsRef.current.clear();
       if (reason === "io server disconnect" && !refreshing) {
         refreshing = true;
@@ -579,6 +586,11 @@ export function RealtimeProvider({
           query.queryKey[3] === "context",
       });
     });
+    nextSocket.on("screen-share:stop-requested", (raw) => {
+      const parsed = screenShareStopRequestedEventSchema.safeParse(raw);
+      if (!parsed.success) return;
+      setScreenShareStopRequest(parsed.data);
+    });
     nextSocket.on("voice-channel:occupancy-updated", (raw) => {
       const parsed = voiceOccupancyUpdatedEventSchema.safeParse(raw);
       if (!parsed.success) return;
@@ -635,6 +647,7 @@ export function RealtimeProvider({
       }
       joinedConversationIdsRef.current.clear();
       clearAllTyping();
+      setScreenShareStopRequest(null);
       nextSocket.disconnect();
       setConnected(false);
     };
@@ -728,6 +741,7 @@ export function RealtimeProvider({
         stopTyping,
         incomingCall,
         latestCall,
+        screenShareStopRequest,
         dismissIncomingCall,
         heartbeatVoice,
       }}

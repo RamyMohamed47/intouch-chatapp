@@ -243,6 +243,28 @@ describe("authenticated conversation sockets", () => {
     assert.equal(outsideReceived, false);
   });
 
+  test("delivers screen-share stop requests only to the targeted user", async () => {
+    const targeted = await connect();
+    const outside = await connect("second-token");
+    let outsideReceived = false;
+    outside.on("screen-share:stop-requested", () => {
+      outsideReceived = true;
+    });
+    const event = {
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      conversationId: firstConversationId,
+    };
+    const received = new Promise<unknown>((resolve) => {
+      targeted.once("screen-share:stop-requested", resolve);
+    });
+
+    gateway.screenShareStopRequested(firstUserId, event);
+
+    assert.deepEqual(await received, event);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(outsideReceived, false);
+  });
+
   test("delivers notification changes only to the recipient user room", async () => {
     const targeted = await connect();
     const outside = await connect("second-token");
