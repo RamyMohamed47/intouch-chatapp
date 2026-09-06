@@ -43,6 +43,7 @@
     "openapi:lint": "redocly lint .agents/api/openapi.yaml --extends=minimal",
     "search:index:sync": "npm run search:index:sync --workspace @intouch/api",
     "storage:cors:sync": "npm run storage:cors:sync --workspace @intouch/api",
+    "audio:generate": "node scripts/generate-call-tones.mjs",
     "infra:up": "docker compose -f compose.infrastructure.yml up -d --wait",
     "infra:down": "docker compose -f compose.infrastructure.yml down",
     "infra:status": "docker compose -f compose.infrastructure.yml ps",

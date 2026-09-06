@@ -193,3 +193,9 @@ video and shared audio. The client then unpublishes its capture so the browser
 sharing indicator closes. Normal share publication and selection remain entirely
 inside LiveKit and do not create Socket.IO activity. Screen sharing is never
 persisted or silently resumed after reload or a full media reconnection.
+
+Direct-call lifecycle state drives two self-hosted frontend tones. A recipient
+hears the incoming ringtone and the caller hears ringback only while the call is
+`RINGING`; every later or terminal state stops both. The tones are local UI
+audio, remain independent from LiveKit participant playback and browser-call
+notifications, and never travel through Socket.IO.

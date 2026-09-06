@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
   const remoteIdentity = "00000000-0000-4000-8000-000000000002";
   return {
     conversationId,
+    enableCallTonePlayback: vi.fn(),
     enablePlayback: vi.fn(),
     endSession: vi.fn(),
     localUserId,
@@ -54,6 +55,7 @@ const mocks = vi.hoisted(() => {
       isDeafened: false,
       isCameraEnabled: false,
       isCameraTransitioning: false,
+      isCallTonePlaybackBlocked: false,
       isMuted: false,
       isPlaybackBlocked: false,
       isScreenShareEnabled: false,
@@ -106,6 +108,7 @@ vi.mock("@/components/users/user-avatar", () => ({
 vi.mock("@/lib/voice/provider", () => ({
   useVoice: () => ({
     ...mocks.voice,
+    enableCallTonePlayback: mocks.enableCallTonePlayback,
     enablePlayback: mocks.enablePlayback,
     endSession: mocks.endSession,
     setInputDevice: mocks.setInputDevice,
@@ -139,6 +142,7 @@ const conversation: DirectConversationDto = {
 
 describe("DirectCallPage", () => {
   beforeEach(() => {
+    mocks.enableCallTonePlayback.mockReset();
     mocks.enablePlayback.mockReset();
     mocks.endSession.mockReset();
     mocks.toggleDeafen.mockReset();
@@ -147,6 +151,7 @@ describe("DirectCallPage", () => {
     mocks.toggleScreenShare.mockReset();
     mocks.voice.activeSpeakerIdentities = [remoteIdentity];
     mocks.voice.activeCall.mediaMode = "AUDIO";
+    mocks.voice.isCallTonePlaybackBlocked = false;
     mocks.voice.isPlaybackBlocked = false;
   });
 
@@ -190,6 +195,20 @@ describe("DirectCallPage", () => {
     expect(mocks.toggleCamera).toHaveBeenCalledOnce();
     expect(mocks.toggleScreenShare).toHaveBeenCalledOnce();
     expect(mocks.endSession).toHaveBeenCalledOnce();
+  });
+
+  it("offers a separate recovery action when call-tone playback is blocked", async () => {
+    mocks.voice.isCallTonePlaybackBlocked = true;
+    render(
+      <DirectCallPage conversation={conversation} organizationName="InTouch" />,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Enable call sound" }),
+    );
+
+    expect(mocks.enableCallTonePlayback).toHaveBeenCalledOnce();
+    expect(mocks.enablePlayback).not.toHaveBeenCalled();
   });
 
   it("labels calls that started in video mode", () => {

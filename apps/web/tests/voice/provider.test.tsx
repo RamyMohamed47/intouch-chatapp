@@ -18,6 +18,11 @@ const mocks = vi.hoisted(() => ({
   startCall: vi.fn(),
   showIncomingCallNotification: vi.fn(),
   transition: vi.fn(),
+  callTonePlayer: {
+    dispose: vi.fn(),
+    play: vi.fn(),
+    stop: vi.fn(),
+  },
   realtime: {
     incomingCall: null as CallDto | null,
     latestCall: null as CallDto | null,
@@ -61,8 +66,9 @@ vi.mock("@/lib/realtime/provider", () => ({
   }),
 }));
 
-import { VoiceProvider, useVoice } from "@/lib/voice/provider";
 import { queryKeys } from "@/lib/query/keys";
+import { CallToneKind } from "@/lib/voice/call-tone-player";
+import { VoiceProvider, useVoice } from "@/lib/voice/provider";
 
 const conversationId = "507f1f77bcf86cd799439012";
 const organizationId = "507f1f77bcf86cd799439013";
@@ -179,6 +185,11 @@ function Probe() {
       <span>
         {voice.isScreenShareEnabled ? "screen-share-on" : "screen-share-off"}
       </span>
+      <span>
+        {voice.isCallTonePlaybackBlocked
+          ? "call-tone-blocked"
+          : "call-tone-ready"}
+      </span>
       <button
         type="button"
         onClick={() => void voice.joinChannel(conversationId)}
@@ -209,6 +220,9 @@ function Probe() {
       <button type="button" onClick={() => void voice.enablePlayback()}>
         Enable test audio
       </button>
+      <button type="button" onClick={() => void voice.enableCallTonePlayback()}>
+        Enable test call sound
+      </button>
     </div>
   );
 }
@@ -223,7 +237,10 @@ const renderProvider = (
   seedQueryClient?.(queryClient);
   return render(
     <QueryClientProvider client={queryClient}>
-      <VoiceProvider roomFactory={() => room as unknown as Room}>
+      <VoiceProvider
+        roomFactory={() => room as unknown as Room}
+        callTonePlayerFactory={() => mocks.callTonePlayer}
+      >
         <Probe />
       </VoiceProvider>
     </QueryClientProvider>,
@@ -245,6 +262,10 @@ describe("VoiceProvider", () => {
     mocks.showIncomingCallNotification.mockReset();
     mocks.showIncomingCallNotification.mockResolvedValue(undefined);
     mocks.transition.mockReset();
+    mocks.callTonePlayer.dispose.mockReset();
+    mocks.callTonePlayer.play.mockReset();
+    mocks.callTonePlayer.play.mockResolvedValue("PLAYING");
+    mocks.callTonePlayer.stop.mockReset();
     mocks.realtime.incomingCall = null;
     mocks.realtime.latestCall = null;
     mocks.realtime.screenShareStopRequest = null;
@@ -279,6 +300,7 @@ describe("VoiceProvider", () => {
     expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(
       true,
     );
+    expect(mocks.callTonePlayer.play).not.toHaveBeenCalled();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Leave test channel" }),
@@ -434,6 +456,11 @@ describe("VoiceProvider", () => {
     );
     await waitFor(() => expect(room.connect).toHaveBeenCalledOnce());
     await waitFor(() =>
+      expect(mocks.callTonePlayer.play).toHaveBeenCalledWith(
+        CallToneKind.Ringback,
+      ),
+    );
+    await waitFor(() =>
       expect(mocks.heartbeatVoice).toHaveBeenCalledWith(callSession.id),
     );
     await userEvent.click(
@@ -539,10 +566,39 @@ describe("VoiceProvider", () => {
     expect(
       await screen.findByRole("heading", { name: "Incoming voice call" }),
     ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mocks.callTonePlayer.play).toHaveBeenCalledWith(
+        CallToneKind.Incoming,
+      ),
+    );
+    mocks.callTonePlayer.stop.mockClear();
     await userEvent.click(screen.getByRole("button", { name: "Decline" }));
 
     expect(mocks.transition).toHaveBeenCalledWith(incomingCall.id, "decline");
     expect(mocks.dismissIncomingCall).toHaveBeenCalled();
+    expect(mocks.callTonePlayer.stop).toHaveBeenCalled();
+  });
+
+  it("offers call-tone recovery when autoplay is blocked", async () => {
+    const room = new FakeRoom();
+    mocks.realtime.incomingCall = incomingCall;
+    mocks.callTonePlayer.play
+      .mockResolvedValueOnce("BLOCKED")
+      .mockResolvedValueOnce("PLAYING");
+    renderProvider(room);
+
+    expect(
+      await screen.findByRole("button", { name: "Enable call sound" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("call-tone-blocked")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Enable call sound" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("call-tone-ready")).toBeInTheDocument(),
+    );
+    expect(mocks.callTonePlayer.play).toHaveBeenCalledTimes(2);
   });
 
   it("uses the service worker for incoming calls while the tab is hidden", async () => {

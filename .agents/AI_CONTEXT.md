@@ -109,6 +109,9 @@ Single Database + organizationId
 - Screen shares are participant-controlled ephemeral LiveKit tracks available in
   calls and voice channels. Multiple participants may present, compatible
   browser audio is optional, and owners can stop a current voice-channel share.
+- Direct-call ringing uses original bundled InTouch audio: recipients hear the
+  incoming chime and callers hear a quieter ringback. These UI tones are
+  independent from LiveKit participant audio and never play in voice channels.
 - Redis enforces one active voice session per user across API replicas and
   stores only opaque participant identities and ephemeral leases.
 - Socket.IO carries call lifecycle, occupancy, and targeted moderation requests

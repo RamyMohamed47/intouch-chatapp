@@ -19,7 +19,7 @@ import {
   Track,
   VideoPresets,
 } from "livekit-client";
-import { Phone, PhoneOff, Video } from "lucide-react";
+import { Phone, PhoneOff, Video, Volume2 } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -47,6 +47,13 @@ import {
   dismissIncomingCallNotification,
   showIncomingCallNotification,
 } from "@/lib/voice/call-notifications";
+import {
+  CallToneKind,
+  createCallTonePlayer,
+  type CallToneKindValue,
+  type CallTonePlayer,
+  type CallTonePlaybackState,
+} from "@/lib/voice/call-tone-player";
 
 export interface ParticipantCameraTrack {
   identity: string;
@@ -75,6 +82,7 @@ interface VoiceContextValue {
   isDeafened: boolean;
   isCameraEnabled: boolean;
   isCameraTransitioning: boolean;
+  isCallTonePlaybackBlocked: boolean;
   isMuted: boolean;
   isPlaybackBlocked: boolean;
   canScreenShare: boolean;
@@ -86,6 +94,7 @@ interface VoiceContextValue {
   screenShareTracks: ParticipantScreenShareTrack[];
   acceptCall(callId: string): Promise<void>;
   declineCall(callId: string): Promise<void>;
+  enableCallTonePlayback(): Promise<void>;
   enablePlayback(): Promise<void>;
   endSession(): Promise<void>;
   joinChannel(conversationId: string): Promise<void>;
@@ -151,14 +160,18 @@ const screenShareErrorMessage = (error: unknown) => {
 export function VoiceProvider({
   children,
   roomFactory = createLiveKitRoom,
+  callTonePlayerFactory = createCallTonePlayer,
 }: {
   children: ReactNode;
   roomFactory?: () => Room;
+  callTonePlayerFactory?: () => CallTonePlayer;
 }) {
   const { status, user } = useAuth();
   const realtime = useRealtime();
   const queryClient = useQueryClient();
   const roomRef = useRef<Room | null>(null);
+  const callTonePlayerRef = useRef<CallTonePlayer | null>(null);
+  const currentCallToneRef = useRef<CallToneKindValue | null>(null);
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const attachedAudioTracksRef = useRef(new Set<Track>());
   const transitionInFlightRef = useRef(false);
@@ -188,6 +201,8 @@ export function VoiceProvider({
   );
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isCameraTransitioning, setIsCameraTransitioning] = useState(false);
+  const [callTonePlaybackState, setCallTonePlaybackState] =
+    useState<CallTonePlaybackState>("IDLE");
   const [screenShareTracks, setScreenShareTracks] = useState<
     ParticipantScreenShareTrack[]
   >([]);
@@ -200,6 +215,56 @@ export function VoiceProvider({
   const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const desiredCallTone =
+    status === "authenticated" && realtime.incomingCall?.status === "RINGING"
+      ? CallToneKind.Incoming
+      : status === "authenticated" &&
+          activeCall?.status === "RINGING" &&
+          activeCall.callerUserId === user?.id
+        ? CallToneKind.Ringback
+        : null;
+
+  useEffect(() => {
+    const player = callTonePlayerFactory();
+    callTonePlayerRef.current = player;
+    return () => {
+      if (callTonePlayerRef.current === player) {
+        callTonePlayerRef.current = null;
+      }
+      player.dispose();
+    };
+  }, [callTonePlayerFactory]);
+
+  useEffect(() => {
+    const player = callTonePlayerRef.current;
+    currentCallToneRef.current = desiredCallTone;
+    if (!player || !desiredCallTone) {
+      player?.stop();
+      setCallTonePlaybackState("IDLE");
+      return;
+    }
+    let cancelled = false;
+    void player.play(desiredCallTone).then((playbackState) => {
+      if (!cancelled) setCallTonePlaybackState(playbackState);
+    });
+    return () => {
+      cancelled = true;
+      player.stop();
+    };
+  }, [desiredCallTone]);
+
+  const stopCallTone = useCallback(() => {
+    currentCallToneRef.current = null;
+    callTonePlayerRef.current?.stop();
+    setCallTonePlaybackState("IDLE");
+  }, []);
+
+  const enableCallTonePlayback = useCallback(async () => {
+    const tone = currentCallToneRef.current;
+    const player = callTonePlayerRef.current;
+    if (!tone || !player) return;
+    setCallTonePlaybackState(await player.play(tone));
+  }, []);
 
   useEffect(() => {
     setCanScreenShare(
@@ -544,12 +609,13 @@ export function VoiceProvider({
   const replaceCurrent = useCallback(async () => {
     if (!activeSession) return true;
     if (!shouldReplaceSession(activeSession)) return false;
+    stopCallTone();
     await voiceApi.leave();
     await disconnectRoom();
     setActiveSession(null);
     setActiveCall(null);
     return true;
-  }, [activeSession, disconnectRoom]);
+  }, [activeSession, disconnectRoom, stopCallTone]);
 
   const joinChannel = useCallback(
     async (conversationId: string) => {
@@ -587,6 +653,7 @@ export function VoiceProvider({
 
   const acceptCall = useCallback(
     async (callId: string) => {
+      stopCallTone();
       await runTransition(async () => {
         if (!(await replaceCurrent())) return;
         const result = await voiceApi.accept(callId);
@@ -600,20 +667,22 @@ export function VoiceProvider({
         realtime.dismissIncomingCall();
       }, "Could not accept the voice call");
     },
-    [connect, realtime, replaceCurrent, runTransition],
+    [connect, realtime, replaceCurrent, runTransition, stopCallTone],
   );
 
   const declineCall = useCallback(
     async (callId: string) => {
+      stopCallTone();
       await runTransition(async () => {
         await voiceApi.transition(callId, "decline");
         realtime.dismissIncomingCall();
       }, "Could not decline the voice call");
     },
-    [realtime, runTransition],
+    [realtime, runTransition, stopCallTone],
   );
 
   const endSession = useCallback(async () => {
+    stopCallTone();
     await runTransition(async () => {
       if (activeCall && activeCall.status !== "ENDED") {
         const callerCanCancel =
@@ -631,7 +700,14 @@ export function VoiceProvider({
       setActiveCall(null);
       queryClient.setQueryData(queryKeys.voice.activeSession, null);
     }, "Could not leave the voice session");
-  }, [activeCall, disconnectRoom, queryClient, runTransition, user?.id]);
+  }, [
+    activeCall,
+    disconnectRoom,
+    queryClient,
+    runTransition,
+    stopCallTone,
+    user?.id,
+  ]);
 
   const toggleMute = useCallback(async () => {
     await runTransition(async () => {
@@ -875,39 +951,6 @@ export function VoiceProvider({
   }, [realtime.latestCall]);
 
   useEffect(() => {
-    if (!realtime.incomingCall) return;
-    let audioContext: AudioContext | null = null;
-    const ring = () => {
-      try {
-        audioContext ??= new AudioContext();
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        oscillator.frequency.value = 660;
-        gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(
-          0.08,
-          audioContext.currentTime + 0.02,
-        );
-        gain.gain.exponentialRampToValueAtTime(
-          0.0001,
-          audioContext.currentTime + 0.45,
-        );
-        oscillator.connect(gain).connect(audioContext.destination);
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + 0.5);
-      } catch {
-        // Browser autoplay policy may block audio until the first interaction.
-      }
-    };
-    ring();
-    const timer = setInterval(ring, 1_500);
-    return () => {
-      clearInterval(timer);
-      if (audioContext) void audioContext.close();
-    };
-  }, [realtime.incomingCall]);
-
-  useEffect(() => {
     if (status === "authenticated") return;
     void disconnectRoom();
     setActiveSession(null);
@@ -937,6 +980,7 @@ export function VoiceProvider({
         isDeafened,
         isCameraEnabled,
         isCameraTransitioning,
+        isCallTonePlaybackBlocked: callTonePlaybackState === "BLOCKED",
         isMuted,
         isPlaybackBlocked,
         isScreenShareEnabled,
@@ -945,6 +989,7 @@ export function VoiceProvider({
         participantIdentities,
         acceptCall,
         declineCall,
+        enableCallTonePlayback,
         enablePlayback,
         endSession,
         joinChannel,
@@ -983,6 +1028,15 @@ export function VoiceProvider({
             )}
           </DialogHeader>
           <DialogFooter>
+            {callTonePlaybackState === "BLOCKED" && (
+              <Button
+                variant="outline"
+                disabled={isTransitioning}
+                onClick={() => void enableCallTonePlayback()}
+              >
+                <Volume2 /> Enable call sound
+              </Button>
+            )}
             <Button
               variant="destructive"
               disabled={isTransitioning}

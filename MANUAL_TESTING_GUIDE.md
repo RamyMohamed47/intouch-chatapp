@@ -488,6 +488,16 @@ chat` is pressed.
   recipient-only incoming dialogs and timeline labels,
   accept, decline, cancel, missed timeout, hang-up, and completed duration.
   Busy recipients must return `409 VOICE_USER_BUSY` without a timeline entry.
+- While the call is ringing, verify only the recipient hears the incoming
+  InTouch chime and only the caller hears the quieter ringback. Accept, decline,
+  cancel, timeout, busy failure, logout, and every transition beyond `RINGING`
+  must stop the tone immediately without affecting participant audio.
+- Block autoplay in one browser and start another call. The call UI and browser
+  notification must still work, `Enable call sound` must retry the appropriate
+  tone from the user gesture, and no unhandled promise should appear. Repeat
+  with the recipient tab hidden where browser policy permits background audio.
+- Join a voice channel and remain connected during participant joins, leaves,
+  camera use, and screen sharing. No ringtone or ringback should play.
 - Verify video calls attempt camera-on for both participants. Deny camera access
   and confirm the call continues with audio and a retryable error. Audio calls
   and voice-channel joins must start camera-off.

@@ -589,6 +589,13 @@ deploying video support to backfill existing call history as audio. Screen
 sharing requires no new LiveKit or Railway variables and is never persisted or
 resumed automatically after a reload.
 
+Direct-call ringing uses original, self-hosted InTouch tones. Recipients hear
+the incoming chime while a call is `RINGING`; callers hear the quieter related
+ringback. Both stop before participant audio begins and failures to load or
+autoplay a tone never interrupt the call. Run `npm run audio:generate` to
+recreate the deterministic WAV assets; no environment variable or external
+audio license is required.
+
 Railway plans that block outbound SMTP must configure `MAIL_PROVIDER=brevo`
 with `BREVO_API_KEY` and a Brevo-verified `MAIL_FROM_ADDRESS`. Upgrading to a
 plan that permits SMTP is not required when the HTTPS provider is selected.

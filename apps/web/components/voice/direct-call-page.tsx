@@ -253,6 +253,15 @@ export function DirectCallPage({
                     <Volume2 /> Enable audio
                   </Button>
                 )}
+                {voice.isCallTonePlaybackBlocked && (
+                  <Button
+                    variant="outline"
+                    disabled={voice.isTransitioning}
+                    onClick={() => void voice.enableCallTonePlayback()}
+                  >
+                    <Volume2 /> Enable call sound
+                  </Button>
+                )}
                 <div className="grid min-w-0 grid-cols-2 gap-2">
                   <Button
                     className="min-w-0"
