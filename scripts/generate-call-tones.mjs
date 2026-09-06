@@ -7,10 +7,13 @@ const outputDirectory = fileURLToPath(
   new URL("../apps/web/public/audio/calls/", import.meta.url),
 );
 
+const smoothStep = (value) => value * value * (3 - 2 * value);
+
 const envelope = (elapsed, duration) => {
-  const attack = Math.min(1, elapsed / 0.035);
-  const release = Math.min(1, (duration - elapsed) / 0.18);
-  return Math.max(0, Math.min(attack, release));
+  const attack = smoothStep(Math.min(1, elapsed / 0.09));
+  const release = smoothStep(Math.min(1, (duration - elapsed) / 0.38));
+  const naturalDecay = Math.exp(-elapsed * 0.45);
+  return Math.max(0, Math.min(attack, release)) * naturalDecay;
 };
 
 const renderTone = (durationSeconds, notes) => {
@@ -26,10 +29,8 @@ const renderTone = (durationSeconds, notes) => {
     for (let index = start; index < end; index += 1) {
       const elapsed = index / sampleRate - note.start;
       const phase = 2 * Math.PI * note.frequency * elapsed;
-      const shimmer = 0.82 * Math.sin(phase) + 0.18 * Math.sin(phase * 2);
-      const movement = 0.94 + 0.06 * Math.sin(2 * Math.PI * 3.2 * elapsed);
-      samples[index] +=
-        shimmer * movement * envelope(elapsed, note.duration) * note.gain;
+      const softBell = 0.97 * Math.sin(phase) + 0.03 * Math.sin(phase * 2);
+      samples[index] += softBell * envelope(elapsed, note.duration) * note.gain;
     }
   }
 
@@ -37,7 +38,7 @@ const renderTone = (durationSeconds, notes) => {
     (maximum, sample) => Math.max(maximum, Math.abs(sample)),
     0,
   );
-  const scale = peak > 0 ? 0.78 / peak : 1;
+  const scale = peak > 0.42 ? 0.42 / peak : 1;
   const pcm = Buffer.alloc(sampleCount * 2);
   samples.forEach((sample, index) => {
     pcm.writeInt16LE(
@@ -67,29 +68,25 @@ const createWave = (pcm) => {
 };
 
 const incomingNotes = [
-  { start: 0, duration: 0.52, frequency: 523.25, gain: 0.65 },
-  { start: 0, duration: 0.52, frequency: 783.99, gain: 0.28 },
-  { start: 0.52, duration: 0.58, frequency: 659.25, gain: 0.66 },
-  { start: 0.52, duration: 0.58, frequency: 987.77, gain: 0.26 },
-  { start: 1.12, duration: 0.9, frequency: 783.99, gain: 0.62 },
-  { start: 1.12, duration: 0.9, frequency: 1046.5, gain: 0.22 },
+  { start: 0.05, duration: 0.72, frequency: 392, gain: 0.28 },
+  { start: 0.62, duration: 0.78, frequency: 493.88, gain: 0.25 },
+  { start: 1.23, duration: 1.02, frequency: 587.33, gain: 0.23 },
+  { start: 2.08, duration: 0.9, frequency: 493.88, gain: 0.2 },
 ];
 
 const ringbackNotes = [
-  { start: 0, duration: 0.34, frequency: 523.25, gain: 0.55 },
-  { start: 0, duration: 0.34, frequency: 659.25, gain: 0.24 },
-  { start: 0.46, duration: 0.34, frequency: 523.25, gain: 0.55 },
-  { start: 0.46, duration: 0.34, frequency: 659.25, gain: 0.24 },
+  { start: 0.08, duration: 0.76, frequency: 392, gain: 0.2 },
+  { start: 0.68, duration: 0.88, frequency: 493.88, gain: 0.17 },
 ];
 
 await mkdir(outputDirectory, { recursive: true });
 await Promise.all([
   writeFile(
     path.join(outputDirectory, "intouch-incoming.wav"),
-    createWave(renderTone(4.2, incomingNotes)),
+    createWave(renderTone(5, incomingNotes)),
   ),
   writeFile(
     path.join(outputDirectory, "intouch-ringback.wav"),
-    createWave(renderTone(3.2, ringbackNotes)),
+    createWave(renderTone(4, ringbackNotes)),
   ),
 ]);

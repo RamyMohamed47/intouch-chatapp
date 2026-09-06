@@ -9,11 +9,11 @@ import { describe, expect, it } from "vitest";
 const assets = [
   {
     name: "intouch-incoming.wav",
-    sha256: "758db6814ac349223a15b006a40a01eccfd265a3585ebaa40cb2c7e2a053393c",
+    sha256: "5b0fa4d787232aa53997888f87d440080f7169f71ca7b2593b327d705740f345",
   },
   {
     name: "intouch-ringback.wav",
-    sha256: "efdb2e69a9fa5fe612696f1e1a20815b5afb2de495e37b381ea4c96fbb89399d",
+    sha256: "359149b5251a03a4000d33d3a431407cc464cf97ecc94d90308b2d9dd63c5353",
   },
 ];
 
