@@ -475,6 +475,9 @@ chat` is pressed.
   stage, presenter controls should allow manual switching, and ending the
   selected share should fall back to another share or the normal participant
   grid.
+- Open a shared screen in full screen from both a direct call and a voice
+  channel. Verify the content remains uncropped, `Escape` restores the call
+  layout, and unsupported browsers expose a disabled control with a reason.
 - As an organization owner, stop another voice-channel participant's share.
   Confirm their screen video and audio stop, their browser capture closes, they
   remain connected, and they may start another share later. Members must not

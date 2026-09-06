@@ -61,4 +61,49 @@ describe("ScreenShareStage", () => {
       "object-contain",
     );
   });
+
+  it("enters and exits browser full screen", async () => {
+    const requestFullscreen = vi.fn(function (this: HTMLElement) {
+      Object.defineProperty(document, "fullscreenElement", {
+        configurable: true,
+        value: this,
+      });
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    const exitFullscreen = vi.fn(() => {
+      Object.defineProperty(document, "fullscreenElement", {
+        configurable: true,
+        value: null,
+      });
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    Object.defineProperty(document, "fullscreenEnabled", {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: requestFullscreen,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: exitFullscreen,
+    });
+
+    render(<ScreenShareStage shares={[share("ramy", "Ramy", 1)]} />);
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "View shared screen in full screen",
+      }),
+    );
+    expect(requestFullscreen).toHaveBeenCalledOnce();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Exit full screen" }),
+    );
+    expect(exitFullscreen).toHaveBeenCalledOnce();
+  });
 });

@@ -1,9 +1,10 @@
 "use client";
 
-import { MonitorUp, Volume2 } from "lucide-react";
+import { Maximize2, Minimize2, MonitorUp, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ParticipantVideo } from "@/components/voice/participant-video";
 import type { ParticipantScreenShareTrack } from "@/lib/voice/provider";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,10 @@ export function ScreenShareStage({
   const [selectedId, setSelectedId] = useState<string | null>(
     latest?.id ?? null,
   );
+  const [canFullscreen, setCanFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState<string | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const latestOrderRef = useRef(0);
   const selected =
     shares.find(({ id }) => id === selectedId) ?? latest ?? shares[0];
@@ -45,6 +50,34 @@ export function ScreenShareStage({
     latestOrderRef.current = latest.observedOrder;
   }, [latest, selectedId, shares]);
 
+  useEffect(() => {
+    const stage = stageRef.current;
+    setCanFullscreen(
+      typeof stage?.requestFullscreen === "function" &&
+        document.fullscreenEnabled !== false,
+    );
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === stageRef.current);
+      setFullscreenError(null);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      setFullscreenError(null);
+      if (document.fullscreenElement === stageRef.current) {
+        await document.exitFullscreen();
+        return;
+      }
+      await stageRef.current?.requestFullscreen();
+    } catch {
+      setFullscreenError("Could not open the shared screen in full screen.");
+    }
+  };
+
   if (!selected) return null;
 
   return (
@@ -52,7 +85,15 @@ export function ScreenShareStage({
       <p className="sr-only" role="status" aria-live="polite" aria-atomic>
         {selected.displayName} is sharing a screen
       </p>
-      <div className="relative aspect-video min-h-48 overflow-hidden rounded-[1.75rem] border border-primary/25 bg-black shadow-2xl">
+      <div
+        ref={stageRef}
+        className={cn(
+          "relative overflow-hidden bg-black shadow-2xl",
+          isFullscreen
+            ? "h-screen w-screen rounded-none border-0"
+            : "aspect-video min-h-48 rounded-[1.75rem] border border-primary/25",
+        )}
+      >
         <ParticipantVideo
           displayName={selected.displayName}
           isLocal={selected.isLocal}
@@ -81,8 +122,38 @@ export function ScreenShareStage({
               </Badge>
             )}
             {action?.(selected)}
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="secondary"
+              className="border border-white/20 bg-black/45 text-white hover:bg-black/65 hover:text-white"
+              disabled={!canFullscreen}
+              title={
+                canFullscreen
+                  ? undefined
+                  : "Full screen is unavailable on this browser or device"
+              }
+              aria-label={
+                isFullscreen
+                  ? "Exit full screen"
+                  : canFullscreen
+                    ? "View shared screen in full screen"
+                    : "Full screen is unavailable on this browser or device"
+              }
+              onClick={() => void toggleFullscreen()}
+            >
+              {isFullscreen ? <Minimize2 /> : <Maximize2 />}
+            </Button>
           </div>
         </div>
+        {fullscreenError && (
+          <p
+            role="status"
+            className="absolute inset-x-4 bottom-4 rounded-lg bg-destructive/90 px-3 py-2 text-center text-xs text-destructive-foreground"
+          >
+            {fullscreenError}
+          </p>
+        )}
       </div>
 
       {shares.length > 1 && (
