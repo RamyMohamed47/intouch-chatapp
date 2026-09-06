@@ -141,6 +141,7 @@ const createAuthService = ({
         user.id,
         identity.providerAccountId,
         usedAt,
+        identity.avatarUrl,
       );
 
       if (linkedUser) {
@@ -155,6 +156,7 @@ const createAuthService = ({
     const providerUser = await userRepository.useGoogleProvider(
       identity.providerAccountId,
       usedAt,
+      identity.avatarUrl,
     );
 
     if (providerUser?.id === user.id) {
@@ -172,6 +174,7 @@ const createAuthService = ({
     const providerUser = await userRepository.useGoogleProvider(
       identity.providerAccountId,
       usedAt,
+      identity.avatarUrl,
     );
 
     if (providerUser) {
@@ -208,6 +211,7 @@ const createAuthService = ({
         const racedProviderUser = await userRepository.useGoogleProvider(
           identity.providerAccountId,
           usedAt,
+          identity.avatarUrl,
         );
 
         if (racedProviderUser) {

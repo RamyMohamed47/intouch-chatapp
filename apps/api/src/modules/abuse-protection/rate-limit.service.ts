@@ -15,6 +15,7 @@ const balancedPolicies: Readonly<Record<RateLimitAction, TokenBucketPolicy>> = {
   [Action.INVITATION_CREATE]: { capacity: 5, refillIntervalMs: 60_000 },
   [Action.READ_RECEIPT_UPDATE]: { capacity: 30, refillIntervalMs: 500 },
   [Action.SEARCH]: { capacity: 20, refillIntervalMs: 500 },
+  [Action.AI_REQUEST]: { capacity: 5, refillIntervalMs: 10_000 },
   [Action.WALLPAPER_MUTATE]: { capacity: 10, refillIntervalMs: 2_000 },
   [Action.UPLOAD_MUTATE]: { capacity: 20, refillIntervalMs: 2_000 },
   [Action.ASSET_ACCESS]: { capacity: 60, refillIntervalMs: 500 },

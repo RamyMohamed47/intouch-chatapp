@@ -5,6 +5,7 @@
   },
   "include": [
     "auth/**/*.ts",
+    "ai/**/*.ts",
     "common/**/*.ts",
     "categories/**/*.ts",
     "chat-wallpapers/**/*.ts",

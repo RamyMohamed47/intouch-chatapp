@@ -35,7 +35,7 @@ const withRefreshLock = async <T>(work: () => Promise<T>): Promise<T> => {
   return work();
 };
 
-const parseError = async (response: Response) => {
+export const parseError = async (response: Response) => {
   const requestId = response.headers.get("X-Request-Id");
   const fallback = new ApiError(
     response.status,

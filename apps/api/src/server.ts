@@ -34,6 +34,7 @@ import createAbuseProtectionModule, {
   createRedisSocketConnectionStore,
 } from "./modules/abuse-protection/index.js";
 import createOrganizationModule from "./modules/organizations/index.js";
+import createAiModule, { createRedisAiQuotaStore } from "./modules/ai/index.js";
 import configureSocket from "./sockets/socket.js";
 import {
   createRedisTypingStore,
@@ -87,6 +88,7 @@ type InTouchServer = Server<
 
 const resources: {
   closeAbuseProtection?: () => void;
+  closeAi?: () => void;
   closeBackgroundJobs?: () => Promise<void>;
   closePresence?: () => void;
   closeTyping?: () => void;
@@ -167,6 +169,7 @@ const shutdown = (
       await closeSocketServer();
       await closeHttpServer();
       resources.closeAbuseProtection?.();
+      resources.closeAi?.();
       await resources.closeBackgroundJobs?.();
       resources.closePresence?.();
       resources.closeTyping?.();
@@ -382,6 +385,24 @@ const organizations = createOrganizationModule({
   voiceRealtime: realtimeGateway,
   voiceSessions,
 });
+const aiQuota = runtimeState.command
+  ? createRedisAiQuotaStore(runtimeState.command, runtimeState.keyPrefix, {
+      dailyUserRequests: config.ai.dailyUserRequests,
+      dailyOrganizationRequests: config.ai.dailyOrganizationRequests,
+      maxConcurrentRequests: config.ai.maxConcurrentRequests,
+    })
+  : undefined;
+const ai = createAiModule({
+  accessScope: organizations.conversationAccessScope,
+  config: config.ai,
+  logger,
+  ...(aiQuota ? { quota: aiQuota } : {}),
+  rateLimits: abuseProtection.rateLimits,
+  requireAccessToken: auth.requireAccessToken,
+  searchProvider: config.searchProvider,
+  telemetry: observabilityMetrics,
+});
+resources.closeAi = ai.close;
 const assetCleanupWorker = createAssetCleanupWorker({
   assets: organizations.assets,
   storage,
@@ -447,6 +468,7 @@ const presenceExpiryWorker = presenceStore
   : undefined;
 resources.closePresence = () => presenceExpiryWorker?.close();
 const app = createApp({
+  aiRouter: ai.router,
   allowedOrigins: config.clientOrigins,
   apiDocsRouter,
   assetRouter: organizations.assetRouter,

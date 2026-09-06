@@ -12,6 +12,7 @@ import { messagesApi } from "@/lib/api/messages";
 import { organizationsApi } from "@/lib/api/organizations";
 import { notificationsApi } from "@/lib/api/notifications";
 import { searchApi } from "@/lib/api/search";
+import { aiApi } from "@/lib/api/ai";
 import { queryKeys } from "@/lib/query/keys";
 
 export const useOrganizations = () =>
@@ -143,6 +144,13 @@ export const useOrganizationSearch = (
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: enabled && Boolean(organizationId) && input.q.trim().length >= 2,
+  });
+
+export const useAiSettings = (organizationId: string) =>
+  useQuery({
+    queryKey: queryKeys.ai.settings(organizationId),
+    queryFn: () => aiApi.getSettings(organizationId),
+    enabled: Boolean(organizationId),
   });
 
 export const useMessageReaders = (

@@ -30,6 +30,7 @@ tags:
   - name: Uploads
   - name: Notifications
   - name: Search
+  - name: AI
   - name: Voice
 
 security:
@@ -685,6 +686,123 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  #
+  # AI assistant
+  #
+
+  /organizations/{organizationId}/ai/settings:
+    get:
+      tags: [AI]
+      summary: Get organization AI settings and caller consent
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/AiSettingsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    put:
+      tags: [AI]
+      summary: Enable or disable organization AI
+      description: Owner-only. Enabling AI also records the owner's consent for the current disclosure version.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiOrganizationSettingsUpdate"
+      responses:
+        "200":
+          $ref: "#/components/responses/AiSettingsResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /organizations/{organizationId}/ai/consent:
+    put:
+      tags: [AI]
+      summary: Accept the current AI data-use disclosure
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiConsentUpdate"
+      responses:
+        "200":
+          $ref: "#/components/responses/AiSettingsResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [AI]
+      summary: Revoke the caller's AI consent
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/AiSettingsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /organizations/{organizationId}/ai/responses:
+    post:
+      tags: [AI]
+      summary: Stream an authorized AI response
+      description: |
+        Streams strict server-sent events named `started`, `sources`, `delta`,
+        `completed`, or `error`. Organization questions retrieve only public
+        text channels the caller can access; conversation questions and
+        summaries enforce current conversation access. Prompt and response
+        text are not persisted by this endpoint.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiResponseRequest"
+      responses:
+        "200":
+          description: AI response event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   #
   # Search
@@ -2294,6 +2412,18 @@ components:
           schema:
             $ref: "#/components/schemas/OrganizationSearchResponse"
 
+    AiSettingsResponse:
+      description: Organization AI availability, consent, disclosure, and quota state.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [aiSettings]
+            properties:
+              aiSettings:
+                $ref: "#/components/schemas/AiSettings"
+
     MessageReactionStateResponse:
       description: Authoritative personalized reaction state for one message.
       content:
@@ -2397,6 +2527,162 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
+
+    AiOrganizationSettingsUpdate:
+      type: object
+      additionalProperties: false
+      required: [enabled, disclosureVersion]
+      properties:
+        enabled:
+          type: boolean
+        disclosureVersion:
+          type: string
+          minLength: 1
+          maxLength: 50
+        acceptsProviderDataUse:
+          type: boolean
+          const: true
+
+    AiConsentUpdate:
+      type: object
+      additionalProperties: false
+      required: [disclosureVersion, acceptsProviderDataUse]
+      properties:
+        disclosureVersion:
+          type: string
+          minLength: 1
+          maxLength: 50
+        acceptsProviderDataUse:
+          type: boolean
+          const: true
+
+    AiSettings:
+      type: object
+      additionalProperties: false
+      required: [available, organizationEnabled, userConsentAccepted, canManage, disclosureVersion, provider, serviceTier, dataUseNotice, quota]
+      properties:
+        available:
+          type: boolean
+        organizationEnabled:
+          type: boolean
+        userConsentAccepted:
+          type: boolean
+        canManage:
+          type: boolean
+        disclosureVersion:
+          type: string
+        provider:
+          type: string
+          const: GEMINI
+        serviceTier:
+          type: string
+          enum: [FREE, PAID]
+        dataUseNotice:
+          type: string
+        quota:
+          type: object
+          additionalProperties: false
+          required: [userRemaining, organizationRemaining, resetsAt]
+          properties:
+            userRemaining:
+              type: integer
+              minimum: 0
+            organizationRemaining:
+              type: integer
+              minimum: 0
+            resetsAt:
+              type: string
+              format: date-time
+
+    AiResponseRequest:
+      oneOf:
+        - $ref: "#/components/schemas/AiAskRequest"
+        - $ref: "#/components/schemas/AiSummarizeRequest"
+        - $ref: "#/components/schemas/AiComposeRequest"
+      discriminator:
+        propertyName: task
+
+    AiAskRequest:
+      type: object
+      additionalProperties: false
+      required: [task, prompt, scope]
+      properties:
+        task:
+          type: string
+          const: ASK
+        prompt:
+          type: string
+          minLength: 2
+          maxLength: 1000
+        scope:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [kind, conversationId]
+              properties:
+                kind:
+                  type: string
+                  const: CONVERSATION
+                conversationId:
+                  type: string
+                  pattern: "^[a-fA-F0-9]{24}$"
+            - type: object
+              additionalProperties: false
+              required: [kind]
+              properties:
+                kind:
+                  type: string
+                  const: ORGANIZATION
+        history:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            additionalProperties: false
+            required: [role, content]
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+                minLength: 1
+                maxLength: 2000
+
+    AiSummarizeRequest:
+      type: object
+      additionalProperties: false
+      required: [task, conversationId, mode]
+      properties:
+        task:
+          type: string
+          const: SUMMARIZE
+        conversationId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        mode:
+          type: string
+          enum: [SUMMARY, ACTION_ITEMS]
+
+    AiComposeRequest:
+      type: object
+      additionalProperties: false
+      required: [task, action, text]
+      properties:
+        task:
+          type: string
+          const: COMPOSE
+        action:
+          type: string
+          enum: [REWRITE_PROFESSIONAL, SHORTEN, FIX_GRAMMAR, TRANSLATE]
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        targetLanguage:
+          type: string
+          minLength: 2
+          maxLength: 40
 
     UpdateChatWallpaperInput:
       type: object

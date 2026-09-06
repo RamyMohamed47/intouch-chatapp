@@ -56,6 +56,7 @@ import {
   shouldSendMessageFromKey,
 } from "@/components/conversations/conversation-interactions";
 import { TypingIndicator } from "@/components/conversations/typing-indicator";
+import { ComposerAiMenu } from "@/components/ai/composer-ai-menu";
 import { ChatWallpaperSurface } from "@/components/conversations/chat-wallpaper";
 import { ChatWallpaperDialog } from "@/components/conversations/chat-wallpaper-dialog";
 import { ComposerEmojiPicker } from "@/components/conversations/composer-emoji-picker";
@@ -1317,6 +1318,18 @@ export function ConversationPage({
               <ComposerEmojiPicker
                 disabled={sendMessage.isPending}
                 onSelect={insertEmoji}
+              />
+              <ComposerAiMenu
+                organizationId={organizationId}
+                draft={content}
+                disabled={sendMessage.isPending || uploads.isUploading}
+                onReplace={(next) => {
+                  setContent(next);
+                  setError(null);
+                  window.requestAnimationFrame(() =>
+                    composerRef.current?.focus(),
+                  );
+                }}
               />
               <Button
                 type="submit"

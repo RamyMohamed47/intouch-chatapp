@@ -44,6 +44,10 @@ class InTouchMetrics {
   readonly backgroundJobDuration: Histogram;
   readonly voiceCalls: Counter;
   readonly voiceJoinDuration: Histogram;
+  readonly aiRequests: Counter;
+  readonly aiDuration: Histogram;
+  readonly aiContext: Histogram;
+  readonly aiTokens: Histogram;
 
   private readonly readinessChecks = new Map<string, ReadinessCheck>();
   private readonly queueDepthChecks = new Map<string, QueueDepthCheck>();
@@ -108,6 +112,20 @@ class InTouchMetrics {
         unit: "s",
       },
     );
+    this.aiRequests = meter.createCounter("intouch.ai.requests", {
+      description: "AI assistant request outcomes",
+    });
+    this.aiDuration = meter.createHistogram("intouch.ai.duration", {
+      description: "AI assistant end-to-end request duration",
+      unit: "s",
+    });
+    this.aiContext = meter.createHistogram("intouch.ai.context", {
+      description: "AI workspace context size",
+      unit: "By",
+    });
+    this.aiTokens = meter.createHistogram("intouch.ai.tokens", {
+      description: "AI provider token usage",
+    });
 
     meter
       .createObservableGauge("intouch.voice.active_sessions", {
@@ -313,6 +331,50 @@ class InTouchMetrics {
       kind: input.kind,
       result: input.result,
     });
+  }
+
+  recordAiRequest(input: {
+    durationSeconds: number;
+    task: string;
+    scope: string;
+    provider: string;
+    model: string;
+    result: "success" | "failure";
+  }) {
+    const attributes = {
+      task: input.task.toLowerCase(),
+      scope: input.scope.toLowerCase(),
+      provider: input.provider,
+      model: input.model,
+      result: input.result,
+    } satisfies Attributes;
+    this.aiRequests.add(1, attributes);
+    this.aiDuration.record(input.durationSeconds, attributes);
+  }
+
+  recordAiContext(input: {
+    characters: number;
+    sources: number;
+    task: string;
+  }) {
+    this.aiContext.record(input.characters, {
+      measure: "characters",
+      task: input.task.toLowerCase(),
+    });
+    this.aiContext.record(input.sources, {
+      measure: "sources",
+      task: input.task.toLowerCase(),
+    });
+  }
+
+  recordAiTokens(input: {
+    inputTokens: number;
+    outputTokens: number;
+    task: string;
+  }) {
+    const task = input.task.toLowerCase();
+    this.aiTokens.record(input.inputTokens, { direction: "input", task });
+    this.aiTokens.record(input.outputTokens, { direction: "output", task });
   }
 
   close() {

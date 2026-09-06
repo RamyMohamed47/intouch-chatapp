@@ -468,3 +468,13 @@ whether the call began as `AUDIO` or `VIDEO`; current camera state is ephemeral.
 Live occupancy, participant
 identities, connection leases, and webhook deduplication remain expiring Redis
 state rather than MongoDB entities.
+
+`AiOrganizationSettings` stores one optional AI-enablement record per
+organization, including the active disclosure version, enabling owner, and
+enablement timestamp. `AiUserConsent` is unique by `(organizationId, userId)`
+and records acceptance of that same disclosure version. Disabling organization
+AI removes member consent records so re-enablement requires fresh consent.
+Organization deletion removes both records transactionally. Prompt text,
+retrieved excerpts, model output, provider request IDs, and token contents are
+never stored. Daily request counters and short concurrency leases are runtime
+state in Redis rather than durable MongoDB entities.

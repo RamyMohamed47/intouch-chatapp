@@ -512,6 +512,84 @@ Atlas result pagination uses opaque `searchAfter` cursors, while native search
 uses query-bound relevance cursors. Search terms and matched content are not
 written to application logs.
 
+## InTouch AI
+
+InTouch AI is an optional Gemini-backed workspace assistant. Organization
+owners must enable it after accepting the current data-use disclosure, and
+every member must separately consent before making a request. Members can ask
+questions against authorized workspace context, summarize text conversations,
+extract action items, and transform composer drafts. Generated text is always
+reviewed by the user before it is sent.
+
+The API retrieves context through the same organization, membership, private
+participant, and conversation-access rules as normal application reads. An
+organization-wide question searches accessible public text channels only;
+conversation-scoped requests may use an accessible text channel or direct
+message. Prompts, generated responses, and retrieved excerpts are not persisted
+or logged. MongoDB stores only organization enablement and member consent.
+
+AI responses stream directly over authenticated server-sent events. BullMQ is
+not used because generation is an interactive request whose browser connection
+owns cancellation and output delivery. Redis coordinates daily quotas and
+concurrency across API replicas; local development uses the same limits through
+the configured runtime-state provider.
+
+AI is disabled by default. To enable Gemini locally or on Railway, configure:
+
+```dotenv
+AI_PROVIDER=gemini
+GEMINI_API_KEY=<server-side-google-ai-studio-key>
+GEMINI_MODEL=gemini-3.8-flash
+GEMINI_SERVICE_TIER=free
+AI_DAILY_USER_REQUESTS=25
+AI_DAILY_ORGANIZATION_REQUESTS=200
+AI_MAX_CONCURRENT_REQUESTS=4
+```
+
+`GEMINI_API_KEY` is API-only; no AI frontend variable is required. Set
+`GEMINI_SERVICE_TIER` accurately because the consent notice distinguishes the
+configured free and paid provider data terms. Existing organizations require no
+migration: settings and consent records are created when the feature is enabled.
+
+## InTouch AI
+
+InTouch AI is an optional Gemini-backed workspace assistant. Organization
+owners must enable it after accepting the current data-use disclosure, and
+every member must separately consent before making a request. Members can ask
+questions against authorized workspace context, summarize text conversations,
+extract action items, and transform composer drafts. Generated text is always
+reviewed by the user before it is sent.
+
+The API retrieves context through the same organization, membership, private
+participant, and conversation-access rules as normal application reads. An
+organization-wide question searches accessible public text channels only;
+conversation-scoped requests may use an accessible text channel or direct
+message. Prompts, generated responses, and retrieved excerpts are not persisted
+or logged. MongoDB stores only organization enablement and member consent.
+
+AI responses stream directly over authenticated server-sent events. BullMQ is
+not used because generation is an interactive request whose browser connection
+owns cancellation and output delivery. Redis coordinates daily quotas and
+concurrency across API replicas; local development uses the same limits through
+the configured runtime-state provider.
+
+AI is disabled by default. To enable Gemini locally or on Railway, configure:
+
+```dotenv
+AI_PROVIDER=gemini
+GEMINI_API_KEY=<server-side-google-ai-studio-key>
+GEMINI_MODEL=gemini-3.8-flash
+GEMINI_SERVICE_TIER=free
+AI_DAILY_USER_REQUESTS=25
+AI_DAILY_ORGANIZATION_REQUESTS=200
+AI_MAX_CONCURRENT_REQUESTS=4
+```
+
+`GEMINI_API_KEY` is API-only; no AI frontend variable is required. Set
+`GEMINI_SERVICE_TIER` accurately because the consent notice distinguishes the
+configured free and paid provider data terms. Existing organizations require no
+migration: settings and consent records are created when the feature is enabled.
+
 ## Repository Layout
 
 ```text
@@ -595,6 +673,18 @@ ringback. Both stop before participant audio begins and failures to load or
 autoplay a tone never interrupt the call. Run `npm run audio:generate` to
 recreate the deterministic WAV assets; no environment variable or external
 audio license is required.
+
+Gemini AI is optional and disabled unless `AI_PROVIDER=gemini`. Add the API-only
+`GEMINI_API_KEY`, an explicit `GEMINI_MODEL`, and an accurate
+`GEMINI_SERVICE_TIER=free|paid` to the API service. No web-service variable,
+BullMQ worker, webhook, or migration is required. Redis should remain shared by
+all replicas so AI concurrency and daily quotas are coordinated.
+
+Gemini AI is optional and disabled unless `AI_PROVIDER=gemini`. Add the API-only
+`GEMINI_API_KEY`, an explicit `GEMINI_MODEL`, and an accurate
+`GEMINI_SERVICE_TIER=free|paid` to the API service. No web-service variable,
+BullMQ worker, webhook, or migration is required. Redis should remain shared by
+all replicas so AI concurrency and daily quotas are coordinated.
 
 Railway plans that block outbound SMTP must configure `MAIL_PROVIDER=brevo`
 with `BREVO_API_KEY` and a Brevo-verified `MAIL_FROM_ADDRESS`. Upgrading to a

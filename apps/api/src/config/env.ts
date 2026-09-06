@@ -53,7 +53,27 @@ export type VoiceConfig =
       apiSecret: string;
     };
 
+export type AiConfig =
+  | {
+      provider: "disabled";
+      model: string;
+      serviceTier: "free" | "paid";
+      dailyUserRequests: number;
+      dailyOrganizationRequests: number;
+      maxConcurrentRequests: number;
+    }
+  | {
+      provider: "gemini";
+      apiKey: string;
+      model: string;
+      serviceTier: "free" | "paid";
+      dailyUserRequests: number;
+      dailyOrganizationRequests: number;
+      maxConcurrentRequests: number;
+    };
+
 export interface AppConfig {
+  ai: AiConfig;
   accessTokenAudience: string;
   accessTokenIssuer: string;
   accessTokenSecret: string;
@@ -116,7 +136,8 @@ const requireEnv = (
     | "REDIS_URL"
     | "LIVEKIT_URL"
     | "LIVEKIT_API_KEY"
-    | "LIVEKIT_API_SECRET",
+    | "LIVEKIT_API_SECRET"
+    | "GEMINI_API_KEY",
 ) => {
   const value = env[name];
 
@@ -348,6 +369,61 @@ const parseVoice = (
   };
 };
 
+const parseAi = (env: NodeJS.ProcessEnv, isProduction: boolean): AiConfig => {
+  const provider = env.AI_PROVIDER ?? "disabled";
+  const dailyUserRequests = parseBoundedInteger(
+    env.AI_DAILY_USER_REQUESTS,
+    25,
+    "AI_DAILY_USER_REQUESTS",
+    10_000,
+  );
+  const dailyOrganizationRequests = parseBoundedInteger(
+    env.AI_DAILY_ORGANIZATION_REQUESTS,
+    200,
+    "AI_DAILY_ORGANIZATION_REQUESTS",
+    100_000,
+  );
+  const maxConcurrentRequests = parseBoundedInteger(
+    env.AI_MAX_CONCURRENT_REQUESTS,
+    4,
+    "AI_MAX_CONCURRENT_REQUESTS",
+    100,
+  );
+  const model = env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
+  const serviceTier =
+    env.GEMINI_SERVICE_TIER ?? (isProduction ? undefined : "free");
+  if (provider === "disabled") {
+    return {
+      provider,
+      model,
+      serviceTier: serviceTier === "paid" ? "paid" : "free",
+      dailyUserRequests,
+      dailyOrganizationRequests,
+      maxConcurrentRequests,
+    };
+  }
+  if (provider !== "gemini") {
+    throw new Error("AI_PROVIDER must be gemini or disabled");
+  }
+  if (isProduction && !env.GEMINI_MODEL) {
+    throw new Error(
+      "GEMINI_MODEL is required when AI is enabled in production",
+    );
+  }
+  if (serviceTier !== "free" && serviceTier !== "paid") {
+    throw new Error("GEMINI_SERVICE_TIER must be free or paid");
+  }
+  return {
+    provider,
+    apiKey: requireEnv(env, "GEMINI_API_KEY"),
+    model,
+    serviceTier,
+    dailyUserRequests,
+    dailyOrganizationRequests,
+    maxConcurrentRequests,
+  };
+};
+
 const parseOptionalHttpsUrl = (
   value: string | undefined,
   name: string,
@@ -522,6 +598,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
   const runtimeState = parseRuntimeState(env, isProduction);
 
   return {
+    ai: parseAi(env, isProduction),
     authActionTokenSecret: validateSecret(
       requireEnv(env, "AUTH_ACTION_TOKEN_SECRET"),
       "AUTH_ACTION_TOKEN_SECRET",

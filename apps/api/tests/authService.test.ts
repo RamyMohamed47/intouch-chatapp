@@ -74,7 +74,18 @@ const createHarness = () => {
   const verifiedUserIds: string[] = [];
   const passwordUpdates: Array<{ userId: string; passwordHash: string }> = [];
   let linkedGoogleProvider:
-    { providerAccountId: string; usedAt: Date; userId: string } | undefined;
+    | {
+        providerAccountId: string;
+        usedAt: Date;
+        userId: string;
+        avatarUrl?: string;
+      }
+    | undefined;
+  const usedGoogleProviders: Array<{
+    providerAccountId: string;
+    usedAt: Date;
+    avatarUrl?: string;
+  }> = [];
   const existingUsernames = new Set<string>();
   const sessionRecords = new Map<string, SessionRecord>();
   const users: AuthUserRepository = {
@@ -113,13 +124,29 @@ const createHarness = () => {
     findPublicById: async (userId) => (userId === user.id ? user : null),
     findPublicByIds: async () => [user],
     findLastSeenByIds: async () => [],
-    linkGoogleProvider: async (userId, providerAccountId, usedAt) => {
-      linkedGoogleProvider = { userId, providerAccountId, usedAt };
+    linkGoogleProvider: async (
+      userId,
+      providerAccountId,
+      usedAt,
+      avatarUrl,
+    ) => {
+      linkedGoogleProvider = {
+        userId,
+        providerAccountId,
+        usedAt,
+        ...(avatarUrl ? { avatarUrl } : {}),
+      };
       return linkGoogleResult;
     },
     touchPasswordProvider: async () => {},
-    useGoogleProvider: async () =>
-      googleProviderResults?.shift() ?? googleProviderUser,
+    useGoogleProvider: async (providerAccountId, usedAt, avatarUrl) => {
+      usedGoogleProviders.push({
+        providerAccountId,
+        usedAt,
+        ...(avatarUrl ? { avatarUrl } : {}),
+      });
+      return googleProviderResults?.shift() ?? googleProviderUser;
+    },
     usernameExists: async (username) => existingUsernames.has(username),
     updateLastSeen: async () => undefined,
     markEmailVerified: async (userId) => {
@@ -299,6 +326,7 @@ const createHarness = () => {
     getCreatedInput: () => createdInput,
     getCreatedGoogleInput: () => createdGoogleInput,
     getLinkedGoogleProvider: () => linkedGoogleProvider,
+    getUsedGoogleProviders: () => usedGoogleProviders,
     setEmailUser: (value: PublicUser | null) => {
       emailUser = value;
     },
@@ -367,18 +395,45 @@ describe("authService", () => {
       userId: user.id,
       providerAccountId: "google-account-id",
       usedAt: now,
+      avatarUrl: "https://example.com/avatar.png",
     });
     assert.equal(harness.getCreatedGoogleInput(), undefined);
   });
 
-  test("reuses an existing Google provider without overwriting the profile", async () => {
+  test("refreshes the external avatar when reusing a Google provider", async () => {
     const harness = createHarness();
     harness.setGoogleProviderUser(user);
 
     await harness.service.loginWithGoogle("authorization-code");
 
+    assert.deepEqual(harness.getUsedGoogleProviders(), [
+      {
+        providerAccountId: "google-account-id",
+        usedAt: now,
+        avatarUrl: "https://example.com/avatar.png",
+      },
+    ]);
     assert.equal(harness.getLinkedGoogleProvider(), undefined);
     assert.equal(harness.getCreatedGoogleInput(), undefined);
+  });
+
+  test("preserves the stored avatar when Google omits the picture claim", async () => {
+    const harness = createHarness();
+    harness.setGoogleIdentity({
+      providerAccountId: "google-account-id",
+      email: user.email,
+      displayName: user.displayName,
+    });
+    harness.setGoogleProviderUser(user);
+
+    await harness.service.loginWithGoogle("authorization-code");
+
+    assert.deepEqual(harness.getUsedGoogleProviders(), [
+      {
+        providerAccountId: "google-account-id",
+        usedAt: now,
+      },
+    ]);
   });
 
   test("adds a collision-safe suffix to generated Google usernames", async () => {

@@ -467,4 +467,46 @@ describe("auth environment configuration", () => {
       "otlp",
     );
   });
+
+  test("validates optional Gemini AI configuration", () => {
+    const config = loadConfig({
+      ...validEnv,
+      AI_PROVIDER: "gemini",
+      GEMINI_API_KEY: "test-gemini-key",
+      GEMINI_MODEL: "test-gemini-model",
+      GEMINI_SERVICE_TIER: "free",
+      AI_DAILY_USER_REQUESTS: "30",
+      AI_DAILY_ORGANIZATION_REQUESTS: "250",
+      AI_MAX_CONCURRENT_REQUESTS: "5",
+    });
+
+    assert.deepEqual(config.ai, {
+      provider: "gemini",
+      apiKey: "test-gemini-key",
+      model: "test-gemini-model",
+      serviceTier: "free",
+      dailyUserRequests: 30,
+      dailyOrganizationRequests: 250,
+      maxConcurrentRequests: 5,
+    });
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          AI_PROVIDER: "gemini",
+          GEMINI_API_KEY: undefined,
+        }),
+      /GEMINI_API_KEY env var is required/,
+    );
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          AI_PROVIDER: "gemini",
+          GEMINI_API_KEY: "test-gemini-key",
+          GEMINI_SERVICE_TIER: "unsupported",
+        }),
+      /GEMINI_SERVICE_TIER must be free or paid/,
+    );
+  });
 });

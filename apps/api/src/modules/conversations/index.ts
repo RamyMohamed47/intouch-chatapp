@@ -4,6 +4,8 @@ export { default as createConversationController } from "./conversation.controll
 export { default as createMongooseConversationParticipantRepository } from "./conversation-participant.repository.js";
 export { default as createMongooseConversationRepository } from "./conversation.repository.js";
 export { default as createConversationPolicy } from "./conversation.policy.js";
+export { default as createConversationAccessScopeService } from "./conversation-access-scope.service.js";
+export type { ConversationAccessScopeService } from "./conversation-access-scope.service.js";
 export { createNoopConversationRealtime } from "./conversation.realtime.js";
 export {
   createConversationRouter,

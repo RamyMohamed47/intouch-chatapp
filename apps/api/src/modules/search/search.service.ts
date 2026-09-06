@@ -1,7 +1,4 @@
-import {
-  ConversationType,
-  ConversationVisibility,
-} from "@intouch/shared/conversations";
+import { ConversationType } from "@intouch/shared/conversations";
 import {
   SearchType,
   type OrganizationSearchQuery,
@@ -14,6 +11,9 @@ import type {
   ConversationParticipantRepository,
   ConversationRepository,
 } from "../conversations/index.js";
+import createConversationAccessScopeService, {
+  type ConversationAccessScopeService,
+} from "../conversations/conversation-access-scope.service.js";
 import { ConversationNotFoundError } from "../conversations/conversation.errors.js";
 import type { MembershipService } from "../memberships/index.js";
 import type { OrganizationPolicy } from "../organizations/organization.policy.js";
@@ -69,6 +69,7 @@ const createSnippet = (
 };
 
 export interface SearchServiceDependencies {
+  accessScope?: ConversationAccessScopeService;
   conversations: ConversationRepository;
   logger: Logger;
   memberships: MembershipService;
@@ -89,6 +90,7 @@ export interface SearchServiceDependencies {
 }
 
 const createSearchService = ({
+  accessScope,
   conversations,
   logger,
   memberships,
@@ -100,39 +102,21 @@ const createSearchService = ({
   telemetry,
   users,
 }: SearchServiceDependencies) => {
+  const scopeService =
+    accessScope ??
+    createConversationAccessScopeService({
+      conversations,
+      memberships,
+      organizationPolicy,
+      organizations,
+      participants,
+    });
   const getScope = async (userId: string, organizationId: string) => {
-    const [organization, membership] = await Promise.all([
-      organizations.findById(organizationId),
-      memberships.findForUser(userId, organizationId),
-    ]);
-    organizationPolicy.assertMember(organization, membership);
-    const [channels, participantIds, organizationMemberships] =
-      await Promise.all([
-        conversations.listByOrganization(organizationId),
-        participants.listConversationIdsForUserInOrganization(
-          userId,
-          organizationId,
-        ),
-        memberships.listForOrganization(organizationId),
-      ]);
-    const participantSet = new Set(participantIds);
-    const accessibleChannels = channels.filter(
-      (conversation) =>
-        conversation.visibility === ConversationVisibility.PUBLIC ||
-        participantSet.has(conversation.id),
-    );
-    const directConversationIds = participantIds.filter(
-      (conversationId) =>
-        !accessibleChannels.some(({ id }) => id === conversationId),
-    );
-    const directConversations = await conversations.findByIds(
-      directConversationIds,
-      ConversationType.DIRECT,
-    );
+    const scope = await scopeService.getForUser(userId, organizationId);
     return {
-      accessibleChannels,
-      directConversations,
-      memberships: organizationMemberships.filter(
+      accessibleChannels: scope.accessibleChannels,
+      directConversations: scope.directConversations,
+      memberships: scope.memberships.filter(
         ({ userId: memberId }) => memberId !== userId,
       ),
     };

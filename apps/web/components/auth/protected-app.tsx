@@ -28,17 +28,20 @@ export function ProtectedApp({ children }: { children: ReactNode }) {
 
 export function ProtectedAppFallback({
   redirecting = false,
+  message,
 }: {
   redirecting?: boolean;
+  message?: string;
 }) {
   return (
     <main className="grid min-h-dvh place-items-center bg-background p-6 text-foreground">
       <div className="w-full max-w-sm text-center">
         <BrandLockup className="mx-auto h-44 w-full" preload />
         <p className="mt-4 text-sm text-muted-foreground">
-          {redirecting
-            ? "Redirecting to sign in..."
-            : "Restoring your workspace..."}
+          {message ??
+            (redirecting
+              ? "Redirecting to sign in..."
+              : "Restoring your workspace...")}
         </p>
       </div>
     </main>

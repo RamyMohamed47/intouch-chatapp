@@ -32,6 +32,7 @@ import {
 } from "../categories/index.js";
 import {
   createConversationController,
+  createConversationAccessScopeService,
   createConversationPolicy,
   createConversationRouter,
   createConversationService,
@@ -281,6 +282,13 @@ const createOrganizationModule = ({
   const unitOfWork = createMongooseOrganizationUnitOfWork();
   const policy = createOrganizationPolicy();
   const conversationPolicy = createConversationPolicy();
+  const conversationAccessScope = createConversationAccessScopeService({
+    conversations,
+    memberships,
+    organizationPolicy: policy,
+    organizations,
+    participants: conversationParticipants,
+  });
   const notificationService = createNotificationService({
     logger,
     notifications,
@@ -305,6 +313,7 @@ const createOrganizationModule = ({
     users,
   });
   const searchService = createSearchService({
+    accessScope: conversationAccessScope,
     conversations,
     logger,
     memberships,
@@ -602,6 +611,7 @@ const createOrganizationModule = ({
     conversationRouter,
     conversationVoiceRouter,
     conversationService,
+    conversationAccessScope,
     directMessageRouter,
     invitationRouter,
     messageRouter,

@@ -11,6 +11,7 @@ import {
 import { getAccessToken, setAccessToken } from "@/lib/auth/access-token";
 import { searchApi } from "@/lib/api/search";
 import { messagesApi } from "@/lib/api/messages";
+import { streamAiResponse } from "@/lib/api/ai";
 import { server } from "../mocks/server";
 
 describe("API transport", () => {
@@ -186,5 +187,53 @@ describe("API transport", () => {
       hasEarlier: true,
       hasLater: true,
     });
+  });
+
+  it("parses authenticated AI SSE events incrementally", async () => {
+    setAccessToken("ai-token");
+    server.use(
+      http.post(
+        "http://localhost:3000/api/v1/organizations/64c000000000000000000001/ai/responses",
+        ({ request }) => {
+          expect(request.headers.get("authorization")).toBe("Bearer ai-token");
+          const encoder = new TextEncoder();
+          return new HttpResponse(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(
+                  encoder.encode(
+                    'event: started\ndata: {"type":"started","requestId":"request-1","task":"ASK"}\n\n',
+                  ),
+                );
+                controller.enqueue(
+                  encoder.encode(
+                    ': heartbeat\n\nevent: delta\ndata: {"type":"delta","text":"Hello"}\n\n',
+                  ),
+                );
+                controller.enqueue(
+                  encoder.encode(
+                    'event: completed\ndata: {"type":"completed","finishReason":"STOP"}\n\n',
+                  ),
+                );
+                controller.close();
+              },
+            }),
+            { headers: { "Content-Type": "text/event-stream" } },
+          );
+        },
+      ),
+    );
+    const events: string[] = [];
+    await streamAiResponse(
+      "64c000000000000000000001",
+      {
+        task: "ASK",
+        prompt: "What changed?",
+        scope: { kind: "ORGANIZATION" },
+      },
+      new AbortController().signal,
+      (event) => events.push(event.type),
+    );
+    expect(events).toEqual(["started", "delta", "completed"]);
   });
 });

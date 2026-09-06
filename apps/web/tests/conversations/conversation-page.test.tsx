@@ -160,6 +160,25 @@ vi.mock("@/lib/voice/provider", () => ({
 }));
 
 vi.mock("@/lib/query/hooks", () => ({
+  useAiSettings: () => ({
+    data: {
+      available: true,
+      organizationEnabled: true,
+      userConsentAccepted: true,
+      canManage: true,
+      disclosureVersion: "ai-data-use-v1",
+      provider: "GEMINI",
+      serviceTier: "FREE",
+      dataUseNotice: "Test AI disclosure",
+      quota: {
+        userRemaining: 25,
+        organizationRemaining: 200,
+        resetsAt: "2026-09-07T00:00:00.000Z",
+      },
+    },
+    isPending: false,
+    isError: false,
+  }),
   useOrganization: () => ({
     data: {
       id: "64c000000000000000000001",

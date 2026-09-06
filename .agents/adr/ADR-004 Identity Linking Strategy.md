@@ -89,7 +89,13 @@ After Google verifies the user's identity:
 - Find the user by the Google `sub` provider ID first.
 - If the provider is not linked, find the user by verified email.
 - Link the provider if necessary.
+- Refresh the stored Google avatar fallback when Google supplies a picture.
+- Preserve the existing fallback when Google omits the picture claim.
 - Authenticate the existing account.
+
+Uploaded R2 avatars remain authoritative in the UI. Google avatar
+synchronization updates only the external fallback used when no uploaded avatar
+is selected.
 
 ---
 

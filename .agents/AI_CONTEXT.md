@@ -117,6 +117,21 @@ Single Database + organizationId
 - Socket.IO carries call lifecycle, occupancy, and targeted moderation requests
   only. It never carries media, provider credentials, or WebRTC signaling.
 
+## AI Assistant
+
+- InTouch AI uses Gemini through a provider interface. The API owns provider
+  credentials, authorization, retrieval, redaction, quotas, and SSE streaming.
+- Organization owners explicitly enable AI for a disclosure version; each
+  member separately accepts or revokes consent.
+- Conversation requests reuse normal access checks. Organization-wide retrieval
+  searches only accessible public text channels and never broadens permissions.
+- Composer transformations send only the caller's draft. Generated text is
+  previewed and never sent automatically.
+- Prompts, generated responses, and workspace excerpts are not persisted or
+  logged. MongoDB stores only enablement and consent records.
+- Redis coordinates bounded daily and concurrent usage across replicas. BullMQ
+  is intentionally not involved in interactive AI generation.
+
 ## Coding Standards
 
 - Naming

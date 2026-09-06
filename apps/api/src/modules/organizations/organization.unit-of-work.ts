@@ -44,6 +44,9 @@ import type { MailOutboxRepository } from "../mail/index.js";
 import createMongooseCallSessionRepository, {
   type CallSessionRepository,
 } from "../voice/call.repository.js";
+import createMongooseAiRepository, {
+  type AiRepository,
+} from "../ai/ai.repository.js";
 
 export interface OrganizationWorkContext {
   categories: CategoryRepository;
@@ -60,6 +63,7 @@ export interface OrganizationWorkContext {
   notifications: NotificationRepository;
   assets: StoredAssetRepository;
   calls?: CallSessionRepository;
+  ai?: AiRepository;
 }
 
 export interface OrganizationUnitOfWork {
@@ -87,6 +91,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
       const notifications = createMongooseNotificationRepository(session);
       const assets = createMongooseStoredAssetRepository(session);
       const calls = createMongooseCallSessionRepository(session);
+      const ai = createMongooseAiRepository(session);
 
       return work({
         categories,
@@ -103,6 +108,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
         organizations,
         assets,
         calls,
+        ai,
       });
     });
   },

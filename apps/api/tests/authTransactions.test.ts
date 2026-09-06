@@ -75,6 +75,60 @@ const googleOAuth: GoogleOAuthClient = {
 };
 
 describe("authentication transactions", () => {
+  test("refreshes the Google avatar fallback without replacing a custom avatar", async () => {
+    const repository = createMongooseUserRepository();
+    const firstUsedAt = new Date("2026-09-01T10:00:00.000Z");
+    const nextUsedAt = new Date("2026-09-02T10:00:00.000Z");
+    const user = await repository.createGoogleUser({
+      username: "google_avatar_user",
+      displayName: "Google Avatar User",
+      email: "google-avatar@example.com",
+      avatarUrl: "https://example.com/old-avatar.png",
+      providerAccountId: "google-avatar-account",
+      usedAt: firstUsedAt,
+    });
+    const avatarAssetId = new mongoose.Types.ObjectId();
+    await UserModel.updateOne(
+      { _id: user.id },
+      { $set: { avatarAssetId } },
+    ).exec();
+
+    const refreshed = await repository.useGoogleProvider(
+      "google-avatar-account",
+      nextUsedAt,
+      "https://example.com/new-avatar.png",
+    );
+    const preserved = await repository.useGoogleProvider(
+      "google-avatar-account",
+      new Date("2026-09-03T10:00:00.000Z"),
+    );
+
+    assert.equal(refreshed?.avatarUrl, "https://example.com/new-avatar.png");
+    assert.equal(refreshed?.avatarAssetId, avatarAssetId.toString());
+    assert.equal(preserved?.avatarUrl, "https://example.com/new-avatar.png");
+    assert.equal(preserved?.avatarAssetId, avatarAssetId.toString());
+  });
+
+  test("stores the Google avatar fallback when linking an existing account", async () => {
+    const repository = createMongooseUserRepository();
+    const linkedAt = new Date("2026-09-02T10:00:00.000Z");
+    const user = await repository.createPasswordUser({
+      username: "linked_avatar_user",
+      displayName: "Linked Avatar User",
+      email: "linked-avatar@example.com",
+      passwordHash: "hashed:password",
+    });
+
+    const linked = await repository.linkGoogleProvider(
+      user.id,
+      "linked-google-account",
+      linkedAt,
+      "https://example.com/linked-avatar.png",
+    );
+
+    assert.equal(linked?.avatarUrl, "https://example.com/linked-avatar.png");
+  });
+
   test("rolls back registration when outbox creation fails", async () => {
     const unitOfWork: AuthUnitOfWork = {
       run: (work) =>

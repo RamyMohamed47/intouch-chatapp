@@ -522,6 +522,39 @@ chat` is pressed.
 - Inspect LiveKit identities and InTouch logs. They must not contain user names,
   user IDs, conversation IDs, tokens, or provider room names in metric labels.
 
+### InTouch AI
+
+- Keep `AI_PROVIDER=disabled` and confirm the assistant reports that the API is
+  not configured. Then configure Gemini and restart the API.
+- As a member, open InTouch AI before the owner enables it. Confirm the member
+  cannot enable it. As the owner, read and accept the provider disclosure, then
+  enable AI in the assistant or organization settings.
+- Confirm every non-owner must independently accept the same disclosure. Revoke
+  consent and verify generation is blocked until consent is accepted again.
+- Ask a conversation-scoped question in a public channel, a private channel,
+  and a DM. Verify source links open the cited message and no inaccessible
+  conversation content appears.
+- Ask an organization-wide question. Confirm results use accessible public text
+  channels only and do not use private channels, DMs, voice channels, deleted
+  messages, call entries, or attachment-only content.
+- Summarize a long text conversation and extract action items. Confirm the UI
+  discloses truncated context when applicable and does not invent owners or
+  deadlines absent from the messages.
+- Use Rewrite professionally, Shorten, Fix grammar, and Translate in the
+  composer. Confirm the original draft remains until Replace draft is selected
+  and no generated text is sent automatically.
+- Start generation, stop it, navigate away, log out, and close the panel. Verify
+  the stream aborts without an unhandled rejection or stale response appearing
+  in another organization.
+- Exhaust the per-user daily quota and test concurrent requests from multiple
+  tabs or replicas. Verify bounded `429` responses and an accurate `Retry-After`
+  without prompt text in logs or metric labels.
+- Inspect MongoDB and logs. Only enablement and consent records may persist;
+  prompts, excerpts, responses, secrets, and provider credentials must not.
+- With `GEMINI_SERVICE_TIER=free`, verify the UI clearly states the configured
+  unpaid-service data-use terms. Repeat with paid configuration and confirm the
+  notice changes.
+
 ## 9. Defect Reporting Template
 
 Use one report per distinct defect:

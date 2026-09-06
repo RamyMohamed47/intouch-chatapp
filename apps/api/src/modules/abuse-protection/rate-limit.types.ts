@@ -7,6 +7,7 @@ export const RateLimitAction = {
   INVITATION_CREATE: "invitation:create",
   READ_RECEIPT_UPDATE: "read-receipt:update",
   SEARCH: "search:query",
+  AI_REQUEST: "ai:request",
   WALLPAPER_MUTATE: "wallpaper:mutate",
   UPLOAD_MUTATE: "upload:mutate",
   ASSET_ACCESS: "asset:access",

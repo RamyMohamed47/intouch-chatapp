@@ -22,6 +22,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ChannelConversationDto } from "@intouch/shared/conversations";
 
 import { BrandMark, BrandSignature } from "@/components/brand/brand";
+import { AiAssistantPanel } from "@/components/ai/ai-assistant-panel";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { OrganizationAvatar } from "@/components/organizations/organization-avatar";
@@ -176,10 +177,12 @@ function WorkspaceNavigation({
   mobile = false,
   onNavigate,
   onSearch,
+  onAi,
 }: {
   mobile?: boolean;
   onNavigate?: () => void;
   onSearch: () => void;
+  onAi: () => void;
 }) {
   const pathname = usePathname();
   const params = useParams<{ organizationId?: string }>();
@@ -314,6 +317,19 @@ function WorkspaceNavigation({
         <Search className="size-4" /> Find anything
         <span className="ml-auto font-mono text-[9px]">Ctrl K</span>
       </button>
+
+      {activeOrganization && (
+        <button
+          type="button"
+          onClick={onAi}
+          className="mt-2 flex h-10 items-center gap-2 rounded-xl border border-primary/25 bg-primary/8 px-3 text-sm text-foreground transition hover:bg-primary/15"
+        >
+          <Sparkles className="size-4 text-primary" /> InTouch AI
+          <Badge variant="outline" className="ml-auto text-[9px]">
+            Beta
+          </Badge>
+        </button>
+      )}
 
       <ScrollArea className="mt-5 min-h-0 flex-1">
         {activeOrganization ? (
@@ -504,7 +520,11 @@ function WorkspaceNavigation({
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const params = useParams<{ organizationId?: string }>();
+  const [aiOpen, setAiOpen] = useState(false);
+  const params = useParams<{
+    organizationId?: string;
+    conversationId?: string;
+  }>();
   const { connected, subscribeOrganization, unsubscribeOrganization } =
     useRealtime();
   const organizationId = params.organizationId;
@@ -533,9 +553,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", openSearch);
   }, []);
 
+  useEffect(() => {
+    const openAi = () => setAiOpen(true);
+    window.addEventListener("intouch:open-ai", openAi);
+    return () => window.removeEventListener("intouch:open-ai", openAi);
+  }, []);
+
   return (
     <main className="flex h-dvh min-w-0 overflow-hidden bg-background text-foreground md:gap-3 md:p-3">
-      <WorkspaceNavigation onSearch={() => setSearchOpen(true)} />
+      <WorkspaceNavigation
+        onSearch={() => setSearchOpen(true)}
+        onAi={() => setAiOpen(true)}
+      />
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden border-border bg-card/75 shadow-2xl shadow-background/40 backdrop-blur-xl md:rounded-[1.7rem] md:border">
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border/70 px-4 md:hidden">
           <Sheet
@@ -562,6 +591,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                   setMobileNavigationOpen(false);
                   setSearchOpen(true);
                 }}
+                onAi={() => {
+                  setMobileNavigationOpen(false);
+                  setAiOpen(true);
+                }}
               />
             </SheetContent>
           </Sheet>
@@ -583,6 +616,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Search />
             </Button>
+            {organizationId && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Open InTouch AI"
+                onClick={() => setAiOpen(true)}
+              >
+                <Sparkles />
+              </Button>
+            )}
           </div>
         </div>
         {children}
@@ -593,6 +637,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         open={searchOpen}
         onOpenChange={setSearchOpen}
       />
+      {organizationId && (
+        <AiAssistantPanel
+          organizationId={organizationId}
+          conversationId={params.conversationId ?? ""}
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+        />
+      )}
     </main>
   );
 }

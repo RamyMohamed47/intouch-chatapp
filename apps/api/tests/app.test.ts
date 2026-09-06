@@ -141,7 +141,7 @@ describe("app", () => {
 
   test("returns a centralized 404 response for the removed frontend root", async () => {
     const response = await fetch(`${baseUrl}/`);
-    const body = await response.json();
+    const body = (await response.json()) as unknown;
 
     assert.equal(response.status, 404);
     assert.deepEqual(body, {
@@ -155,7 +155,7 @@ describe("app", () => {
 
   test("returns a centralized 404 response for unknown routes", async () => {
     const response = await fetch(`${baseUrl}/not-found`);
-    const body = await response.json();
+    const body = (await response.json()) as unknown;
 
     assert.equal(response.status, 404);
     assert.deepEqual(body, {
@@ -212,7 +212,7 @@ describe("app", () => {
 
   test("does not expose API resources outside the versioned API mount", async () => {
     const response = await fetch(`${baseUrl}/messages`);
-    const body = await response.json();
+    const body = (await response.json()) as unknown;
 
     assert.equal(response.status, 404);
     assert.deepEqual(body, {

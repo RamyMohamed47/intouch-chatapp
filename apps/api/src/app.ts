@@ -18,6 +18,7 @@ import createHttpLogger from "./middleware/httpLogger.js";
 export interface AppDependencies {
   allowedOrigins?: readonly string[];
   apiDocsRouter?: Router;
+  aiRouter?: Router;
   assetRouter?: Router;
   authRouter?: Router;
   categoryRouter?: Router;
@@ -48,6 +49,7 @@ export interface AppDependencies {
 const createApp = ({
   allowedOrigins = ["http://localhost:5173"],
   apiDocsRouter,
+  aiRouter,
   assetRouter,
   authRouter,
   categoryRouter,
@@ -208,6 +210,10 @@ const createApp = ({
 
   if (searchRouter) {
     app.use("/api/v1/organizations", searchRouter);
+  }
+
+  if (aiRouter) {
+    app.use("/api/v1/organizations", aiRouter);
   }
 
   if (userChatWallpaperRouter) {

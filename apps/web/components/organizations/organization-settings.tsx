@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
+  Bot,
   Camera,
   Hash,
   Lock,
@@ -49,9 +50,11 @@ import { Select } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { categoriesApi } from "@/lib/api/categories";
 import { conversationsApi } from "@/lib/api/conversations";
+import { aiApi } from "@/lib/api/ai";
 import { organizationsApi } from "@/lib/api/organizations";
 import {
   useCategories,
+  useAiSettings,
   useChannels,
   useMembers,
   useOrganization,
@@ -815,6 +818,107 @@ function MemberSettings({ organizationId }: { organizationId: string }) {
   );
 }
 
+function AiSettings({ organizationId }: { organizationId: string }) {
+  const queryClient = useQueryClient();
+  const settings = useAiSettings(organizationId);
+  const [accepted, setAccepted] = useState(false);
+  const update = useMutation({
+    mutationFn: (enabled: boolean) =>
+      aiApi.updateSettings(organizationId, {
+        enabled,
+        disclosureVersion: settings.data?.disclosureVersion ?? "",
+        ...(enabled ? { acceptsProviderDataUse: true as const } : {}),
+      }),
+    onSuccess: (next) => {
+      queryClient.setQueryData(queryKeys.ai.settings(organizationId), next);
+      setAccepted(false);
+    },
+  });
+
+  if (settings.isPending) {
+    return (
+      <p className="text-sm text-muted-foreground">Loading AI settings...</p>
+    );
+  }
+  if (settings.isError || !settings.data) {
+    return (
+      <FormError>
+        {settings.error?.message ?? "AI settings are unavailable"}
+      </FormError>
+    );
+  }
+  return (
+    <section className="grid gap-6 rounded-[1.75rem] border border-primary/20 bg-primary/5 p-6 lg:grid-cols-[1fr_auto]">
+      <div>
+        <span className="grid size-11 place-items-center rounded-2xl bg-primary/15 text-primary">
+          <Bot aria-hidden />
+        </span>
+        <h2 className="mt-5 text-xl font-semibold">InTouch AI</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          {settings.data.dataUseNotice}
+        </p>
+        <p className="mt-3 max-w-2xl text-xs leading-5 text-muted-foreground">
+          When enabled, authorized members who accept the disclosure can ask
+          questions and summarize messages they already have permission to read.
+          The assistant can make mistakes.
+        </p>
+        {!settings.data.organizationEnabled &&
+          settings.data.available &&
+          settings.data.canManage && (
+            <label className="mt-5 flex max-w-2xl gap-3 text-sm">
+              <input
+                id="ai-settings-disclosure"
+                name="aiSettingsDisclosure"
+                type="checkbox"
+                checked={accepted}
+                onChange={(event) => setAccepted(event.target.checked)}
+              />
+              <span>
+                I authorize Gemini processing for messages organization members
+                may already access.
+              </span>
+            </label>
+          )}
+        {update.isError && (
+          <div className="mt-4">
+            <FormError>{update.error.message}</FormError>
+          </div>
+        )}
+      </div>
+      <div className="flex min-w-48 flex-col justify-center gap-3 rounded-2xl border border-border bg-background/45 p-4">
+        <Badge
+          variant={settings.data.organizationEnabled ? "default" : "outline"}
+        >
+          {settings.data.organizationEnabled ? "Enabled" : "Disabled"}
+        </Badge>
+        <p className="text-xs text-muted-foreground">
+          Provider: Gemini {settings.data.serviceTier.toLowerCase()}
+        </p>
+        {!settings.data.canManage ? (
+          <p className="text-xs leading-5 text-muted-foreground">
+            Only an organization owner can change this setting.
+          </p>
+        ) : settings.data.organizationEnabled ? (
+          <Button
+            variant="destructive"
+            disabled={update.isPending}
+            onClick={() => update.mutate(false)}
+          >
+            Disable AI
+          </Button>
+        ) : (
+          <Button
+            disabled={!settings.data.available || !accepted || update.isPending}
+            onClick={() => update.mutate(true)}
+          >
+            {settings.data.available ? "Enable AI" : "Provider not configured"}
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function OrganizationSettings({
   organizationId,
 }: {
@@ -865,6 +969,7 @@ export function OrganizationSettings({
               <TabsTrigger value="categories">Categories</TabsTrigger>
               <TabsTrigger value="channels">Channels</TabsTrigger>
               <TabsTrigger value="members">Members</TabsTrigger>
+              <TabsTrigger value="ai">AI assistant</TabsTrigger>
             </TabsList>
             <TabsContent value="general">
               <GeneralSettings organizationId={organizationId} />
@@ -877,6 +982,9 @@ export function OrganizationSettings({
             </TabsContent>
             <TabsContent value="members">
               <MemberSettings organizationId={organizationId} />
+            </TabsContent>
+            <TabsContent value="ai">
+              <AiSettings organizationId={organizationId} />
             </TabsContent>
           </Tabs>
         </div>

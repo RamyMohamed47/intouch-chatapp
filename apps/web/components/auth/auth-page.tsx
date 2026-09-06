@@ -26,6 +26,7 @@ import { startGoogleSignIn } from "@/lib/auth/client";
 import { useAuth } from "@/lib/auth/provider";
 import { getSafeReturnPath } from "@/lib/auth/return-path";
 import { getFormString } from "@/lib/utils";
+import { ProtectedAppFallback } from "./protected-app";
 
 type FieldErrors = Partial<
   Record<"displayName" | "username" | "email" | "password", string>
@@ -61,6 +62,18 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   useEffect(() => {
     if (status === "authenticated") router.replace(returnPath);
   }, [returnPath, router, status]);
+
+  if (status !== "unauthenticated") {
+    return (
+      <ProtectedAppFallback
+        message={
+          status === "loading"
+            ? "Restoring your session..."
+            : "Opening your workspace..."
+        }
+      />
+    );
+  }
 
   const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -336,7 +349,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               type="submit"
               size="lg"
               className="h-11 rounded-xl"
-              disabled={pending || status === "loading"}
+              disabled={pending}
             >
               {pending
                 ? "Please wait..."

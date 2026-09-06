@@ -46,11 +46,13 @@ export interface UserRepository {
     userId: string,
     providerAccountId: string,
     usedAt: Date,
+    avatarUrl?: string,
   ): Promise<PublicUser | null>;
   touchPasswordProvider(userId: string, usedAt: Date): Promise<void>;
   useGoogleProvider(
     providerAccountId: string,
     usedAt: Date,
+    avatarUrl?: string,
   ): Promise<PublicUser | null>;
   usernameExists(username: string): Promise<boolean>;
   updateLastSeen(userId: string, lastSeenAt: Date): Promise<void>;
@@ -286,7 +288,7 @@ const createMongooseUserRepository = (
     }));
   },
 
-  async linkGoogleProvider(userId, providerAccountId, usedAt) {
+  async linkGoogleProvider(userId, providerAccountId, usedAt, avatarUrl) {
     try {
       const query = UserModel.findOneAndUpdate(
         {
@@ -307,6 +309,7 @@ const createMongooseUserRepository = (
           $set: {
             emailVerificationStatus: EmailVerificationStatus.VERIFIED,
             emailVerifiedAt: usedAt,
+            ...(avatarUrl ? { avatarUrl } : {}),
           },
         },
         { new: true },
@@ -340,7 +343,7 @@ const createMongooseUserRepository = (
     await query.exec();
   },
 
-  async useGoogleProvider(providerAccountId, usedAt) {
+  async useGoogleProvider(providerAccountId, usedAt, avatarUrl) {
     const query = UserModel.findOneAndUpdate(
       {
         loginProviders: {
@@ -351,7 +354,10 @@ const createMongooseUserRepository = (
         },
       },
       {
-        $set: { "loginProviders.$.lastUsedAt": usedAt },
+        $set: {
+          "loginProviders.$.lastUsedAt": usedAt,
+          ...(avatarUrl ? { avatarUrl } : {}),
+        },
       },
       { new: true },
     ).lean<UserRecord>();

@@ -71,6 +71,10 @@ export const queryKeys = {
         conversationId ?? "all-conversations",
       ] as const,
   },
+  ai: {
+    settings: (organizationId: string) =>
+      ["organizations", organizationId, "ai", "settings"] as const,
+  },
   assets: {
     access: (assetId: string) => ["assets", assetId, "access"] as const,
   },
