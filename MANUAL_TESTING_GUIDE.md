@@ -522,11 +522,11 @@ chat` is pressed.
 - Inspect LiveKit identities and InTouch logs. They must not contain user names,
   user IDs, conversation IDs, tokens, or provider room names in metric labels.
 
-### InTouch AI
+### Echo AI Assistant
 
 - Keep `AI_PROVIDER=disabled` and confirm the assistant reports that the API is
   not configured. Then configure Gemini and restart the API.
-- As a member, open InTouch AI before the owner enables it. Confirm the member
+- As a member, open Echo before the owner enables it. Confirm the member
   cannot enable it. As the owner, read and accept the provider disclosure, then
   enable AI in the assistant or organization settings.
 - Confirm every non-owner must independently accept the same disclosure. Revoke

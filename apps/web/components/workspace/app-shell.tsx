@@ -324,7 +324,7 @@ function WorkspaceNavigation({
           onClick={onAi}
           className="mt-2 flex h-10 items-center gap-2 rounded-xl border border-primary/25 bg-primary/8 px-3 text-sm text-foreground transition hover:bg-primary/15"
         >
-          <Sparkles className="size-4 text-primary" /> InTouch AI
+          <Sparkles className="size-4 text-primary" /> Echo
           <Badge variant="outline" className="ml-auto text-[9px]">
             Beta
           </Badge>
@@ -621,7 +621,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="Open InTouch AI"
+                aria-label="Open Echo"
                 onClick={() => setAiOpen(true)}
               >
                 <Sparkles />

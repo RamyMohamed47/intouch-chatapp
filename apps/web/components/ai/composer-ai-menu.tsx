@@ -75,7 +75,7 @@ export function ComposerAiMenu({
         type="button"
         variant="ghost"
         size="icon"
-        aria-label="Improve draft with InTouch AI"
+        aria-label="Improve draft with Echo"
         disabled={disabled || !draft.trim()}
         onClick={() => setOpen(true)}
       >
@@ -84,7 +84,7 @@ export function ComposerAiMenu({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">
-            AI writing tools
+            Echo writing tools
           </p>
           <DialogTitle>Refine your message</DialogTitle>
           <DialogDescription>
@@ -94,8 +94,8 @@ export function ComposerAiMenu({
         </DialogHeader>
         {!ready ? (
           <div className="mt-5 rounded-2xl border border-dashed border-border p-5 text-sm leading-6 text-muted-foreground">
-            Enable InTouch AI and accept its data-use disclosure before using
-            writing tools.
+            Enable Echo and accept its data-use disclosure before using writing
+            tools.
             <Button
               className="mt-4 w-full"
               onClick={() => {
@@ -103,7 +103,7 @@ export function ComposerAiMenu({
                 window.dispatchEvent(new Event("intouch:open-ai"));
               }}
             >
-              Open InTouch AI
+              Open Echo
             </Button>
           </div>
         ) : (

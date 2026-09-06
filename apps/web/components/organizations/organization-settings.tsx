@@ -837,13 +837,13 @@ function AiSettings({ organizationId }: { organizationId: string }) {
 
   if (settings.isPending) {
     return (
-      <p className="text-sm text-muted-foreground">Loading AI settings...</p>
+      <p className="text-sm text-muted-foreground">Loading Echo settings...</p>
     );
   }
   if (settings.isError || !settings.data) {
     return (
       <FormError>
-        {settings.error?.message ?? "AI settings are unavailable"}
+        {settings.error?.message ?? "Echo settings are unavailable"}
       </FormError>
     );
   }
@@ -853,14 +853,14 @@ function AiSettings({ organizationId }: { organizationId: string }) {
         <span className="grid size-11 place-items-center rounded-2xl bg-primary/15 text-primary">
           <Bot aria-hidden />
         </span>
-        <h2 className="mt-5 text-xl font-semibold">InTouch AI</h2>
+        <h2 className="mt-5 text-xl font-semibold">Echo</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           {settings.data.dataUseNotice}
         </p>
         <p className="mt-3 max-w-2xl text-xs leading-5 text-muted-foreground">
           When enabled, authorized members who accept the disclosure can ask
           questions and summarize messages they already have permission to read.
-          The assistant can make mistakes.
+          Echo can make mistakes.
         </p>
         {!settings.data.organizationEnabled &&
           settings.data.available &&
@@ -904,14 +904,16 @@ function AiSettings({ organizationId }: { organizationId: string }) {
             disabled={update.isPending}
             onClick={() => update.mutate(false)}
           >
-            Disable AI
+            Disable Echo
           </Button>
         ) : (
           <Button
             disabled={!settings.data.available || !accepted || update.isPending}
             onClick={() => update.mutate(true)}
           >
-            {settings.data.available ? "Enable AI" : "Provider not configured"}
+            {settings.data.available
+              ? "Enable Echo"
+              : "Provider not configured"}
           </Button>
         )}
       </div>
@@ -969,7 +971,7 @@ export function OrganizationSettings({
               <TabsTrigger value="categories">Categories</TabsTrigger>
               <TabsTrigger value="channels">Channels</TabsTrigger>
               <TabsTrigger value="members">Members</TabsTrigger>
-              <TabsTrigger value="ai">AI assistant</TabsTrigger>
+              <TabsTrigger value="ai">Echo</TabsTrigger>
             </TabsList>
             <TabsContent value="general">
               <GeneralSettings organizationId={organizationId} />

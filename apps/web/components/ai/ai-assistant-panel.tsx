@@ -255,7 +255,7 @@ export function AiAssistantPanel({
               <Bot className="size-5" aria-hidden />
             </span>
             <div>
-              <SheetTitle>InTouch AI</SheetTitle>
+              <SheetTitle>Echo</SheetTitle>
               <SheetDescription>
                 Authorized workspace assistance
               </SheetDescription>
@@ -268,17 +268,17 @@ export function AiAssistantPanel({
 
         {settings.isPending ? (
           <div className="grid flex-1 place-items-center text-sm text-muted-foreground">
-            Checking AI access...
+            Checking Echo access...
           </div>
         ) : settings.isError || !settings.data ? (
           <div className="p-5">
             <FormError>
-              {settings.error?.message ?? "AI settings are unavailable"}
+              {settings.error?.message ?? "Echo settings are unavailable"}
             </FormError>
           </div>
         ) : !settings.data.available ? (
           <div className="m-5 rounded-2xl border border-dashed border-border p-5">
-            <h3 className="font-semibold">AI is not configured</h3>
+            <h3 className="font-semibold">Echo is not configured</h3>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Configure the Gemini provider on the API before enabling this
               workspace.
@@ -287,7 +287,9 @@ export function AiAssistantPanel({
         ) : !enabled ? (
           <div className="m-5 rounded-2xl border border-primary/20 bg-primary/5 p-5">
             <Sparkles className="size-5 text-primary" aria-hidden />
-            <h3 className="mt-4 font-semibold">Enable AI for this workspace</h3>
+            <h3 className="mt-4 font-semibold">
+              Enable Echo for this workspace
+            </h3>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {settings.data.dataUseNotice}
             </p>
@@ -311,12 +313,12 @@ export function AiAssistantPanel({
                   disabled={!accepted || updateSettings.isPending}
                   onClick={() => updateSettings.mutate(true)}
                 >
-                  <Check /> Enable InTouch AI
+                  <Check /> Enable Echo
                 </Button>
               </>
             ) : (
               <p className="mt-4 text-sm font-medium">
-                An organization owner must enable AI.
+                An organization owner must enable Echo.
               </p>
             )}
             {updateSettings.isError && (
@@ -332,8 +334,8 @@ export function AiAssistantPanel({
               {settings.data.dataUseNotice}
             </p>
             <p className="mt-3 text-xs leading-5 text-muted-foreground">
-              The owner has enabled AI for authorized workspace messages. AI can
-              make mistakes.
+              The owner has enabled Echo for authorized workspace messages. Echo
+              can make mistakes.
             </p>
             <Button
               className="mt-4 w-full"
@@ -370,7 +372,7 @@ export function AiAssistantPanel({
                 <Button
                   size="icon-sm"
                   variant="ghost"
-                  aria-label="Clear AI history"
+                  aria-label="Clear Echo history"
                   onClick={() => {
                     generation.reset();
                     setMessages([]);
@@ -467,7 +469,7 @@ export function AiAssistantPanel({
               className="border-t border-border bg-background/35 p-4"
             >
               <label htmlFor={inputId} className="sr-only">
-                Ask InTouch AI
+                Ask Echo
               </label>
               <Textarea
                 id={inputId}

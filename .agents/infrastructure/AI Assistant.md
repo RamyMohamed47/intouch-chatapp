@@ -1,6 +1,6 @@
-# AI Assistant
+# Echo AI Assistant
 
-InTouch AI is an optional interactive Gemini integration. It is deliberately
+Echo is InTouch's optional interactive Gemini assistant. It is deliberately
 separate from durable background jobs: authenticated HTTP requests retrieve
 authorized context and stream model output to the requesting browser over SSE.
 Closing the response aborts provider generation and releases its concurrency
