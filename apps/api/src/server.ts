@@ -245,7 +245,7 @@ const mailWorker = createMailOutboxWorker({
   cipher: mailCipher,
   logger,
   outbox: createMongooseMailOutboxRepository(),
-  render: createMailRenderer(config.webAppUrl),
+  render: createMailRenderer(config.webAppUrl, config.mobileAppUrl),
   transport: mailTransport,
 });
 const apiDocsRouter = createApiDocsRouter(loadOpenApiContract());
@@ -419,7 +419,7 @@ if (config.backgroundJobsProvider === "bullmq") {
     outbox: createMongooseMailOutboxRepository(),
     redisKeyPrefix: config.runtimeState.keyPrefix,
     redisUrl: config.runtimeState.url,
-    render: createMailRenderer(config.webAppUrl),
+    render: createMailRenderer(config.webAppUrl, config.mobileAppUrl),
     transport: mailTransport,
     telemetry: observabilityMetrics,
   });

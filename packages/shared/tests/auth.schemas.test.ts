@@ -4,6 +4,10 @@ import { describe, test } from "node:test";
 import {
   forgotPasswordSchema,
   loginSchema,
+  mobileAuthResponseSchema,
+  mobileGoogleSchema,
+  mobileLogoutSchema,
+  mobileRefreshResponseSchema,
   refreshSchema,
   registerSchema,
   resendVerificationSchema,
@@ -102,6 +106,43 @@ describe("shared auth schemas", () => {
     assert.equal(
       resetPasswordSchema.safeParse({ token, password: "é".repeat(37) })
         .success,
+      false,
+    );
+  });
+
+  test("keeps mobile credentials strict and separate from cookie responses", () => {
+    assert.deepEqual(mobileGoogleSchema.parse({ idToken: "google-id-token" }), {
+      idToken: "google-id-token",
+    });
+    assert.equal(
+      mobileLogoutSchema.safeParse({
+        refreshToken: "session.secret",
+        extra: true,
+      }).success,
+      false,
+    );
+    assert.equal(
+      mobileAuthResponseSchema.safeParse({
+        user: {
+          id: "507f1f77bcf86cd799439011",
+          username: "ramy_47",
+          displayName: "Ramy Mohamed",
+          email: "ramy@example.com",
+          avatarAssetId: null,
+          createdAt: "2026-07-28T12:00:00.000Z",
+          updatedAt: "2026-07-28T12:00:00.000Z",
+        },
+        accessToken: "access",
+        refreshToken: "refresh",
+      }).success,
+      true,
+    );
+    assert.equal(
+      mobileRefreshResponseSchema.safeParse({
+        accessToken: "access",
+        refreshToken: "refresh",
+        cookie: "forbidden",
+      }).success,
       false,
     );
   });

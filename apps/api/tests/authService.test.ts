@@ -253,6 +253,7 @@ const createHarness = () => {
     getAuthorizationUrl: (state) =>
       `https://accounts.google.test?state=${state}`,
     exchangeCode: async () => googleIdentity,
+    verifyIdToken: async () => googleIdentity,
   };
   const refreshTokens = createRefreshTokenManager();
   const actionTokens = createAuthActionTokenManager(

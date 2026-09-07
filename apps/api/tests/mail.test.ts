@@ -134,6 +134,32 @@ describe("transactional mail", () => {
     assert.doesNotMatch(rendered.html, /<Ramy>/);
   });
 
+  test("renders mobile email actions with an HTTPS fallback", () => {
+    const factory = createMailOutboxJobFactory(cipher, () => now);
+    const verification = factory.verification({
+      userId: "507f1f77bcf86cd799439011",
+      email: "ramy@example.com",
+      displayName: "Ramy",
+      token: "token.secret",
+      deliveryTarget: "MOBILE",
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+    });
+    const rendered = createMailRenderer(
+      "https://app.example.com",
+      "intouch://",
+    )(cipher.decrypt(verification));
+
+    assert.match(
+      rendered.text,
+      /intouch:\/\/verify-email\?token=token\.secret/,
+    );
+    assert.match(
+      rendered.text,
+      /https:\/\/app\.example\.com\/verify-email#token=token\.secret/,
+    );
+    assert.match(rendered.html, /web confirmation link/);
+  });
+
   test("retries transient delivery failures without logging recipients", async () => {
     const payload = cipher.encrypt({
       kind: MailKind.EMAIL_VERIFICATION,

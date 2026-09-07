@@ -5,6 +5,7 @@ export const MailKind = {
 } as const;
 
 export type MailKindValue = (typeof MailKind)[keyof typeof MailKind];
+export type MailDeliveryTarget = "MOBILE" | "WEB";
 
 export type MailPayload =
   | {
@@ -12,12 +13,14 @@ export type MailPayload =
       to: string;
       displayName: string;
       token: string;
+      deliveryTarget?: MailDeliveryTarget;
     }
   | {
       kind: typeof MailKind.PASSWORD_RESET;
       to: string;
       displayName: string;
       token: string;
+      deliveryTarget?: MailDeliveryTarget;
     }
   | {
       kind: typeof MailKind.ORGANIZATION_INVITATION;
@@ -65,6 +68,7 @@ export interface MailOutboxJobFactory {
     displayName: string;
     token: string;
     expiresAt: Date;
+    deliveryTarget?: MailDeliveryTarget;
   }): CreateMailOutboxInput;
   passwordReset(input: {
     userId: string;
@@ -72,6 +76,7 @@ export interface MailOutboxJobFactory {
     displayName: string;
     token: string;
     expiresAt: Date;
+    deliveryTarget?: MailDeliveryTarget;
   }): CreateMailOutboxInput;
   organizationInvitation(input: {
     organizationId: string;

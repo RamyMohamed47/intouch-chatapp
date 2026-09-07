@@ -24,7 +24,7 @@
 - npm workspaces with applications under `apps` and contracts under `packages`
 - Backend composition root at `apps/api/src/server.ts`
 - Next.js frontend at `apps/web`
-- Future mobile application reserved for `apps/mobile`
+- Expo Router mobile application at `apps/mobile`, Android-first and iOS-ready
 - Local application processes run natively; `compose.infrastructure.yml`
   provides the MongoDB replica set, Redis/BullMQ, and Mailpit development stack.
 - Observability uses structured Railway logs, OpenTelemetry OTLP metrics and
@@ -64,6 +64,21 @@
   to existing users only through verified email addresses.
 - Google tokens are discarded after verification; InTouch continues to own JWT
   access tokens and rotating refresh sessions.
+- Native mobile authentication returns access and refresh tokens through strict
+  JSON endpoints. Access tokens remain in memory and rotating refresh tokens
+  are stored in Expo SecureStore; browser cookie and CSRF behavior is unchanged.
+
+## Mobile V1
+
+- Expo SDK 57 and React Native 0.86 share `@intouch/shared` contracts with the
+  API and web application.
+- Mobile V1 includes native authentication, workspace administration, text
+  channels and DMs, attachments, reactions, typing, presence, receipts,
+  themes, and chat wallpapers.
+- TanStack Query owns API state. Socket.IO updates or reconciles those caches
+  and disconnects while the app is backgrounded.
+- Voice, video, screen sharing, Echo, search, push notifications, persistent
+  offline data, and queued sends remain outside mobile V1.
 
 ## Multi-tenancy
 

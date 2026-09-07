@@ -124,6 +124,41 @@ const getDisplayName = (payload: TokenPayload, email: string) => {
   return (name || email.split("@")[0] || "Google User").slice(0, 50);
 };
 
+const verifyGoogleIdToken = async (
+  sdkClient: GoogleOAuthSdkClient,
+  config: GoogleOAuthConfig,
+  diagnostics: GoogleOAuthDiagnostics,
+  idToken: string,
+) => {
+  try {
+    const ticket = await sdkClient.verifyIdToken({
+      audience: config.clientId,
+      idToken,
+    });
+    const payload = ticket.getPayload();
+
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+      throw new InvalidGoogleAuthenticationError();
+    }
+
+    const email = payload.email.trim().toLowerCase();
+    const avatarUrl = getAvatarUrl(payload.picture);
+
+    return {
+      providerAccountId: payload.sub,
+      email,
+      displayName: getDisplayName(payload, email),
+      ...(avatarUrl ? { avatarUrl } : {}),
+    };
+  } catch (error) {
+    if (error instanceof InvalidGoogleAuthenticationError) {
+      throw error;
+    }
+
+    throw mapGoogleError(error, "id_token_verification", diagnostics);
+  }
+};
+
 export const createGoogleOAuthClient = (
   config: GoogleOAuthConfig,
   sdkClient: GoogleOAuthSdkClient = new OAuth2Client({
@@ -162,32 +197,10 @@ export const createGoogleOAuthClient = (
       throw mapGoogleError(error, "code_exchange", diagnostics);
     }
 
-    try {
-      const ticket = await sdkClient.verifyIdToken({
-        audience: config.clientId,
-        idToken,
-      });
-      const payload = ticket.getPayload();
+    return verifyGoogleIdToken(sdkClient, config, diagnostics, idToken);
+  },
 
-      if (!payload?.sub || !payload.email || payload.email_verified !== true) {
-        throw new InvalidGoogleAuthenticationError();
-      }
-
-      const email = payload.email.trim().toLowerCase();
-      const avatarUrl = getAvatarUrl(payload.picture);
-
-      return {
-        providerAccountId: payload.sub,
-        email,
-        displayName: getDisplayName(payload, email),
-        ...(avatarUrl ? { avatarUrl } : {}),
-      };
-    } catch (error) {
-      if (error instanceof InvalidGoogleAuthenticationError) {
-        throw error;
-      }
-
-      throw mapGoogleError(error, "id_token_verification", diagnostics);
-    }
+  verifyIdToken(idToken) {
+    return verifyGoogleIdToken(sdkClient, config, diagnostics, idToken);
   },
 });

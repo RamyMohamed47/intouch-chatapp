@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const authDeliveryTargetSchema = z.enum(["WEB", "MOBILE"]);
+
 export const registerSchema = z
   .object({
     username: z
@@ -29,6 +31,7 @@ export const registerSchema = z
         (password) => new TextEncoder().encode(password).byteLength <= 72,
         "Password must be at most 72 bytes",
       ),
+    deliveryTarget: authDeliveryTargetSchema.optional(),
   })
   .strict();
 

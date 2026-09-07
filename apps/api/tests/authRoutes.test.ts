@@ -51,6 +51,11 @@ const authService: AuthService = {
 
     return { refreshToken: "google-refresh-token" };
   },
+  loginWithGoogleIdToken: async () => ({
+    user,
+    accessToken: "google-mobile-access-token",
+    refreshToken: "google-mobile-refresh-token",
+  }),
   register: async () => ({
     email: user.email,
     verificationRequired: true,
@@ -297,6 +302,59 @@ describe("auth routes", () => {
         assert.equal(await response.text(), "");
       }
     }
+  });
+
+  test("returns mobile tokens in JSON without setting cookies or requiring CSRF", async () => {
+    const loginResponse = await fetch(`${baseUrl}/api/v1/auth/mobile/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: user.email,
+        password: "correct horse battery staple",
+      }),
+    });
+    assert.equal(loginResponse.status, 200);
+    assert.equal(loginResponse.headers.get("set-cookie"), null);
+    const loginBody = (await loginResponse.json()) as {
+      accessToken: string;
+      refreshToken: string;
+      user: { email: string; avatarAssetId: string | null };
+    };
+    assert.equal(loginBody.user.email, user.email);
+    assert.equal(loginBody.user.avatarAssetId, null);
+    assert.equal(loginBody.accessToken, "login-access-token");
+    assert.equal(loginBody.refreshToken, "login-refresh-token");
+
+    const refreshResponse = await fetch(
+      `${baseUrl}/api/v1/auth/mobile/refresh`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: "mobile-refresh-token" }),
+      },
+    );
+    assert.equal(refreshResponse.status, 200);
+    assert.deepEqual(await refreshResponse.json(), {
+      accessToken: "rotated-access-token",
+      refreshToken: "rotated-refresh-token",
+    });
+
+    const googleResponse = await fetch(`${baseUrl}/api/v1/auth/mobile/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: "native-google-id-token" }),
+    });
+    assert.equal(googleResponse.status, 200);
+    assert.equal(googleResponse.headers.get("set-cookie"), null);
+  });
+
+  test("rejects unknown fields in mobile session requests", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/auth/mobile/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken: "token", cookie: true }),
+    });
+    assert.equal(response.status, 400);
   });
 
   test("rejects malformed email-action requests", async () => {

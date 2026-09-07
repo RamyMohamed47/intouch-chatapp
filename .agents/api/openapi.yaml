@@ -87,6 +87,82 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /auth/mobile/login:
+    post:
+      tags: [Authentication]
+      summary: Authenticate a native mobile client
+      description: Returns both tokens in JSON. This native flow does not set cookies or require browser CSRF protection.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/LoginRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/MobileAuthResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/mobile/google:
+    post:
+      tags: [Authentication]
+      summary: Authenticate a native mobile client with Google
+      description: Verifies a Google ID token against the configured server client audience and returns rotating InTouch credentials.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/MobileGoogleRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/MobileAuthResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /auth/mobile/refresh:
+    post:
+      tags: [Authentication]
+      summary: Rotate a native mobile refresh token
+      description: Accepts the refresh credential in a strict JSON body and returns a replacement pair without setting cookies.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/MobileRefreshRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/MobileRefreshResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/mobile/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke a native mobile refresh session
+      description: Idempotently revokes the refresh credential supplied in the strict JSON body.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/MobileRefreshRequest"
+      responses:
+        "204":
+          description: Session revoked or already absent
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
   /auth/verify-email:
     post:
       tags: [Authentication]
@@ -1832,6 +1908,22 @@ components:
           schema:
             $ref: "#/components/schemas/LoginInput"
 
+    MobileGoogleRequest:
+      description: Native Google ID token issued for the configured server client audience.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MobileGoogleInput"
+
+    MobileRefreshRequest:
+      description: Native refresh credential transported in JSON rather than a browser cookie.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MobileRefreshInput"
+
     VerifyEmailRequest:
       description: Defined by the shared email-confirmation contract.
       required: true
@@ -2029,6 +2121,20 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AccessTokenPayload"
+
+    MobileAuthResponse:
+      description: Native mobile session created without cookies.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MobileAuthPayload"
+
+    MobileRefreshResponse:
+      description: Native mobile session rotated without cookies.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MobileRefreshPayload"
 
     GoogleOAuthStartRedirect:
       description: OAuth state cookie set and browser redirected to Google.
@@ -4047,8 +4153,11 @@ components:
         password:
           type: string
           minLength: 8
-          maxLength: 72
+          maxLength: 128
           writeOnly: true
+          description: Limited to 72 UTF-8 bytes after validation.
+        deliveryTarget:
+          $ref: "#/components/schemas/AuthDeliveryTarget"
 
     LoginInput:
       type: object
@@ -4062,6 +4171,34 @@ components:
           type: string
           minLength: 8
           maxLength: 72
+          writeOnly: true
+
+    AuthDeliveryTarget:
+      type: string
+      enum: [WEB, MOBILE]
+      default: WEB
+      description: Selects the primary link target while email retains a web fallback.
+
+    MobileGoogleInput:
+      type: object
+      additionalProperties: false
+      required: [idToken]
+      properties:
+        idToken:
+          type: string
+          minLength: 1
+          maxLength: 16384
+          writeOnly: true
+
+    MobileRefreshInput:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+          maxLength: 1024
           writeOnly: true
 
     AuthActionToken:
@@ -4087,6 +4224,8 @@ components:
         email:
           type: string
           format: email
+        deliveryTarget:
+          $ref: "#/components/schemas/AuthDeliveryTarget"
 
     ResetPasswordInput:
       type: object
@@ -4157,6 +4296,30 @@ components:
           $ref: "#/components/schemas/PublicUser"
         accessToken:
           type: string
+
+    MobileAuthPayload:
+      type: object
+      additionalProperties: false
+      required: [user, accessToken, refreshToken]
+      properties:
+        user:
+          $ref: "#/components/schemas/PublicUser"
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+          writeOnly: true
+
+    MobileRefreshPayload:
+      type: object
+      additionalProperties: false
+      required: [accessToken, refreshToken]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+          writeOnly: true
 
     RegistrationPendingPayload:
       type: object

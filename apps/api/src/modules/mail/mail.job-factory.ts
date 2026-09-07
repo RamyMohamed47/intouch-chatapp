@@ -31,6 +31,7 @@ const createMailOutboxJobFactory = (
           to: input.email,
           displayName: input.displayName,
           token: input.token,
+          deliveryTarget: input.deliveryTarget ?? "WEB",
         },
         input.expiresAt,
       );
@@ -44,6 +45,7 @@ const createMailOutboxJobFactory = (
           to: input.email,
           displayName: input.displayName,
           token: input.token,
+          deliveryTarget: input.deliveryTarget ?? "WEB",
         },
         input.expiresAt,
       );

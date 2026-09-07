@@ -3,6 +3,8 @@ import {
   authRequestAcceptedResponseSchema,
   authResponseSchema,
   googleOAuthCallbackQuerySchema,
+  mobileAuthResponseSchema,
+  mobileRefreshResponseSchema,
   refreshResponseSchema,
   registrationPendingResponseSchema,
 } from "@intouch/shared/auth";
@@ -17,6 +19,10 @@ import {
 import type {
   ForgotPasswordInput,
   LoginInput,
+  MobileGoogleInput,
+  MobileLoginInput,
+  MobileLogoutInput,
+  MobileRefreshInput,
   RegisterInput,
   ResendVerificationInput,
   ResetPasswordInput,
@@ -40,6 +46,10 @@ export interface AuthController {
   forgotPassword: RequestHandler;
   resetPassword: RequestHandler;
   login: RequestHandler;
+  mobileGoogle: RequestHandler;
+  mobileLogin: RequestHandler;
+  mobileLogout: RequestHandler;
+  mobileRefresh: RequestHandler;
   logout: RequestHandler;
   refresh: RequestHandler;
   me: RequestHandler;
@@ -212,6 +222,29 @@ const createAuthController = (
 
     setRefreshCookie(res, cookie, result.refreshToken);
     res.status(200).json(authResponseSchema.parse(result));
+  }),
+
+  mobileLogin: catchAsync(async (req, res) => {
+    const result = await authService.login(req.body as MobileLoginInput);
+    res.status(200).json(mobileAuthResponseSchema.parse(result));
+  }),
+
+  mobileGoogle: catchAsync(async (req, res) => {
+    const { idToken } = req.body as MobileGoogleInput;
+    const result = await authService.loginWithGoogleIdToken(idToken);
+    res.status(200).json(mobileAuthResponseSchema.parse(result));
+  }),
+
+  mobileRefresh: catchAsync(async (req, res) => {
+    const { refreshToken } = req.body as MobileRefreshInput;
+    const result = await authService.refresh(refreshToken);
+    res.status(200).json(mobileRefreshResponseSchema.parse(result));
+  }),
+
+  mobileLogout: catchAsync(async (req, res) => {
+    const { refreshToken } = req.body as MobileLogoutInput;
+    await authService.logout(refreshToken);
+    res.status(204).send();
   }),
 
   refresh: catchAsync(async (_req, res) => {

@@ -236,6 +236,18 @@ const createAuthService = ({
     throw new GoogleIdentityConflictError();
   };
 
+  const authenticateGoogleIdentity = async (
+    identity: GoogleIdentity,
+  ): Promise<AuthResult> => {
+    await loginProtection.clearAttempts(identity.email);
+
+    return unitOfWork.run(async (context) => {
+      const user = await resolveGoogleUser(context.users, identity);
+      await context.users.markEmailVerified(user.id, now());
+      return issueAuthentication(user, context.sessions);
+    });
+  };
+
   return {
     getGoogleAuthorizationUrl(state: string) {
       return googleOAuth.getAuthorizationUrl(state);
@@ -243,15 +255,14 @@ const createAuthService = ({
 
     async loginWithGoogle(code: string): Promise<GoogleAuthResult> {
       const identity = await googleOAuth.exchangeCode(code);
-      await loginProtection.clearAttempts(identity.email);
+      const result = await authenticateGoogleIdentity(identity);
 
-      return unitOfWork.run(async (context) => {
-        const user = await resolveGoogleUser(context.users, identity);
-        await context.users.markEmailVerified(user.id, now());
-        return {
-          refreshToken: await issueRefreshSession(user, context.sessions),
-        };
-      });
+      return { refreshToken: result.refreshToken };
+    },
+
+    async loginWithGoogleIdToken(idToken: string): Promise<AuthResult> {
+      const identity = await googleOAuth.verifyIdToken(idToken);
+      return authenticateGoogleIdentity(identity);
     },
 
     async register(input: RegisterInput): Promise<RegistrationPendingResult> {
@@ -289,6 +300,9 @@ const createAuthService = ({
               displayName: user.displayName,
               token: actionToken.token,
               expiresAt,
+              ...(input.deliveryTarget
+                ? { deliveryTarget: input.deliveryTarget }
+                : {}),
             }),
           );
 
@@ -377,6 +391,9 @@ const createAuthService = ({
             displayName: account.user.displayName,
             token: actionToken.token,
             expiresAt,
+            ...(input.deliveryTarget
+              ? { deliveryTarget: input.deliveryTarget }
+              : {}),
           }),
         );
       });
@@ -405,6 +422,9 @@ const createAuthService = ({
             displayName: account.user.displayName,
             token: actionToken.token,
             expiresAt,
+            ...(input.deliveryTarget
+              ? { deliveryTarget: input.deliveryTarget }
+              : {}),
           }),
         );
       });

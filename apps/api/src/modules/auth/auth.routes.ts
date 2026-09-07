@@ -8,6 +8,10 @@ import type { AuthMiddleware } from "./auth.middleware.js";
 import {
   forgotPasswordSchema,
   loginSchema,
+  mobileGoogleSchema,
+  mobileLoginSchema,
+  mobileLogoutSchema,
+  mobileRefreshSchema,
   registerSchema,
   resendVerificationSchema,
   resetPasswordSchema,
@@ -128,6 +132,30 @@ const createAuthRouter = (
     loginLimit,
     validateBody(loginSchema),
     controller.login,
+  );
+  router.post(
+    "/mobile/login",
+    loginLimit,
+    validateBody(mobileLoginSchema),
+    controller.mobileLogin,
+  );
+  router.post(
+    "/mobile/google",
+    googleCallbackLimit,
+    validateBody(mobileGoogleSchema),
+    controller.mobileGoogle,
+  );
+  router.post(
+    "/mobile/refresh",
+    refreshLimit,
+    validateBody(mobileRefreshSchema),
+    controller.mobileRefresh,
+  );
+  router.post(
+    "/mobile/logout",
+    refreshLimit,
+    validateBody(mobileLogoutSchema),
+    controller.mobileLogout,
   );
   router.post(
     "/verify-email",

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { registerSchema } from "./register.schema.js";
+import { authDeliveryTargetSchema, registerSchema } from "./register.schema.js";
 
 const emailSchema = registerSchema.shape.email;
 const passwordSchema = registerSchema.shape.password;
@@ -17,10 +17,18 @@ export const verifyEmailSchema = z
   .strict();
 
 export const resendVerificationSchema = z
-  .object({ email: emailSchema })
+  .object({
+    email: emailSchema,
+    deliveryTarget: authDeliveryTargetSchema.optional(),
+  })
   .strict();
 
-export const forgotPasswordSchema = z.object({ email: emailSchema }).strict();
+export const forgotPasswordSchema = z
+  .object({
+    email: emailSchema,
+    deliveryTarget: authDeliveryTargetSchema.optional(),
+  })
+  .strict();
 
 export const resetPasswordSchema = z
   .object({

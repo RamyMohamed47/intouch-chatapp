@@ -3,7 +3,7 @@
 All handshake, acknowledgement, client-event, and server-event DTOs originate
 from Zod schemas exported by `@intouch/shared/realtime`. The API parses
 outbound payloads before emission, including conversion of `Date` values to ISO
-8601 strings. Web and future mobile clients consume the inferred shared types
+8601 strings. Web and mobile clients consume the inferred shared types
 rather than redefining event payloads.
 
 ## Authentication

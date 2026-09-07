@@ -90,6 +90,25 @@ describe("Google OAuth client", () => {
     });
   });
 
+  test("verifies a native Google ID token with the web audience", async () => {
+    let verifiedOptions: { audience: string; idToken: string } | undefined;
+    const client = createGoogleOAuthClient(config, {
+      ...createSdk(),
+      verifyIdToken: async (options) => {
+        verifiedOptions = options;
+        return { getPayload: () => payload };
+      },
+    });
+
+    const identity = await client.verifyIdToken("native-id-token");
+
+    assert.deepEqual(verifiedOptions, {
+      audience: config.clientId,
+      idToken: "native-id-token",
+    });
+    assert.equal(identity.providerAccountId, payload.sub);
+  });
+
   test("rejects missing or unverified identity claims", async () => {
     const client = createGoogleOAuthClient(config, {
       ...createSdk({ ...payload, email_verified: false }),

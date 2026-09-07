@@ -1,5 +1,7 @@
 .agents
 **/dist
+**/.expo
+**/expo-env.d.ts
 node_modules
 coverage
 package-lock.json

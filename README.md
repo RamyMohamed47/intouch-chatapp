@@ -37,6 +37,7 @@ Run either application independently when needed:
 ```bash
 npm run dev:api
 npm run dev:web
+npm run dev:mobile
 ```
 
 Frontend server settings are documented in `apps/web/.env.example`.
@@ -58,6 +59,46 @@ Infrastructure lifecycle and troubleshooting are documented under
 [Local Docker Infrastructure](.agents/infrastructure/Local%20Docker%20Infrastructure.md).
 Optional metrics, traces, error monitoring, dashboards, and alert guidance are
 documented under [Observability](.agents/infrastructure/Observability.md).
+
+## Mobile Development
+
+`apps/mobile` is an Expo SDK 57 development-build application. It consumes the
+same API and `@intouch/shared` contracts as the web client. Start the local
+infrastructure and API first, then start Metro separately:
+
+```bash
+npm run infra:up
+npm run dev:api
+npm run dev:mobile
+```
+
+Create `apps/mobile/.env.local` from `apps/mobile/.env.example`. A physical
+device must use the development machine's LAN address, not `localhost`:
+
+```dotenv
+EXPO_PUBLIC_API_URL=http://192.168.1.2:3000
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-google-web-client-id
+```
+
+Set `MOBILE_APP_URL=intouch://` in `apps/api/config.env` so mobile-requested
+verification and reset emails can open the app. `EXPO_PUBLIC_*` values are
+embedded public configuration and must never contain provider secrets.
+
+Google sign-in requires an InTouch development build, an Android OAuth client
+for `com.ramymohamed.intouch`, and the SHA-1 fingerprint of the development or
+EAS signing certificate. From `apps/mobile`, initialize the EAS project once,
+then create the appropriate internal build:
+
+```bash
+eas init
+eas build --profile development --platform android
+eas build --profile preview --platform android
+```
+
+The preview profile produces an installable APK. Expo Go is not supported
+because native Google authentication uses native modules. Detailed setup and
+manual V1 acceptance steps are in
+[Mobile V1](.agents/mobile/Mobile%20V1.md).
 
 ## API Documentation
 
@@ -154,6 +195,7 @@ values are:
 - `GOOGLE_OAUTH_CALLBACK_URL`
 - `GOOGLE_OAUTH_FRONTEND_REDIRECT_URL`
 - `WEB_APP_URL`, the exact frontend origin used in email links
+- `MOBILE_APP_URL`, the native deep-link base; use `intouch://`
 - `MAIL_PROVIDER`; use `brevo` for HTTPS delivery or `smtp` for SMTP
 - `MAIL_FROM_NAME` and `MAIL_FROM_ADDRESS`
 - `SEARCH_PROVIDER`; use `atlas` in production and `native` for local MongoDB
@@ -253,6 +295,7 @@ GOOGLE_OAUTH_CLIENT_ID=replace-with-google-web-client-id
 GOOGLE_OAUTH_CLIENT_SECRET=replace-with-google-web-client-secret
 GOOGLE_OAUTH_CALLBACK_URL=http://localhost:3001/api/v1/auth/oauth/google/callback
 GOOGLE_OAUTH_FRONTEND_REDIRECT_URL=http://localhost:3001/auth/callback
+MOBILE_APP_URL=intouch://
 ```
 
 Password login uses independent per-IP and MongoDB-backed per-account limits.
@@ -345,6 +388,13 @@ access JWT. A failed or cancelled flow redirects with `googleAuth=failed`.
 
 Only `openid`, `email`, and `profile` are requested. Google access and refresh
 tokens are not stored.
+
+Native mobile Google sign-in sends a Google ID token to
+`POST /api/v1/auth/mobile/google`. The API verifies its signature, expiry,
+issuer, verified email, and configured web-client audience before issuing
+InTouch credentials. Native refresh tokens are returned only by the mobile
+session endpoints and are stored in Expo SecureStore; browser authentication
+continues to use its HttpOnly refresh cookie and CSRF protection.
 
 ## Organization Memberships
 
@@ -556,14 +606,11 @@ migration: settings and consent records are created when the feature is enabled.
 ```text
 apps/
 |-- api/                  # Express, Socket.IO, MongoDB, API tests and migrations
-`-- web/                  # Next.js frontend and same-origin API proxy
+|-- web/                  # Next.js frontend and same-origin API proxy
+`-- mobile/               # Expo Router Android-first native client
 packages/
 `-- shared/               # Transport-neutral Zod contracts and shared types
 ```
-
-The future mobile client belongs at `apps/mobile` and should consume
-`@intouch/shared`; it is intentionally not scaffolded until its framework and
-native authentication transport are selected.
 
 ## Railway Deployment
 

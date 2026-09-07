@@ -32,6 +32,7 @@ export interface GoogleIdentity {
 export interface GoogleOAuthClient {
   getAuthorizationUrl(state: string): string;
   exchangeCode(code: string): Promise<GoogleIdentity>;
+  verifyIdToken(idToken: string): Promise<GoogleIdentity>;
 }
 
 export interface OAuthStateManager {

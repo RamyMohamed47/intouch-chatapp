@@ -25,32 +25,46 @@ const page = (content: string) => `<!doctype html>
 const action = (label: string, url: string) =>
   `<p style="margin:28px 0"><a href="${escapeHtml(url)}" style="display:inline-block;border-radius:12px;background:#2f9dff;color:#06101f;padding:13px 20px;text-decoration:none;font-weight:700">${escapeHtml(label)}</a></p><p style="font-size:12px;word-break:break-all;color:#8fa4c2">${escapeHtml(url)}</p>`;
 
-export const createMailRenderer = (webAppUrl: string) => {
+export const createMailRenderer = (
+  webAppUrl: string,
+  mobileAppUrl = "intouch://",
+) => {
   const baseUrl = webAppUrl.replace(/\/$/, "");
+  const mobileBaseUrl = mobileAppUrl.replace(/\/$/, "");
 
   return (payload: MailPayload): RenderedMail => {
     const name = escapeHtml(payload.displayName);
 
     switch (payload.kind) {
       case MailKind.EMAIL_VERIFICATION: {
-        const url = `${baseUrl}/verify-email#token=${encodeURIComponent(payload.token)}`;
+        const path = `/verify-email?token=${encodeURIComponent(payload.token)}`;
+        const url =
+          payload.deliveryTarget === "MOBILE"
+            ? `${mobileBaseUrl}${path}`
+            : `${baseUrl}/verify-email#token=${encodeURIComponent(payload.token)}`;
+        const fallbackUrl = `${baseUrl}/verify-email#token=${encodeURIComponent(payload.token)}`;
         return {
           to: payload.to,
           subject: "Confirm your InTouch email",
-          text: `Hi ${payload.displayName}, confirm your InTouch email within 24 hours: ${url}`,
+          text: `Hi ${payload.displayName}, confirm your InTouch email within 24 hours: ${url}${url === fallbackUrl ? "" : `\nWeb fallback: ${fallbackUrl}`}`,
           html: page(
-            `<h1 style="margin:0 0 16px;font-size:28px">Confirm your email</h1><p>Hi ${name},</p><p>Confirm this email address to activate your InTouch account. This link expires in 24 hours.</p>${action("Confirm email", url)}<p>If you did not create this account, you can ignore this message.</p>`,
+            `<h1 style="margin:0 0 16px;font-size:28px">Confirm your email</h1><p>Hi ${name},</p><p>Confirm this email address to activate your InTouch account. This link expires in 24 hours.</p>${action("Confirm email", url)}${url === fallbackUrl ? "" : `<p>If the app does not open, use the <a href="${escapeHtml(fallbackUrl)}" style="color:#74b9ff">web confirmation link</a>.</p>`}<p>If you did not create this account, you can ignore this message.</p>`,
           ),
         };
       }
       case MailKind.PASSWORD_RESET: {
-        const url = `${baseUrl}/reset-password#token=${encodeURIComponent(payload.token)}`;
+        const path = `/reset-password?token=${encodeURIComponent(payload.token)}`;
+        const url =
+          payload.deliveryTarget === "MOBILE"
+            ? `${mobileBaseUrl}${path}`
+            : `${baseUrl}/reset-password#token=${encodeURIComponent(payload.token)}`;
+        const fallbackUrl = `${baseUrl}/reset-password#token=${encodeURIComponent(payload.token)}`;
         return {
           to: payload.to,
           subject: "Reset your InTouch password",
-          text: `Hi ${payload.displayName}, reset your InTouch password within 15 minutes: ${url}`,
+          text: `Hi ${payload.displayName}, reset your InTouch password within 15 minutes: ${url}${url === fallbackUrl ? "" : `\nWeb fallback: ${fallbackUrl}`}`,
           html: page(
-            `<h1 style="margin:0 0 16px;font-size:28px">Reset your password</h1><p>Hi ${name},</p><p>Use the link below to choose a new InTouch password. This link expires in 15 minutes and can be used once.</p>${action("Reset password", url)}<p>If you did not request this, you can ignore this message.</p>`,
+            `<h1 style="margin:0 0 16px;font-size:28px">Reset your password</h1><p>Hi ${name},</p><p>Use the link below to choose a new InTouch password. This link expires in 15 minutes and can be used once.</p>${action("Reset password", url)}${url === fallbackUrl ? "" : `<p>If the app does not open, use the <a href="${escapeHtml(fallbackUrl)}" style="color:#74b9ff">web reset link</a>.</p>`}<p>If you did not request this, you can ignore this message.</p>`,
           ),
         };
       }

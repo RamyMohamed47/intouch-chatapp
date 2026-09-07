@@ -9,8 +9,13 @@ export default tseslint.config(
       ".agents/**",
       "dist/**",
       "apps/*/dist/**",
+      "apps/*/.expo/**",
       "apps/*/.next/**",
       "apps/web/*.config.mjs",
+      "apps/mobile/*.config.cjs",
+      "apps/mobile/*.config.mjs",
+      "apps/mobile/app.config.ts",
+      "apps/mobile/expo-env.d.ts",
       "packages/*/dist/**",
       "node_modules/**",
       "coverage/**",
@@ -36,6 +41,15 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         ...globals.browser,
+      },
+    },
+  },
+  {
+    files: ["apps/mobile/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.jest,
       },
     },
   },

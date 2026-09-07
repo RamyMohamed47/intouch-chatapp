@@ -72,6 +72,9 @@ const googleOAuth: GoogleOAuthClient = {
   exchangeCode: async () => {
     throw new Error("unused");
   },
+  verifyIdToken: async () => {
+    throw new Error("unused");
+  },
 };
 
 describe("authentication transactions", () => {

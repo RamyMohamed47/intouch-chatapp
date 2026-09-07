@@ -96,6 +96,7 @@ export interface AppConfig {
   mailFromAddress: string;
   mailFromName: string;
   mailTransport: MailTransportConfig;
+  mobileAppUrl: string;
   webAppUrl: string;
   port: number;
   searchProvider: "atlas" | "native";
@@ -239,6 +240,17 @@ const parseWebAppUrl = (
     throw new Error("WEB_APP_URL origin must be included in CLIENT_ORIGINS");
   }
   return url.origin;
+};
+
+const parseMobileAppUrl = (value: string | undefined) => {
+  const normalized = (value ?? "intouch://").trim();
+  const url = new URL(normalized);
+
+  if (url.protocol !== "intouch:") {
+    throw new Error("MOBILE_APP_URL must use the intouch scheme");
+  }
+
+  return "intouch://";
 };
 
 const parseSearchProvider = (
@@ -652,6 +664,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     mailFromAddress: parseEmailAddress(requireEnv(env, "MAIL_FROM_ADDRESS")),
     mailFromName: requireEnv(env, "MAIL_FROM_NAME"),
     mailTransport,
+    mobileAppUrl: parseMobileAppUrl(env.MOBILE_APP_URL),
     port: parsePort(env.PORT),
     searchProvider: parseSearchProvider(env.SEARCH_PROVIDER, isProduction),
     storage: parseStorage(env, isProduction),
