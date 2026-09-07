@@ -6,6 +6,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: "intouch-mobile",
   owner: "ramymohamed47",
   version: "1.0.0",
+  runtimeVersion: {
+    policy: "appVersion",
+  },
+  updates: {
+    url: "https://u.expo.dev/89e46978-2270-438c-93e1-9c32506ea6ed",
+  },
   orientation: "default",
   scheme: "intouch",
   extra: {
