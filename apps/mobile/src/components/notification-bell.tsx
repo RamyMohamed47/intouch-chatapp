@@ -36,7 +36,9 @@ export const NotificationBell = () => {
         pressed && styles.pressed,
       ]}
     >
-      <Bell color={theme.text} size={22} />
+      <View style={styles.icon}>
+        <Bell color={theme.text} size={22} />
+      </View>
       {count ? (
         <View style={[styles.badge, { backgroundColor: theme.danger }]}>
           <Text style={styles.badgeText}>{count > 99 ? "99+" : count}</Text>
@@ -67,5 +69,12 @@ const styles = StyleSheet.create({
     top: -5,
   },
   badgeText: { color: "#ffffff", fontSize: 10, fontWeight: "900" },
+  icon: {
+    alignItems: "center",
+    height: 22,
+    justifyContent: "center",
+    transform: [{ translateY: -1 }],
+    width: 22,
+  },
   pressed: { opacity: 0.72 },
 });
