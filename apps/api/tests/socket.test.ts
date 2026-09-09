@@ -206,6 +206,8 @@ describe("authenticated conversation sockets", () => {
     gateway.messageCreated(message);
     assert.deepEqual(await received, {
       ...message,
+      mentions: [],
+      replyTo: null,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     });

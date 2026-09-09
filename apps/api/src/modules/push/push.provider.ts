@@ -25,6 +25,7 @@ export const createExpoPushProvider = (accessToken: string): PushProvider => {
         title: message.title,
         body: message.body,
         data: message.data,
+        ...(message.badge === undefined ? {} : { badge: message.badge }),
         channelId: "intouch-activity-v2",
         sound: "default",
         priority: "high",

@@ -22,6 +22,8 @@ const messages: InfiniteData<MessageListResponse> = {
           attachments: [],
           reactions: [],
           currentUserReaction: null,
+          mentions: [],
+          replyTo: null,
         },
       ],
     },

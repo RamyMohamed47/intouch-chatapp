@@ -4,6 +4,7 @@ import { dateTimeDtoSchema, identifierDtoSchema } from "../common/index.js";
 import { publicUserSummaryDtoSchema } from "../users/index.js";
 import { attachmentDtoSchema } from "../uploads/index.js";
 import { callSummaryDtoSchema } from "../voice/index.js";
+import { messageMentionSchema } from "./message.schema.js";
 
 export const MessageType = {
   TEXT: "TEXT",
@@ -12,6 +13,16 @@ export const MessageType = {
 } as const;
 
 export const messageTypeSchema = z.enum(MessageType);
+
+export const messageReplyPreviewDtoSchema = z
+  .object({
+    id: identifierDtoSchema,
+    sender: publicUserSummaryDtoSchema,
+    content: z.string().max(160).nullable(),
+    messageType: messageTypeSchema,
+    deletedAt: dateTimeDtoSchema.nullable(),
+  })
+  .strict();
 
 export const messageCoreDtoSchema = z.object({
   id: identifierDtoSchema,
@@ -25,6 +36,8 @@ export const messageCoreDtoSchema = z.object({
   updatedAt: dateTimeDtoSchema,
   attachments: z.array(attachmentDtoSchema).default([]),
   call: callSummaryDtoSchema.nullable().optional(),
+  mentions: z.array(messageMentionSchema).default([]),
+  replyTo: messageReplyPreviewDtoSchema.nullable().default(null),
 });
 
 export const messageReactionSummaryDtoSchema = z
@@ -104,6 +117,10 @@ export const messageReadReceiptSummaryResponseSchema = z.object({
 });
 
 export type MessageTypeValue = z.infer<typeof messageTypeSchema>;
+export type MessageMention = z.infer<typeof messageMentionSchema>;
+export type MessageReplyPreviewDto = z.infer<
+  typeof messageReplyPreviewDtoSchema
+>;
 export type MessageCoreDto = z.infer<typeof messageCoreDtoSchema>;
 export type MessageDto = z.infer<typeof messageDtoSchema>;
 export type MessageResponse = z.infer<typeof messageResponseSchema>;

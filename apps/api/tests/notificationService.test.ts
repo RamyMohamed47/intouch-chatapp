@@ -57,7 +57,10 @@ const repository = (
   ...overrides,
 });
 
-const createHarness = (notifications = repository()) => {
+const createHarness = (
+  notifications = repository(),
+  allowsPush: boolean | undefined = undefined,
+) => {
   const events: Parameters<NotificationRealtime["notificationChanged"]>[] = [];
   const service = createNotificationService({
     logger: { error() {} },
@@ -91,6 +94,9 @@ const createHarness = (notifications = repository()) => {
         },
       ],
     },
+    ...(allowsPush === undefined
+      ? {}
+      : { preferences: { allowsPush: async () => allowsPush } }),
     now: () => now,
   });
   return { events, service };
@@ -126,6 +132,19 @@ describe("notification service", () => {
       service.markRead(record.recipientUserId, record.id),
       NotificationNotFoundError,
     );
+  });
+
+  test("checks current preferences immediately before push delivery", async () => {
+    const { service: suppressed } = createHarness(repository(), false);
+    assert.equal(
+      await suppressed.findForPush(record.id, record.pushVersion),
+      null,
+    );
+
+    const { service: allowed } = createHarness(repository(), true);
+    const push = await allowed.findForPush(record.id, record.pushVersion);
+    assert.equal(push?.notification.id, record.id);
+    assert.equal(push?.unreadCount, 1);
   });
 
   test("declares recipient, grouping, cleanup, and expiry indexes", () => {

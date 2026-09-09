@@ -5,13 +5,20 @@ import {
   ConversationType,
   ConversationVisibility,
 } from "@intouch/shared/conversations";
+import { MembershipRole } from "@intouch/shared/memberships";
+import { NotificationType } from "@intouch/shared/notifications";
 
 import type { MessageBroadcaster } from "../src/broadcasting/messageBroadcaster.js";
 import createConversationPolicy from "../src/modules/conversations/conversation.policy.js";
 import type { ConversationRecord } from "../src/modules/conversations/conversation.types.js";
 import type { MessageRepository } from "../src/modules/message/message.repository.js";
-import { MessageNotFoundError } from "../src/modules/message/message.errors.js";
+import {
+  MessageNotFoundError,
+  MessageValidationError,
+} from "../src/modules/message/message.errors.js";
 import createMessageService from "../src/modules/message/message.service.js";
+import type { NotificationRepository } from "../src/modules/notifications/notification.repository.js";
+import type { OrganizationWorkContext } from "../src/modules/organizations/organization.unit-of-work.js";
 import { UploadConflictError } from "../src/modules/uploads/upload.errors.js";
 import type {
   StoredAssetRecord,
@@ -23,6 +30,7 @@ import {
   MessageType,
   type MessageRecord,
 } from "../src/modules/message/message.types.js";
+import type { UserRepository } from "../src/modules/user/user.repository.js";
 import {
   createTestUnitOfWork,
   emptyCommunicationContext,
@@ -107,6 +115,8 @@ const createService = (
   },
   uploads?: Pick<UploadService, "decorate">,
   assetOverrides: Partial<StoredAssetRepository> = {},
+  contextOverrides: Partial<OrganizationWorkContext> = {},
+  users?: Pick<UserRepository, "findPublicByIds">,
 ) =>
   createMessageService({
     activity,
@@ -125,6 +135,7 @@ const createService = (
           currentUserReaction: null,
         })),
     },
+    ...(users ? { users } : {}),
     ...(uploads ? { uploads } : {}),
     unitOfWork: createTestUnitOfWork({
       conversations: {
@@ -149,6 +160,7 @@ const createService = (
         ...emptyCommunicationContext.assets,
         ...assetOverrides,
       },
+      ...contextOverrides,
     }),
   });
 
@@ -157,7 +169,15 @@ describe("messageService", () => {
     const service = createService(createRepository(), createBroadcaster());
     const result = await service.list(userId, conversationId, { limit: 50 });
     assert.deepEqual(result, {
-      messages: [{ ...message, reactions: [], currentUserReaction: null }],
+      messages: [
+        {
+          ...message,
+          mentions: [],
+          replyTo: null,
+          reactions: [],
+          currentUserReaction: null,
+        },
+      ],
       nextCursor: null,
     });
   });
@@ -177,7 +197,15 @@ describe("messageService", () => {
       await service.context(userId, conversationId, message.id),
       {
         anchorMessageId: message.id,
-        messages: [{ ...message, reactions: [], currentUserReaction: null }],
+        messages: [
+          {
+            ...message,
+            mentions: [],
+            replyTo: null,
+            reactions: [],
+            currentUserReaction: null,
+          },
+        ],
         hasEarlier: true,
         hasLater: true,
       },
@@ -216,10 +244,12 @@ describe("messageService", () => {
     });
     assert.deepEqual(result, {
       ...message,
+      mentions: [],
+      replyTo: null,
       reactions: [],
       currentUserReaction: null,
     });
-    assert.deepEqual(broadcaster.created, [message]);
+    assert.deepEqual(broadcaster.created, [result]);
     assert.deepEqual(activityCalls, [userId]);
   });
 
@@ -333,6 +363,163 @@ describe("messageService", () => {
     );
     assert.deepEqual(broadcaster.created, []);
     assert.equal(activityCalls, 0);
+  });
+
+  test("validates mentions and gives reply notifications precedence", async () => {
+    const recipientUserId = "507f1f77bcf86cd799439017";
+    const replyMessageId = "507f1f77bcf86cd799439018";
+    const content = "Hi @Teammate";
+    const mention = { userId: recipientUserId, start: 3, end: 12 };
+    const recipient = {
+      id: recipientUserId,
+      username: "teammate",
+      displayName: "Teammate",
+      email: "teammate@example.test",
+      createdAt: now,
+      updatedAt: now,
+    };
+    const replyTarget: MessageRecord = {
+      ...message,
+      id: replyMessageId,
+      senderId: recipientUserId,
+      content: "Original",
+    };
+    const created: MessageRecord = {
+      ...message,
+      content,
+      replyToMessageId: replyMessageId,
+      mentions: [mention],
+      notifiedMentionUserIds: [recipientUserId],
+    };
+    const notificationInputs: Parameters<
+      NotificationRepository["create"]
+    >[0][] = [];
+    let persistedInput: Parameters<MessageRepository["create"]>[0] | undefined;
+    const userRepository = {
+      findPublicByIds: async () => [recipient],
+    };
+    const membership = {
+      id: "507f1f77bcf86cd799439019",
+      userId: recipientUserId,
+      organizationId: conversation.organizationId,
+      role: MembershipRole.MEMBER,
+      joinedAt: now,
+    };
+    const service = createService(
+      createRepository({
+        create: async (input) => {
+          persistedInput = input;
+          return created;
+        },
+        findById: async (id) => (id === replyMessageId ? replyTarget : message),
+        findByIds: async (ids) =>
+          ids.includes(replyMessageId) ? [replyTarget] : [],
+      }),
+      createBroadcaster(),
+      undefined,
+      undefined,
+      {},
+      {
+        memberships: {
+          createOwner: async () => membership,
+          createMember: async () => membership,
+          findForUser: async (candidateUserId) =>
+            candidateUserId === recipientUserId ? membership : null,
+          listForUser: async () => [],
+          listForOrganization: async () => [
+            membership,
+            { ...membership, id: userId, userId },
+          ],
+          deleteForOrganization: async () => 0,
+        },
+        notifications: {
+          ...emptyCommunicationContext.notifications,
+          create: async (input) => {
+            notificationInputs.push(input);
+            return emptyCommunicationContext.notifications.create(input);
+          },
+        },
+        users: {
+          ...emptyCommunicationContext.users,
+          ...userRepository,
+        },
+      },
+      userRepository,
+    );
+
+    const result = await service.create(userId, conversationId, {
+      content,
+      replyToMessageId: replyMessageId,
+      mentions: [mention],
+    });
+
+    assert.equal(persistedInput?.replyToMessageId, replyMessageId);
+    assert.deepEqual(persistedInput?.mentions, [mention]);
+    assert.deepEqual(persistedInput?.notifiedMentionUserIds, [recipientUserId]);
+    assert.equal(notificationInputs.length, 1);
+    assert.equal(
+      notificationInputs[0]?.type,
+      NotificationType.MESSAGE_REPLY_RECEIVED,
+    );
+    assert.equal(notificationInputs[0]?.recipientUserId, recipientUserId);
+    assert.deepEqual(result.replyTo, {
+      id: replyMessageId,
+      sender: {
+        id: recipientUserId,
+        username: recipient.username,
+        displayName: recipient.displayName,
+        avatarAssetId: null,
+      },
+      content: replyTarget.content,
+      messageType: MessageType.TEXT,
+      deletedAt: null,
+    });
+  });
+
+  test("rejects mentions of users outside the conversation membership", async () => {
+    const outsiderUserId = "507f1f77bcf86cd799439017";
+    const outsider = {
+      id: outsiderUserId,
+      username: "outsider",
+      displayName: "Outsider",
+      email: "outsider@example.test",
+      createdAt: now,
+      updatedAt: now,
+    };
+    const service = createService(
+      createRepository(),
+      createBroadcaster(),
+      undefined,
+      undefined,
+      {},
+      {
+        memberships: {
+          createOwner: async () => {
+            throw new Error("unused");
+          },
+          createMember: async () => {
+            throw new Error("unused");
+          },
+          findForUser: async () => null,
+          listForUser: async () => [],
+          listForOrganization: async () => [],
+          deleteForOrganization: async () => 0,
+        },
+        users: {
+          ...emptyCommunicationContext.users,
+          findPublicByIds: async () => [outsider],
+        },
+      },
+      { findPublicByIds: async () => [outsider] },
+    );
+
+    await assert.rejects(
+      service.create(userId, conversationId, {
+        content: "Hi @Outsider",
+        mentions: [{ userId: outsiderUserId, start: 3, end: 12 }],
+      }),
+      MessageValidationError,
+    );
   });
 
   test("does not redact an already deleted message again", async () => {

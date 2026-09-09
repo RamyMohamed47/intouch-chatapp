@@ -565,6 +565,7 @@ const app = createApp({
   messageRouter: organizations.messageRouter,
   messageReactionRouter: organizations.messageReactionRouter,
   notificationRouter: organizations.notificationRouter,
+  notificationPreferenceRouter: organizations.notificationPreferenceRouter,
   ...(pushRuntime ? { pushDeviceRouter: pushRuntime.router } : {}),
   organizationAccessRouter: organizations.accessRouter,
   organizationConversationRouter: organizations.organizationConversationRouter,

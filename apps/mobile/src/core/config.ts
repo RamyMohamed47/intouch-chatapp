@@ -11,8 +11,13 @@ const googleWebClientId = publicEnvironmentValue(
   process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
   "unconfigured.apps.googleusercontent.com",
 );
+const sentryDsn =
+  typeof process.env.EXPO_PUBLIC_SENTRY_DSN === "string"
+    ? process.env.EXPO_PUBLIC_SENTRY_DSN.trim()
+    : "";
 
 export const mobileConfig = {
   apiUrl: trimTrailingSlash(apiUrl),
   googleWebClientId,
+  sentryDsn,
 } as const;

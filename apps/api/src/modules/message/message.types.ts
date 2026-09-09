@@ -2,6 +2,8 @@ import type {
   CreateMessageInput,
   MessageHistoryQuery,
   MessageReactionSummaryDto,
+  MessageMention,
+  MessageReplyPreviewDto,
   UpdateMessageInput,
 } from "@intouch/shared/messages";
 import { MessageType, type MessageTypeValue } from "@intouch/shared/messages";
@@ -18,6 +20,13 @@ export interface Message {
   content: string | null;
   messageType: MessageTypeValue;
   callId?: Types.ObjectId;
+  replyToMessageId?: Types.ObjectId;
+  mentions: Array<{
+    userId: Types.ObjectId;
+    start: number;
+    end: number;
+  }>;
+  notifiedMentionUserIds: Types.ObjectId[];
   editedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
@@ -31,12 +40,16 @@ export interface MessageRecord {
   content: string | null;
   messageType: MessageTypeValue;
   callId?: string;
+  replyToMessageId?: string;
+  mentions?: MessageMention[];
+  notifiedMentionUserIds?: string[];
   editedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   attachments: AttachmentDto[];
   call?: CallSummaryDto | null;
+  replyTo?: MessageReplyPreviewDto | null;
 }
 
 export interface CreateMessageRecordInput {
@@ -45,6 +58,9 @@ export interface CreateMessageRecordInput {
   content: string | null;
   messageType: MessageTypeValue;
   callId?: string;
+  replyToMessageId?: string;
+  mentions?: MessageMention[];
+  notifiedMentionUserIds?: string[];
 }
 
 export interface MessagePage {

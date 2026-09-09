@@ -24,6 +24,7 @@ import {
   Muted,
 } from "@/components/ui/controls";
 import { OrganizationAvatar } from "@/components/organization-avatar";
+import { NotificationMuteButton } from "@/components/notification-mute-button";
 import { Screen } from "@/components/ui/screen";
 import { UserAvatar } from "@/components/user-avatar";
 import { useAppearance } from "@/features/appearance/appearance-provider";
@@ -35,6 +36,7 @@ import {
   prepareSquareImage,
   uploadFiles,
 } from "@/features/uploads/upload-client";
+import { requestMediaLibraryAccess } from "@/features/uploads/media-library-permission";
 import { uploadsApi } from "@/features/uploads/uploads-api";
 
 export default function WorkspaceDetailScreen() {
@@ -206,6 +208,7 @@ export default function WorkspaceDetailScreen() {
     });
 
   const replaceLogo = async () => {
+    if (!(await requestMediaLibraryAccess())) return;
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
     });
@@ -271,6 +274,9 @@ export default function WorkspaceDetailScreen() {
           <Heading>{organization.data?.name ?? "Workspace"}</Heading>
           <Muted>{organization.data?.visibility} workspace</Muted>
         </View>
+        <NotificationMuteButton
+          scope={{ kind: "organization", organizationId }}
+        />
       </View>
 
       {isOwner ? (

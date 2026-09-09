@@ -72,8 +72,12 @@ import {
   type MessageReactionRealtime,
 } from "../message-reactions/index.js";
 import {
+  createMongooseNotificationPreferenceRepository,
   createMongooseNotificationRepository,
   createNotificationController,
+  createNotificationPreferenceController,
+  createNotificationPreferenceRouter,
+  createNotificationPreferenceService,
   createNotificationRouter,
   createNotificationService,
   type NotificationRealtime,
@@ -277,6 +281,8 @@ const createOrganizationModule = ({
   const calls = createMongooseCallSessionRepository();
   const organizations = createMongooseOrganizationRepository();
   const notifications = createMongooseNotificationRepository();
+  const notificationPreferences =
+    createMongooseNotificationPreferenceRepository();
   const invitations = createMongooseInvitationRepository();
   const memberships = createMembershipService(
     createMongooseMembershipRepository(),
@@ -295,6 +301,7 @@ const createOrganizationModule = ({
   const notificationService = createNotificationService({
     logger,
     notifications,
+    preferences: notificationPreferences,
     organizations,
     realtime: notificationRealtime,
     ...(pushPublisher ? { push: pushPublisher } : {}),
@@ -389,6 +396,13 @@ const createOrganizationModule = ({
         ) ?? Promise.resolve(),
     },
   });
+  const notificationPreferenceService = createNotificationPreferenceService({
+    conversations: conversationService,
+    memberships,
+    preferences: notificationPreferences,
+  });
+  const notificationPreferenceController =
+    createNotificationPreferenceController(notificationPreferenceService);
   const voiceService = createVoiceService({
     activity: conversationActivity,
     audiences: createMongooseConversationActivityAudienceRepository(),
@@ -447,6 +461,7 @@ const createOrganizationModule = ({
     reactions: messageReactionService,
     uploads: uploadService,
     unitOfWork,
+    users,
   });
   const directMessageService = createDirectMessageService({
     activity: conversationActivity,
@@ -571,6 +586,11 @@ const createOrganizationModule = ({
     requireAccessToken,
     mutateNotificationLimit,
   );
+  const notificationPreferenceRouter = createNotificationPreferenceRouter(
+    notificationPreferenceController,
+    requireAccessToken,
+    mutateNotificationLimit,
+  );
   const uploadRouter = createUploadRouter(
     uploadController,
     requireAccessToken,
@@ -621,6 +641,7 @@ const createOrganizationModule = ({
     messageRouter,
     messageReactionRouter,
     notificationRouter,
+    notificationPreferenceRouter,
     notificationService,
     membershipDirectory,
     organizationConversationRouter,

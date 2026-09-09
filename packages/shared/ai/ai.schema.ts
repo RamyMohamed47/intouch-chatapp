@@ -217,6 +217,7 @@ export const aiSseEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export type AiResponseRequest = z.infer<typeof aiResponseRequestSchema>;
+export type AiHistoryMessage = z.infer<typeof aiHistoryMessageSchema>;
 export type AiOrganizationSettingsUpdate = z.infer<
   typeof aiOrganizationSettingsUpdateSchema
 >;

@@ -48,6 +48,7 @@ class InTouchMetrics {
   readonly aiDuration: Histogram;
   readonly aiContext: Histogram;
   readonly aiTokens: Histogram;
+  readonly pushOutcomes: Counter;
 
   private readonly readinessChecks = new Map<string, ReadinessCheck>();
   private readonly queueDepthChecks = new Map<string, QueueDepthCheck>();
@@ -125,6 +126,9 @@ class InTouchMetrics {
     });
     this.aiTokens = meter.createHistogram("intouch.ai.tokens", {
       description: "AI provider token usage",
+    });
+    this.pushOutcomes = meter.createCounter("intouch.push.outcomes", {
+      description: "Mobile push delivery outcomes",
     });
 
     meter
@@ -375,6 +379,12 @@ class InTouchMetrics {
     const task = input.task.toLowerCase();
     this.aiTokens.record(input.inputTokens, { direction: "input", task });
     this.aiTokens.record(input.outputTokens, { direction: "output", task });
+  }
+
+  recordPushOutcome(
+    outcome: "sent" | "suppressed" | "rejected" | "retried" | "failed",
+  ) {
+    this.pushOutcomes.add(1, { outcome });
   }
 
   close() {

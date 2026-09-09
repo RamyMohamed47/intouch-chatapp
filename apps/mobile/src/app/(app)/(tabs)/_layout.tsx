@@ -1,5 +1,10 @@
 import { Tabs } from "expo-router";
-import { MessageCircle, UserRound, Warehouse } from "lucide-react-native";
+import {
+  MessageCircle,
+  Sparkles,
+  UserRound,
+  Warehouse,
+} from "lucide-react-native";
 
 import { useAppearance } from "@/features/appearance/appearance-provider";
 
@@ -31,6 +36,13 @@ export default function TabsLayout() {
         options={{
           title: "Workspaces",
           tabBarIcon: ({ color }) => <Warehouse color={color} size={22} />,
+        }}
+      />
+      <Tabs.Screen
+        name="echo"
+        options={{
+          title: "Echo",
+          tabBarIcon: ({ color }) => <Sparkles color={color} size={22} />,
         }}
       />
       <Tabs.Screen

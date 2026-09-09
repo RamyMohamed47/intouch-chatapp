@@ -7,6 +7,7 @@ import type {
   Message,
   MessageRecord,
 } from "./message.types.js";
+import type { MessageMention } from "@intouch/shared/messages";
 
 interface MessageDocument extends Message {
   _id: Types.ObjectId;
@@ -15,6 +16,7 @@ interface MessageDocument extends Message {
 export interface MessageRepository {
   create(input: CreateMessageRecordInput): Promise<MessageRecord>;
   findById(messageId: string): Promise<MessageRecord | null>;
+  findByIds?(messageIds: readonly string[]): Promise<MessageRecord[]>;
   listByConversation(
     conversationId: string,
     before: string | undefined,
@@ -32,6 +34,8 @@ export interface MessageRepository {
   updateContent(
     messageId: string,
     content: string | null,
+    mentions: readonly MessageMention[],
+    notifiedMentionUserIds: readonly string[],
     editedAt: Date,
   ): Promise<MessageRecord | null>;
   redact(messageId: string, deletedAt: Date): Promise<MessageRecord | null>;
@@ -46,12 +50,24 @@ const toMessageRecord = (message: MessageDocument): MessageRecord => ({
   content: message.content,
   messageType: message.messageType,
   ...(message.callId ? { callId: message.callId.toString() } : {}),
+  ...(message.replyToMessageId
+    ? { replyToMessageId: message.replyToMessageId.toString() }
+    : {}),
+  mentions: (message.mentions ?? []).map(({ userId, start, end }) => ({
+    userId: userId.toString(),
+    start,
+    end,
+  })),
+  notifiedMentionUserIds: (message.notifiedMentionUserIds ?? []).map((id) =>
+    id.toString(),
+  ),
   editedAt: message.editedAt,
   deletedAt: message.deletedAt,
   createdAt: message.createdAt,
   updatedAt: message.updatedAt,
   attachments: [],
   call: null,
+  replyTo: null,
 });
 
 const createMongooseMessageRepository = (
@@ -68,10 +84,21 @@ const createMongooseMessageRepository = (
   },
 
   async findById(messageId) {
-    const query = MessageModel.findById(messageId).lean<MessageDocument>();
+    const query = MessageModel.findById(messageId)
+      .select("+notifiedMentionUserIds")
+      .lean<MessageDocument>();
     if (session) query.session(session);
     const message = await query.exec();
     return message ? toMessageRecord(message) : null;
+  },
+
+  async findByIds(messageIds) {
+    if (messageIds.length === 0) return [];
+    const query = MessageModel.find({ _id: { $in: messageIds } }).lean<
+      MessageDocument[]
+    >();
+    if (session) query.session(session);
+    return (await query.exec()).map(toMessageRecord);
   },
 
   async listByConversation(conversationId, before, limit) {
@@ -119,10 +146,16 @@ const createMongooseMessageRepository = (
     };
   },
 
-  async updateContent(messageId, content, editedAt) {
+  async updateContent(
+    messageId,
+    content,
+    mentions,
+    notifiedMentionUserIds,
+    editedAt,
+  ) {
     const query = MessageModel.findOneAndUpdate(
       { _id: messageId, deletedAt: null },
-      { $set: { content, editedAt } },
+      { $set: { content, mentions, notifiedMentionUserIds, editedAt } },
       { new: true, runValidators: true },
     ).lean<MessageDocument>();
     if (session) query.session(session);

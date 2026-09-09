@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => {
     attachments: [],
     reactions: [],
     currentUserReaction: null,
+    mentions: [],
+    replyTo: null,
   };
   const state: {
     conversationType: "CHANNEL" | "DIRECT";
@@ -77,6 +79,7 @@ const mocks = vi.hoisted(() => {
     stopTyping: vi.fn(),
     routerReplace: vi.fn(),
     routerPush: vi.fn(),
+    useParticipants: vi.fn(),
     updateReadReceipt: vi.fn(() =>
       Promise.resolve({
         id: "650000000000000000000001",
@@ -276,6 +279,29 @@ vi.mock("@/lib/query/hooks", () => ({
     isPending: false,
     isError: false,
   }),
+  useParticipants: (conversationId: string, enabled = true) => {
+    mocks.useParticipants(conversationId, enabled);
+    return {
+      data: [
+        {
+          id: "64e000000000000000000003",
+          organizationId: "64c000000000000000000001",
+          conversationId: "64d000000000000000000001",
+          userId: "64b000000000000000000002",
+          addedByUserId: "64b000000000000000000001",
+          joinedAt: "2026-08-01T10:00:00.000Z",
+          user: {
+            id: "64b000000000000000000002",
+            username: "lina",
+            displayName: "Lina Hassan",
+            avatarAssetId: null,
+          },
+        },
+      ],
+      isPending: false,
+      isError: false,
+    };
+  },
   useMessageReaders: () => ({
     data: mocks.state.channelReaderSummary,
     isPending: false,
@@ -333,6 +359,7 @@ describe("ConversationPage interactions", () => {
     mocks.createMessage.mockClear();
     mocks.createDirectMessage.mockClear();
     mocks.routerPush.mockClear();
+    mocks.useParticipants.mockClear();
     mocks.removeMessage.mockReset();
     mocks.removeMessage.mockResolvedValue(undefined);
   });
@@ -359,6 +386,11 @@ describe("ConversationPage interactions", () => {
   it("shows the direct-message peer presence in the header", () => {
     mocks.state.conversationType = "DIRECT";
     renderConversation();
+
+    expect(mocks.useParticipants).toHaveBeenCalledWith(
+      "64d000000000000000000001",
+      false,
+    );
 
     expect(
       screen.getByRole("heading", { name: "Lina Hassan" }),

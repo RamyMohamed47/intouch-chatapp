@@ -47,6 +47,9 @@ import createMongooseCallSessionRepository, {
 import createMongooseAiRepository, {
   type AiRepository,
 } from "../ai/ai.repository.js";
+import createMongooseUserRepository, {
+  type UserRepository,
+} from "../user/user.repository.js";
 
 export interface OrganizationWorkContext {
   categories: CategoryRepository;
@@ -64,6 +67,7 @@ export interface OrganizationWorkContext {
   assets: StoredAssetRepository;
   calls?: CallSessionRepository;
   ai?: AiRepository;
+  users?: UserRepository;
 }
 
 export interface OrganizationUnitOfWork {
@@ -92,6 +96,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
       const assets = createMongooseStoredAssetRepository(session);
       const calls = createMongooseCallSessionRepository(session);
       const ai = createMongooseAiRepository(session);
+      const users = createMongooseUserRepository(session);
 
       return work({
         categories,
@@ -109,6 +114,7 @@ const createMongooseOrganizationUnitOfWork = (): OrganizationUnitOfWork => ({
         assets,
         calls,
         ai,
+        users,
       });
     });
   },

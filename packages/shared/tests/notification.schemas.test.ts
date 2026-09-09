@@ -8,6 +8,9 @@ import {
   notificationChangedEventSchema,
   notificationDtoSchema,
   notificationListQuerySchema,
+  notificationMuteRequestSchema,
+  notificationPreferencesResponseSchema,
+  updateNotificationPreferencesSchema,
 } from "../notifications/index.js";
 
 const id = "507f1f77bcf86cd799439011";
@@ -75,6 +78,65 @@ describe("notification contracts", () => {
         notificationId: id,
       }).success,
       false,
+    );
+  });
+
+  test("validates notification categories and timed or permanent mutes", () => {
+    const categories = {
+      invitations: true,
+      directMessages: false,
+      mentionsAndReplies: true,
+      reactions: false,
+    };
+    assert.deepEqual(
+      updateNotificationPreferencesSchema.parse({ categories }),
+      {
+        categories,
+      },
+    );
+    assert.deepEqual(
+      notificationMuteRequestSchema.parse({ mutedUntil: null }),
+      {
+        mutedUntil: null,
+      },
+    );
+    assert.equal(
+      notificationMuteRequestSchema.safeParse({ mutedUntil: null, extra: true })
+        .success,
+      false,
+    );
+    assert.equal(
+      notificationPreferencesResponseSchema.safeParse({
+        preferences: { categories, mutes: [] },
+      }).success,
+      true,
+    );
+  });
+
+  test("parses dedicated mention and reply notifications", () => {
+    const base = {
+      id: notification.id,
+      actor: notification.actor,
+      organization: notification.organization,
+      conversationId: "507f1f77bcf86cd799439014",
+      messageId: "507f1f77bcf86cd799439015",
+      readAt: notification.readAt,
+      createdAt: notification.createdAt,
+      lastActivityAt: notification.lastActivityAt,
+    };
+    assert.equal(
+      notificationDtoSchema.safeParse({
+        ...base,
+        type: NotificationType.CHANNEL_MENTION_RECEIVED,
+      }).success,
+      true,
+    );
+    assert.equal(
+      notificationDtoSchema.safeParse({
+        ...base,
+        type: NotificationType.MESSAGE_REPLY_RECEIVED,
+      }).success,
+      true,
     );
   });
 });

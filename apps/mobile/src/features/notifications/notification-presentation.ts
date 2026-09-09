@@ -30,6 +30,16 @@ export const notificationCopy = (notification: NotificationDto) => {
         title: `${notification.actor.displayName} reacted ${notification.emoji}`,
         description: `They reacted to your message in ${notification.organization.name}.`,
       };
+    case NotificationType.CHANNEL_MENTION_RECEIVED:
+      return {
+        title: `${notification.actor.displayName} mentioned you`,
+        description: `Open the message in ${notification.organization.name}.`,
+      };
+    case NotificationType.MESSAGE_REPLY_RECEIVED:
+      return {
+        title: `${notification.actor.displayName} replied to you`,
+        description: `Open the reply in ${notification.organization.name}.`,
+      };
   }
 };
 
@@ -51,6 +61,8 @@ export const notificationHref = (notification: NotificationDto): Href => {
         },
       };
     case NotificationType.MESSAGE_REACTION_RECEIVED:
+    case NotificationType.CHANNEL_MENTION_RECEIVED:
+    case NotificationType.MESSAGE_REPLY_RECEIVED:
       return {
         pathname: "/conversation/[conversationId]",
         params: {

@@ -21,6 +21,7 @@ import {
   MailKind,
   type MailOutboxJobFactory,
 } from "../src/modules/mail/index.js";
+import type { UserRepository } from "../src/modules/user/user.repository.js";
 
 const unused = (): never => {
   throw new Error("Unused test repository method");
@@ -222,6 +223,22 @@ const assets: StoredAssetRepository = {
   scheduleCleanupRetry: async () => undefined,
 };
 
+const users: UserRepository = {
+  hasIdentityConflict: async () => false,
+  createPasswordUser: async () => unused(),
+  createGoogleUser: async () => unused(),
+  findPasswordUserByEmail: async () => null,
+  findPublicByEmail: async () => null,
+  findPublicById: async () => null,
+  findPublicByIds: async () => [],
+  findLastSeenByIds: async () => [],
+  linkGoogleProvider: async () => null,
+  touchPasswordProvider: async () => undefined,
+  useGoogleProvider: async () => null,
+  usernameExists: async () => false,
+  updateLastSeen: async () => undefined,
+};
+
 export const testMailFactory: MailOutboxJobFactory = {
   verification: (input) => ({
     aggregateKey: `auth-verification:${input.userId}`,
@@ -263,6 +280,7 @@ export const emptyCommunicationContext = {
   mailOutbox,
   notifications,
   assets,
+  users,
 };
 
 const organizations: OrganizationRepository = {

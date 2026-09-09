@@ -16,6 +16,7 @@ import {
 } from "./notification.errors.js";
 import type { NotificationRealtime } from "./notification.realtime.js";
 import type { NotificationRepository } from "./notification.repository.js";
+import type { NotificationPreferenceRepository } from "./notification-preference.repository.js";
 import type {
   NotificationCursor,
   NotificationPage,
@@ -70,6 +71,7 @@ export interface NotificationServiceDependencies {
   realtime: NotificationRealtime;
   push?: { enqueue(record: NotificationRecord): Promise<void> };
   users: Pick<UserRepository, "findPublicByIds">;
+  preferences?: Pick<NotificationPreferenceRepository, "allowsPush">;
   now?: () => Date;
 }
 
@@ -80,6 +82,7 @@ const createNotificationService = ({
   realtime,
   push,
   users,
+  preferences,
   now = () => new Date(),
 }: NotificationServiceDependencies) => {
   const hydrate = async (
@@ -169,6 +172,18 @@ const createNotificationService = ({
                 }),
               ]
             : [];
+        case NotificationType.CHANNEL_MENTION_RECEIVED:
+        case NotificationType.MESSAGE_REPLY_RECEIVED:
+          return record.conversationId && record.messageId
+            ? [
+                notificationDtoSchema.parse({
+                  ...common,
+                  type: record.type,
+                  conversationId: record.conversationId,
+                  messageId: record.messageId,
+                }),
+              ]
+            : [];
       }
     });
   };
@@ -228,9 +243,30 @@ const createNotificationService = ({
       ) {
         return null;
       }
+      if (
+        preferences &&
+        !(await preferences.allowsPush({
+          userId: record.recipientUserId,
+          type: record.type,
+          organizationId: record.organizationId,
+          ...(record.conversationId
+            ? { conversationId: record.conversationId }
+            : {}),
+          now: now(),
+        }))
+      ) {
+        return null;
+      }
       const [notification] = await hydrate([record]);
       return notification
-        ? { notification, recipientUserId: record.recipientUserId }
+        ? {
+            notification,
+            recipientUserId: record.recipientUserId,
+            unreadCount: await notifications.countUnread(
+              record.recipientUserId,
+              now(),
+            ),
+          }
         : null;
     },
 

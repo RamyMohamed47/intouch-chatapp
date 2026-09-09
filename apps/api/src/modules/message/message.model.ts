@@ -18,6 +18,29 @@ const messageSchema = new Schema<Message>(
       required: true,
     },
     callId: { type: Schema.Types.ObjectId, ref: "CallSession" },
+    replyToMessageId: { type: Schema.Types.ObjectId, ref: "Message" },
+    mentions: {
+      type: [
+        new Schema(
+          {
+            userId: {
+              type: Schema.Types.ObjectId,
+              ref: "User",
+              required: true,
+            },
+            start: { type: Number, min: 0, required: true },
+            end: { type: Number, min: 1, required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    notifiedMentionUserIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+      select: false,
+    },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
   },
@@ -27,6 +50,13 @@ const messageSchema = new Schema<Message>(
 messageSchema.index(
   { conversationId: 1, _id: -1 },
   { name: "messages_by_conversation_cursor" },
+);
+messageSchema.index(
+  { replyToMessageId: 1 },
+  {
+    name: "messages_by_reply_target",
+    partialFilterExpression: { replyToMessageId: { $type: "objectId" } },
+  },
 );
 messageSchema.index(
   { callId: 1 },

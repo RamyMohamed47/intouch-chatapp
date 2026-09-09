@@ -32,6 +32,7 @@ export interface AppDependencies {
   messageRouter?: Router;
   messageReactionRouter?: Router;
   notificationRouter?: Router;
+  notificationPreferenceRouter?: Router;
   organizationAccessRouter?: Router;
   organizationConversationRouter?: Router;
   organizationRouter?: Router;
@@ -64,6 +65,7 @@ const createApp = ({
   messageRouter,
   messageReactionRouter,
   notificationRouter,
+  notificationPreferenceRouter,
   organizationAccessRouter,
   organizationConversationRouter,
   organizationRouter,
@@ -228,6 +230,10 @@ const createApp = ({
 
   if (pushDeviceRouter) {
     app.use("/api/v1/users", pushDeviceRouter);
+  }
+
+  if (notificationPreferenceRouter) {
+    app.use("/api/v1/users", notificationPreferenceRouter);
   }
 
   app.use((req, _res, next) => {

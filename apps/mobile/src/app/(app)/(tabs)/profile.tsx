@@ -1,8 +1,12 @@
 import * as ImagePicker from "expo-image-picker";
-import { useQueryClient } from "@tanstack/react-query";
+import type {
+  NotificationCategoryPreferences,
+  NotificationPreferencesDto,
+} from "@intouch/shared/notifications";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Linking, Text, View } from "react-native";
+import { Linking, Switch, Text, View } from "react-native";
 
 import { MainScreenHeader } from "@/components/app-shell";
 import { Button, Card, Muted } from "@/components/ui/controls";
@@ -11,10 +15,12 @@ import { UserAvatar } from "@/components/user-avatar";
 import { useAppearance } from "@/features/appearance/appearance-provider";
 import { ThemeName, type ThemeNameValue } from "@/features/appearance/theme";
 import { useAuth } from "@/features/auth/auth-provider";
+import { notificationsApi } from "@/features/notifications/notifications-api";
 import {
   prepareSquareImage,
   uploadFiles,
 } from "@/features/uploads/upload-client";
+import { requestMediaLibraryAccess } from "@/features/uploads/media-library-permission";
 import { uploadsApi } from "@/features/uploads/uploads-api";
 import { usePush } from "@/features/push/push-provider";
 
@@ -28,8 +34,23 @@ export default function ProfileScreen() {
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
+  const notificationPreferences = useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: () => notificationsApi.getPreferences(),
+  });
+  const updateNotificationPreferences = useMutation<
+    NotificationPreferencesDto,
+    Error,
+    NotificationCategoryPreferences
+  >({
+    mutationFn: (categories) => notificationsApi.updatePreferences(categories),
+    onSuccess: (next) => {
+      queryClient.setQueryData(["notification-preferences"], next);
+    },
+  });
 
   const replaceAvatar = async () => {
+    if (!(await requestMediaLibraryAccess())) return;
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: false,
@@ -140,6 +161,54 @@ export default function ProfileScreen() {
         ) : null}
       </Card>
 
+      <Card>
+        <Text style={{ color: theme.text, fontSize: 17, fontWeight: "900" }}>
+          Notification categories
+        </Text>
+        <Muted>
+          These controls affect push delivery. Activity still remains in your
+          notification inbox.
+        </Muted>
+        {notificationPreferences.data
+          ? (
+              [
+                ["invitations", "Invitations"],
+                ["directMessages", "Direct messages"],
+                ["mentionsAndReplies", "Mentions and replies"],
+                ["reactions", "Reactions"],
+              ] as const
+            ).map(([key, label]) => (
+              <View key={key} style={styles.preferenceRow}>
+                <Text style={{ color: theme.text, flex: 1, fontWeight: "700" }}>
+                  {label}
+                </Text>
+                <Switch
+                  accessibilityLabel={`${label} notifications`}
+                  disabled={updateNotificationPreferences.isPending}
+                  onValueChange={(enabled) =>
+                    updateNotificationPreferences.mutate({
+                      ...notificationPreferences.data.categories,
+                      [key]: enabled,
+                    })
+                  }
+                  trackColor={{ false: theme.border, true: theme.accentSoft }}
+                  thumbColor={
+                    notificationPreferences.data.categories[key]
+                      ? theme.accent
+                      : theme.muted
+                  }
+                  value={notificationPreferences.data.categories[key]}
+                />
+              </View>
+            ))
+          : null}
+        {notificationPreferences.isError ? (
+          <Text style={{ color: theme.danger }}>
+            Notification preferences could not be loaded.
+          </Text>
+        ) : null}
+      </Card>
+
       <Text
         style={{
           color: theme.muted,
@@ -222,8 +291,8 @@ export default function ProfileScreen() {
 
       <Card>
         <Muted>
-          Voice, video, screen sharing, Echo, and search remain available on web
-          or in a later mobile release.
+          Voice, video, and screen sharing remain available on web or in a later
+          mobile release.
         </Muted>
         <Button destructive onPress={() => void logout()}>
           Sign out
@@ -232,3 +301,11 @@ export default function ProfileScreen() {
     </Screen>
   );
 }
+
+const styles = {
+  preferenceRow: {
+    alignItems: "center" as const,
+    flexDirection: "row" as const,
+    minHeight: 48,
+  },
+};

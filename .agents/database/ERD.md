@@ -135,6 +135,9 @@ erDiagram
         string content
         enum messageType
         ObjectId callId
+        ObjectId replyToMessageId
+        json mentions
+        ObjectId notifiedMentionUserIds
         datetime createdAt
         datetime updatedAt
         datetime editedAt
@@ -247,6 +250,24 @@ erDiagram
         datetime updatedAt
     }
 
+    NotificationPreference {
+        ObjectId id
+        ObjectId userId
+        json categories
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    NotificationMute {
+        ObjectId id
+        ObjectId userId
+        ObjectId organizationId
+        ObjectId conversationId
+        datetime mutedUntil
+        datetime createdAt
+        datetime updatedAt
+    }
+
     PushDevice {
         ObjectId id
         ObjectId userId
@@ -312,6 +333,14 @@ erDiagram
     User ||--o{ ChatWallpaperPreference : customizes
 
     Conversation ||--o{ ChatWallpaperPreference : overrides
+
+    User ||--o| NotificationPreference : configures
+
+    User ||--o{ NotificationMute : mutes
+
+    Organization ||--o{ NotificationMute : scopes
+
+    Conversation ||--o{ NotificationMute : optionally_scopes
 
     User ||--o{ StoredAsset : owns
 
@@ -472,9 +501,16 @@ conversation deletion, organization deletion, private-participant removal, and
 public-to-private visibility transitions delete reactions that no longer have a
 valid lifecycle or authorized owner.
 
+`Message.replyToMessageId` is immutable and constrained by the service to the
+same conversation. Mention records embed the selected user and validated UTF-16
+range. Reply previews are bulk hydrated from message and public-user records;
+they are not duplicated into the stored message. `notifiedMentionUserIds`
+prevents repeated edits and retries from notifying the same recipient twice.
+
 `Notification` stores durable, recipient-specific in-app activity for pending
-organization invitations, accepted invitations, incoming direct messages, and
-reactions to the recipient's messages. Invitation and reaction notifications
+organization invitations, accepted invitations, incoming direct messages,
+channel mentions, channel replies, and reactions to the recipient's messages.
+Invitation, mention, reply, and reaction notifications
 use deterministic deduplication keys. Consecutive unread direct messages from
 the same conversation share an `activeGroupKey`, increment `messageCount`, and
 advance `latestMessageId`; advancing the recipient's DM read state closes that
@@ -485,6 +521,13 @@ lifecycle-cleanup, and TTL indexes support inbox pagination, unread counts,
 idempotency, and transactional deletion. Notification creation and cleanup
 participate in the source domain transaction; Socket.IO publication occurs only
 after commit and carries safe hydrated DTOs to the recipient's user room.
+
+`NotificationPreference` is unique per user and stores the four category
+switches. Its absence resolves to all categories enabled. `NotificationMute`
+is unique per user and organization/conversation scope; an absent `mutedUntil`
+means indefinite and a TTL index removes expired timed mutes. Preferences and
+mutes are evaluated immediately before push dispatch, so delayed BullMQ jobs
+honor current settings without deleting durable notification records.
 
 `PushDevice` stores one encrypted Expo token per app installation. The token
 hash enforces global uniqueness without making the provider token queryable,

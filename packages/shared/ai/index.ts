@@ -15,6 +15,7 @@ export {
 } from "./ai.schema.js";
 export type {
   AiConsentUpdate,
+  AiHistoryMessage,
   AiOrganizationSettingsUpdate,
   AiResponseRequest,
   AiSettingsDto,

@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   createMessageSchema,
+  updateMessageSchema,
   messageReadReceiptSummaryResponseSchema,
   messageHistoryQuerySchema,
   messageReactionStateResponseSchema,
@@ -34,6 +35,47 @@ describe("shared message schemas", () => {
     );
     assert.equal(
       messageHistoryQuerySchema.safeParse({ limit: 101 }).success,
+      false,
+    );
+  });
+
+  test("validates replies and ordered UTF-16 mention ranges", () => {
+    const replyToMessageId = "507f1f77bcf86cd799439011";
+    const userId = "507f1f77bcf86cd799439012";
+    assert.deepEqual(
+      createMessageSchema.parse({
+        content: "Hi @Lina 👋",
+        replyToMessageId,
+        mentions: [{ userId, start: 3, end: 8 }],
+      }),
+      {
+        content: "Hi @Lina 👋",
+        replyToMessageId,
+        mentions: [{ userId, start: 3, end: 8 }],
+      },
+    );
+    assert.equal(
+      createMessageSchema.safeParse({
+        content: "Hi",
+        mentions: [{ userId, start: 0, end: 9 }],
+      }).success,
+      false,
+    );
+    assert.equal(
+      createMessageSchema.safeParse({
+        content: "@Lina @Omar",
+        mentions: [
+          { userId, start: 6, end: 11 },
+          { userId, start: 0, end: 5 },
+        ],
+      }).success,
+      false,
+    );
+    assert.equal(
+      updateMessageSchema.safeParse({
+        content: "Hello",
+        replyToMessageId,
+      }).success,
       false,
     );
   });

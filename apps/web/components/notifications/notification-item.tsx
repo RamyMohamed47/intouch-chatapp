@@ -3,8 +3,10 @@
 import type { NotificationDto } from "@intouch/shared/notifications";
 import { NotificationType } from "@intouch/shared/notifications";
 import {
+  AtSign,
   MailPlus,
   MessageCircleMore,
+  MessageSquareReply,
   SmilePlus,
   UserCheck,
 } from "lucide-react";
@@ -26,6 +28,9 @@ export const notificationHref = (notification: NotificationDto) => {
           ? "direct-messages"
           : "channels"
       }/${notification.conversationId}?messageId=${notification.messageId}`;
+    case NotificationType.CHANNEL_MENTION_RECEIVED:
+    case NotificationType.MESSAGE_REPLY_RECEIVED:
+      return `/app/${notification.organization.id}/channels/${notification.conversationId}?messageId=${notification.messageId}`;
   }
 };
 
@@ -58,6 +63,18 @@ const notificationCopy = (notification: NotificationDto) => {
         title: `${notification.actor.displayName} reacted ${notification.emoji}`,
         description: `They reacted to your message in ${notification.organization.name}.`,
         icon: SmilePlus,
+      };
+    case NotificationType.CHANNEL_MENTION_RECEIVED:
+      return {
+        title: `${notification.actor.displayName} mentioned you`,
+        description: `Open the message in ${notification.organization.name}.`,
+        icon: AtSign,
+      };
+    case NotificationType.MESSAGE_REPLY_RECEIVED:
+      return {
+        title: `${notification.actor.displayName} replied to you`,
+        description: `Open the reply in ${notification.organization.name}.`,
+        icon: MessageSquareReply,
       };
   }
 };

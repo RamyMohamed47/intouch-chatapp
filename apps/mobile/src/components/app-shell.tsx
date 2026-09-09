@@ -5,7 +5,14 @@ import {
   DrawerItem,
   type DrawerContentComponentProps,
 } from "expo-router/drawer";
-import { Menu, MessageCircle, UserRound, Warehouse } from "lucide-react-native";
+import {
+  Menu,
+  MessageCircle,
+  Search,
+  Sparkles,
+  UserRound,
+  Warehouse,
+} from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { OrganizationAvatar } from "@/components/organization-avatar";
@@ -68,7 +75,9 @@ export const AppDrawerContent = (props: DrawerContentComponentProps) => {
     ({ id }) => id === activeOrganizationId,
   );
 
-  const navigate = (path: "/chats" | "/workspaces" | "/profile") => {
+  const navigate = (
+    path: "/chats" | "/workspaces" | "/echo" | "/profile" | "/search",
+  ) => {
     props.navigation.closeDrawer();
     router.navigate(path);
   };
@@ -136,6 +145,26 @@ export const AppDrawerContent = (props: DrawerContentComponentProps) => {
           label="Workspaces"
           labelStyle={styles.itemLabel}
           onPress={() => navigate("/workspaces")}
+          activeTintColor={theme.accent}
+          activeBackgroundColor={theme.accentSoft}
+          inactiveTintColor={theme.text}
+        />
+        <DrawerItem
+          focused={pathname === "/echo"}
+          icon={({ color, size }) => <Sparkles color={color} size={size} />}
+          label="Echo"
+          labelStyle={styles.itemLabel}
+          onPress={() => navigate("/echo")}
+          activeTintColor={theme.accent}
+          activeBackgroundColor={theme.accentSoft}
+          inactiveTintColor={theme.text}
+        />
+        <DrawerItem
+          focused={pathname === "/search"}
+          icon={({ color, size }) => <Search color={color} size={size} />}
+          label="Search"
+          labelStyle={styles.itemLabel}
+          onPress={() => navigate("/search")}
           activeTintColor={theme.accent}
           activeBackgroundColor={theme.accentSoft}
           inactiveTintColor={theme.text}

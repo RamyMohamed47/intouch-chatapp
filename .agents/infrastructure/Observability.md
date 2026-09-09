@@ -4,8 +4,8 @@ InTouch uses three complementary production signals:
 
 - Railway captures structured API logs and container resource metrics.
 - Grafana Cloud receives OpenTelemetry metrics and sampled traces over OTLP.
-- Sentry receives sanitized unexpected API and web errors with private source
-  maps.
+- Sentry receives sanitized unexpected API, web, and mobile errors with private
+  source maps.
 
 Telemetry is optional in development and never participates in readiness.
 Exporter or Sentry outages must not reject application requests or make
@@ -94,7 +94,8 @@ logs when already permitted by the domain's logging policy.
 
 ## Sentry
 
-Create separate Sentry projects for `intouch-api` and `intouch-web`. Configure
+Create separate Sentry projects for `intouch-api`, `intouch-web`, and
+`intouch-mobile`. Configure
 the API Railway service with its API project values:
 
 ```dotenv
@@ -120,6 +121,21 @@ The API `build:api` command uploads private source maps using the Railway commit
 SHA. The Next.js build uploads web source maps and deletes them from deployment
 artifacts. Builds skip uploads when no Sentry settings are configured and fail
 when only a partial upload configuration is supplied.
+
+Configure the Expo EAS build environment with the dedicated mobile project:
+
+```dotenv
+EXPO_PUBLIC_SENTRY_DSN=https://<mobile-project-dsn>
+SENTRY_AUTH_TOKEN=<source-map-upload-token>
+SENTRY_ORG=<organization-slug>
+SENTRY_PROJECT=intouch-mobile
+```
+
+The DSN is public runtime configuration. The auth token is a sensitive
+build-only value and must not use an `EXPO_PUBLIC_` prefix. The native Sentry SDK
+is disabled when no DSN is configured, disables replay and tracing, and removes
+tokens, cookies, message/Echo content, filenames, email addresses, request
+bodies, presigned query strings, and user objects before transmission.
 
 Sentry captures unexpected failures only. Expected validation,
 authentication, authorization, conflict, not-found, and throttling responses
@@ -155,6 +171,9 @@ consecutive failures. Never place credentials in synthetic URLs.
 Create Sentry issue alerts for new regressions and repeated production errors.
 Avoid duplicate alerting on expected 4xx responses because those events are not
 captured.
+
+Push delivery exports `intouch_push_outcomes_total` with the bounded `outcome`
+label values `sent`, `suppressed`, `rejected`, `retried`, and `failed`.
 
 ## Incident Workflow
 

@@ -73,6 +73,8 @@ const message = {
   createdAt: now,
   updatedAt: now,
   attachments: [],
+  mentions: [],
+  replyTo: null,
   reactions: [],
   currentUserReaction: null,
 };

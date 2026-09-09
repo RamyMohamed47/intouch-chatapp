@@ -68,7 +68,7 @@
   JSON endpoints. Access tokens remain in memory and rotating refresh tokens
   are stored in Expo SecureStore; browser cookie and CSRF behavior is unchanged.
 
-## Mobile V1.1
+## Mobile V1.2
 
 - Expo SDK 57 and React Native 0.86 share `@intouch/shared` contracts with the
   API and web application.
@@ -77,11 +77,11 @@
   themes, and chat wallpapers.
 - TanStack Query owns API state. Socket.IO updates or reconciles those caches
   and disconnects while the app is backgrounded.
-- V1.1 adds a durable notification inbox, Expo push delivery, exact-message
-  deep links, lifecycle reconciliation, upload cancellation, and targeted
-  error recovery while remaining online-first.
-- Voice, video, screen sharing, Echo, search, persistent offline data, and
-  queued sends remain outside mobile V1.1.
+- V1.2 adds Echo streaming and composer tools, organization-wide search,
+  message replies and mentions, notification categories and scoped mutes,
+  authoritative badges, and sanitized mobile Sentry reporting.
+- Voice, video, screen sharing, persistent offline data, and queued sends remain
+  outside mobile V1.2.
 
 ## Multi-tenancy
 
@@ -91,13 +91,17 @@ Single Database + organizationId
 
 - MongoDB stores durable, recipient-specific in-app notifications.
 - Supported activity is invitation received, invitation accepted, incoming
-  direct message, and reaction to the recipient's message.
+  direct message, channel mention, channel reply, and reaction to the
+  recipient's message.
 - Notification writes and lifecycle cleanup share the source domain
   transaction; recipient-only Socket.IO events publish after commit.
 - Unread DMs group per conversation until the recipient's read state advances.
 - Notification records expire after 30 days. Mobile push tokens are encrypted
   at rest, scoped to installation IDs, delivered through a durable BullMQ-backed
   outbox, and removed when Expo reports `DeviceNotRegistered`.
+- Category preferences and timed/permanent workspace or conversation mutes
+  suppress push and foreground interruption only. Durable records, unread chat
+  state, and Socket.IO reconciliation remain authoritative.
 
 ## Private Assets
 

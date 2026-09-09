@@ -121,6 +121,7 @@ describe("push delivery", () => {
         notifications: {
           findForPush: async () => ({
             recipientUserId: record.recipientUserId,
+            unreadCount: 1,
             notification: {
               id: record.notificationId,
               type: NotificationType.DIRECT_MESSAGE_RECEIVED,

@@ -162,10 +162,12 @@ Notification mutations originate from REST-backed domain transactions rather
 than client socket events. Invitation notifications are created and removed with
 the invitation lifecycle, accepted-invitation notifications target the inviter,
 incoming DMs are grouped until the recipient advances their read state, and
-reaction notifications target the message sender. Selected incoming DMs and
-invitation events may produce frontend toasts; reaction notifications remain
-silent. Reconnects invalidate the notification query family so missed socket
-events never become the durable source of truth.
+channel mentions, channel replies, and reactions target the relevant message
+recipient. Reply notification takes precedence when the same recipient is also
+mentioned. Category preferences and scoped mutes suppress foreground
+interruption and push, not these durable user-room events. Reconnects invalidate
+the notification query family so missed socket events never become the durable
+source of truth.
 
 ## Voice Runtime
 

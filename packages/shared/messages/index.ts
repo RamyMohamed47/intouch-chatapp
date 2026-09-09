@@ -1,5 +1,6 @@
 export {
   createMessageSchema,
+  messageMentionSchema,
   messageContentSchema,
   messageHistoryQuerySchema,
   messageReactionUsersQuerySchema,
@@ -19,6 +20,7 @@ export type {
 export {
   MessageType,
   messageCoreDtoSchema,
+  messageReplyPreviewDtoSchema,
   messageContextResponseSchema,
   messageDtoSchema,
   messageListResponseSchema,
@@ -48,6 +50,8 @@ export type {
   MessageReactionUsersDto,
   MessageReactionUsersResponse,
   MessageTypeValue,
+  MessageMention,
+  MessageReplyPreviewDto,
   ReadReceiptDto,
   ReadReceiptResponse,
 } from "./message.dto.js";

@@ -18,6 +18,7 @@ export const MessageActionSheet = ({
   onDelete,
   onEdit,
   onReact,
+  onReply,
   pending,
   visible,
 }: {
@@ -27,6 +28,7 @@ export const MessageActionSheet = ({
   onDelete: () => void;
   onEdit: () => void;
   onReact: (emoji: string) => void | Promise<void>;
+  onReply?: () => void;
   pending: boolean;
   visible: boolean;
 }) => {
@@ -81,6 +83,24 @@ export const MessageActionSheet = ({
               );
             })}
           </View>
+
+          {onReply ? (
+            <View style={[styles.actions, { borderTopColor: theme.border }]}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={pending}
+                onPress={onReply}
+                style={({ pressed }) => [
+                  styles.action,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.actionText, { color: theme.text }]}>
+                  Reply
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {isOwnMessage ? (
             <View style={[styles.actions, { borderTopColor: theme.border }]}>

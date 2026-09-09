@@ -1,6 +1,7 @@
 import {
   NotificationStatus,
   type NotificationDto,
+  type NotificationStatusValue,
 } from "@intouch/shared/notifications";
 import {
   useInfiniteQuery,
@@ -10,6 +11,7 @@ import {
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { BellRing } from "lucide-react-native";
+import { useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { UserAvatar } from "@/components/user-avatar";
@@ -70,10 +72,12 @@ export default function NotificationsScreen() {
   const { theme } = useAppearance();
   const { setActiveOrganizationId } = useWorkspace();
   const queryClient = useQueryClient();
+  const [status, setStatus] = useState<NotificationStatusValue>(
+    NotificationStatus.ALL,
+  );
   const notifications = useInfiniteQuery({
-    queryKey: ["notifications", NotificationStatus.ALL],
-    queryFn: ({ pageParam }) =>
-      notificationsApi.list(NotificationStatus.ALL, pageParam),
+    queryKey: ["notifications", status],
+    queryFn: ({ pageParam }) => notificationsApi.list(status, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: ({ nextCursor }) => nextCursor ?? undefined,
   });
@@ -120,6 +124,31 @@ export default function NotificationsScreen() {
               Read all
             </Button>
           ) : null}
+        </View>
+        <View style={styles.filters}>
+          {([NotificationStatus.ALL, NotificationStatus.UNREAD] as const).map(
+            (filter) => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: status === filter }}
+                key={filter}
+                onPress={() => setStatus(filter)}
+                style={[
+                  styles.filter,
+                  {
+                    backgroundColor:
+                      status === filter ? theme.accentSoft : theme.panel,
+                    borderColor:
+                      status === filter ? theme.accent : theme.border,
+                  },
+                ]}
+              >
+                <Text style={{ color: theme.text, fontWeight: "800" }}>
+                  {filter === NotificationStatus.ALL ? "All" : "Unread"}
+                </Text>
+              </Pressable>
+            ),
+          )}
         </View>
         {notifications.isLoading ? (
           <StateView
@@ -186,6 +215,13 @@ const styles = StyleSheet.create({
   heading: { fontSize: 25, fontWeight: "900", letterSpacing: -0.6 },
   subtitle: { fontSize: 13, marginTop: 2 },
   list: { gap: 10, paddingBottom: 28 },
+  filters: { flexDirection: "row", gap: 8, paddingBottom: 12 },
+  filter: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
   itemRow: { alignItems: "flex-start", flexDirection: "row", gap: 12 },
   titleRow: { alignItems: "flex-start", flexDirection: "row", gap: 8 },
   itemTitle: { flex: 1, fontSize: 15, fontWeight: "800", lineHeight: 20 },

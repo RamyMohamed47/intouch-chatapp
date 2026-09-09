@@ -105,7 +105,9 @@ eas build --profile preview --platform android
 The preview profile produces an installable APK. Expo Go is not supported
 because native Google authentication uses native modules. Detailed setup and
 manual V1 acceptance steps are in
-[Mobile V1](.agents/mobile/Mobile%20V1.md).
+[Mobile V1](.agents/mobile/Mobile%20V1.md), with Echo, search, reply/mention,
+notification-control, and mobile-monitoring acceptance in
+[Mobile V1.2](.agents/mobile/Mobile%20V1.2.md).
 
 ## API Documentation
 
@@ -459,16 +461,23 @@ are broadcast; channel read activity remains private.
 Authenticated users receive a durable notification inbox at
 `GET /api/v1/notifications`, with unread filtering, cursor pagination, unread
 counts, individual read updates, and mark-all-read support. The inbox covers
-organization invitations, accepted invitations, incoming direct messages, and
-reactions to the caller's messages. Ordinary channel messages continue to use
-conversation unread badges rather than creating notifications.
+organization invitations, accepted invitations, incoming direct messages,
+channel mentions, channel replies, and reactions to the caller's messages.
+Ordinary channel messages continue to use conversation unread badges rather
+than creating notifications.
 
 Unread direct messages from the same conversation are grouped until the
 recipient advances that conversation's read receipt. Notification records are
 created or cleaned up inside the source domain transaction, expire after 30
 days, and are synchronized to the recipient's authenticated user room through
-`notification:changed`. MongoDB remains authoritative after reconnects; email
-and push notification preferences are not part of this iteration.
+`notification:changed`. MongoDB remains authoritative after reconnects.
+
+Authenticated users manage category switches through
+`GET|PUT /api/v1/users/me/notification-preferences` and timed or permanent
+workspace/conversation mutes through the notification-mute resources. These
+settings suppress push and foreground interruption only; durable inbox records
+and unread message state remain intact. Mutes are checked immediately before
+BullMQ dispatch so delayed jobs honor the latest setting.
 
 Socket.IO clients authenticate with `auth: { accessToken }`, then emit
 `conversation:join` before receiving scoped message events. Organization

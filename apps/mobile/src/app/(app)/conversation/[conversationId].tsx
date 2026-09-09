@@ -1,5 +1,13 @@
-import { ChannelKind, ConversationType } from "@intouch/shared/conversations";
-import type { MessageDto, MessageListResponse } from "@intouch/shared/messages";
+import {
+  ChannelKind,
+  ConversationType,
+  ConversationVisibility,
+} from "@intouch/shared/conversations";
+import type {
+  MessageDto,
+  MessageListResponse,
+  MessageMention,
+} from "@intouch/shared/messages";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -22,6 +30,8 @@ import {
   Palette,
   Paperclip,
   Send,
+  Sparkles,
+  X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -39,7 +49,9 @@ import {
 } from "react-native";
 
 import { BackButton, Button, Muted } from "@/components/ui/controls";
+import { ComposerAiSheet } from "@/components/composer-ai-sheet";
 import { MessageActionSheet } from "@/components/message-action-sheet";
+import { NotificationMuteButton } from "@/components/notification-mute-button";
 import { Screen, StateView } from "@/components/ui/screen";
 import { UserAvatar } from "@/components/user-avatar";
 import { useAppearance } from "@/features/appearance/appearance-provider";
@@ -49,6 +61,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { conversationsApi } from "@/features/conversations/conversations-api";
 import { messagesApi } from "@/features/messages/messages-api";
 import { mergeReactionStateIntoMessagePages } from "@/features/messages/reaction-cache";
+import { MessageText } from "@/features/messages/message-text";
 import {
   callMessageLabel,
   hasReadMessage,
@@ -56,6 +69,7 @@ import {
 import { organizationsApi } from "@/features/organizations/organizations-api";
 import { useRealtime } from "@/features/realtime/realtime-provider";
 import { AttachmentView } from "@/features/uploads/attachment-view";
+import { requestMediaLibraryAccess } from "@/features/uploads/media-library-permission";
 import {
   uploadFiles,
   type LocalUploadFile,
@@ -81,12 +95,15 @@ export default function ConversationScreen() {
   } = useRealtime();
   const queryClient = useQueryClient();
   const listRef = useRef<FlatList<MessageDto>>(null);
+  const initiallyPositionedConversationRef = useRef<string | null>(null);
   const pendingReceiptMessageIdRef = useRef<string | null>(null);
   const failedReceiptMessageIdRef = useRef<string | null>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const [content, setContent] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingAllowsEmpty, setEditingAllowsEmpty] = useState(false);
+  const [mentions, setMentions] = useState<MessageMention[]>([]);
+  const [replyTo, setReplyTo] = useState<MessageDto | null>(null);
   const [files, setFiles] = useState<LocalUploadFile[]>([]);
   const [completedUploadIds, setCompletedUploadIds] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -112,6 +129,7 @@ export default function ConversationScreen() {
   const [appIsActive, setAppIsActive] = useState(
     AppState.currentState === "active",
   );
+  const [showComposerAi, setShowComposerAi] = useState(false);
   const conversation = useQuery({
     queryKey: ["conversations", conversationId],
     queryFn: () => conversationsApi.get(conversationId),
@@ -121,6 +139,13 @@ export default function ConversationScreen() {
     queryKey: ["organizations", organizationId, "members"],
     queryFn: () => organizationsApi.members(organizationId ?? ""),
     enabled: Boolean(organizationId),
+  });
+  const participants = useQuery({
+    queryKey: ["conversations", conversationId, "participants"],
+    queryFn: () => conversationsApi.participants(conversationId),
+    enabled:
+      conversation.data?.type === ConversationType.CHANNEL &&
+      conversation.data.visibility === ConversationVisibility.PRIVATE,
   });
   const wallpaper = useQuery({
     queryKey: ["conversations", conversationId, "wallpaper"],
@@ -152,6 +177,39 @@ export default function ConversationScreen() {
   const selectedMessage = allMessages.find(
     ({ id }) => id === selectedMessageId,
   );
+  const mentionQuery = useMemo(() => {
+    const match = content.match(/(?:^|\s)@([^@\n]*)$/);
+    return match ? (match[1]?.toLocaleLowerCase() ?? "") : null;
+  }, [content]);
+  const mentionCandidates = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const participantIds = new Set([
+      ...(participants.data?.map(({ userId }) => userId) ?? []),
+      ...(conversation.data?.type === ConversationType.DIRECT
+        ? [conversation.data.peer.id]
+        : []),
+    ]);
+    const restrictToParticipants =
+      conversation.data?.type === ConversationType.DIRECT ||
+      (conversation.data?.type === ConversationType.CHANNEL &&
+        conversation.data.visibility === ConversationVisibility.PRIVATE);
+    return (members.data ?? [])
+      .filter(({ user: memberUser }) => memberUser.id !== user?.id)
+      .filter(
+        ({ user: memberUser }) =>
+          !restrictToParticipants || participantIds.has(memberUser.id),
+      )
+      .filter(({ user: memberUser }) =>
+        memberUser.displayName.toLocaleLowerCase().includes(mentionQuery),
+      )
+      .slice(0, 6);
+  }, [
+    conversation.data,
+    mentionQuery,
+    members.data,
+    participants.data,
+    user?.id,
+  ]);
   const isVoice =
     conversation.data?.type === ConversationType.CHANNEL &&
     conversation.data.kind === ChannelKind.VOICE;
@@ -301,11 +359,34 @@ export default function ConversationScreen() {
     };
   }, [allMessages, anchorMessageId, messageContext.data]);
 
+  useEffect(() => {
+    if (
+      anchorMessageId ||
+      allMessages.length === 0 ||
+      initiallyPositionedConversationRef.current === conversationId
+    ) {
+      return;
+    }
+    initiallyPositionedConversationRef.current = conversationId;
+    const frame = requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [allMessages.length, anchorMessageId, conversationId]);
+
   const send = useMutation({
     mutationFn: async () => {
+      const normalizedContent = content.trim();
+      const leadingWhitespace = content.length - content.trimStart().length;
+      const normalizedMentions = mentions.map((mention) => ({
+        ...mention,
+        start: mention.start - leadingWhitespace,
+        end: mention.end - leadingWhitespace,
+      }));
       if (editingMessageId) {
         return messagesApi.update(editingMessageId, {
-          content: content.trim() || null,
+          content: normalizedContent || null,
+          mentions: normalizedMentions,
         });
       }
       let uploadIds = completedUploadIds;
@@ -328,14 +409,18 @@ export default function ConversationScreen() {
         setCompletedUploadIds(uploadIds);
       }
       return messagesApi.create(conversationId, {
-        ...(content.trim() ? { content: content.trim() } : {}),
+        ...(normalizedContent ? { content: normalizedContent } : {}),
         ...(uploadIds.length ? { uploadIds } : {}),
+        ...(replyTo ? { replyToMessageId: replyTo.id } : {}),
+        ...(normalizedMentions.length ? { mentions: normalizedMentions } : {}),
       });
     },
     onSuccess: async () => {
       setContent("");
       setEditingMessageId(null);
       setEditingAllowsEmpty(false);
+      setMentions([]);
+      setReplyTo(null);
       setFiles([]);
       setCompletedUploadIds([]);
       setUploadProgress(0);
@@ -382,6 +467,7 @@ export default function ConversationScreen() {
     );
   };
   const pickImages = async () => {
+    if (!(await requestMediaLibraryAccess())) return;
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsMultipleSelection: true,
@@ -434,6 +520,32 @@ export default function ConversationScreen() {
     setContent(message.content ?? "");
     setEditingMessageId(message.id);
     setEditingAllowsEmpty(message.attachments.length > 0);
+    setMentions(message.mentions);
+    setReplyTo(null);
+  };
+
+  const changeContent = (next: string) => {
+    setContent(next);
+    setMentions((current) =>
+      current.filter(
+        ({ start, end }) =>
+          next.slice(start, end) === content.slice(start, end),
+      ),
+    );
+  };
+
+  const selectMention = (member: NonNullable<typeof members.data>[number]) => {
+    const match = content.match(/(?:^|\s)@([^@\n]*)$/);
+    if (!match || match.index === undefined) return;
+    const atOffset = match[0].lastIndexOf("@");
+    const start = match.index + atOffset;
+    const label = `@${member.user.displayName}`;
+    const next = `${content.slice(0, start)}${label} `;
+    setContent(next);
+    setMentions((current) => [
+      ...current.filter(({ end }) => end <= start),
+      { userId: member.user.id, start, end: start + label.length },
+    ]);
   };
 
   const onViewableItemsChanged = useRef(
@@ -483,6 +595,16 @@ export default function ConversationScreen() {
           { borderBottomColor: theme.border, backgroundColor: theme.panel },
         ]}
       >
+        <Pressable
+          accessibilityLabel="Polish draft with Echo"
+          disabled={!content.trim()}
+          onPress={() => setShowComposerAi(true)}
+        >
+          <Sparkles
+            color={content.trim() ? theme.accent : theme.muted}
+            size={22}
+          />
+        </Pressable>
         <BackButton onPress={() => router.back()} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
@@ -494,6 +616,9 @@ export default function ConversationScreen() {
         >
           <Palette color={theme.accent} size={22} />
         </Pressable>
+        <NotificationMuteButton
+          scope={{ kind: "conversation", conversationId }}
+        />
       </View>
       {anchorMessageId ? (
         <View
@@ -599,6 +724,38 @@ export default function ConversationScreen() {
                     </Text>
                   ) : (
                     <>
+                      {item.replyTo ? (
+                        <Pressable
+                          accessibilityLabel="Open replied-to message"
+                          onPress={() =>
+                            router.push({
+                              pathname: "/conversation/[conversationId]",
+                              params: {
+                                conversationId,
+                                messageId: item.replyTo?.id ?? "",
+                              },
+                            })
+                          }
+                          style={[
+                            styles.replyPreview,
+                            { borderColor: theme.accent },
+                          ]}
+                        >
+                          <Text
+                            style={{ color: theme.accent, fontWeight: "900" }}
+                          >
+                            {item.replyTo.sender.displayName}
+                          </Text>
+                          <Muted>
+                            {item.replyTo.deletedAt
+                              ? "Original message deleted"
+                              : (item.replyTo.content ??
+                                (item.replyTo.messageType === "CALL"
+                                  ? "Voice call"
+                                  : "Attachment"))}
+                          </Muted>
+                        </Pressable>
+                      ) : null}
                       {item.attachments.map((attachment) => (
                         <AttachmentView
                           attachment={attachment}
@@ -606,9 +763,10 @@ export default function ConversationScreen() {
                         />
                       ))}
                       {item.content ? (
-                        <Text style={{ color: theme.text, fontSize: 16 }}>
-                          {item.content}
-                        </Text>
+                        <MessageText
+                          content={item.content}
+                          mentions={item.mentions}
+                        />
                       ) : null}
                       <View style={styles.reactions}>
                         {item.reactions.map((reaction) => (
@@ -720,6 +878,14 @@ export default function ConversationScreen() {
         onEdit={() => {
           if (selectedMessage) startEditing(selectedMessage);
         }}
+        onReply={() => {
+          if (!selectedMessage) return;
+          setReplyTo(selectedMessage);
+          setEditingMessageId(null);
+          setEditingAllowsEmpty(false);
+          setMentions([]);
+          setSelectedMessageId(null);
+        }}
         onReact={async (emoji) => {
           if (
             selectedMessage &&
@@ -828,6 +994,29 @@ export default function ConversationScreen() {
             : " "}
         </Text>
       </View>
+      {replyTo ? (
+        <View
+          style={[styles.replyComposer, { backgroundColor: theme.panelStrong }]}
+        >
+          <View style={styles.fileList}>
+            <Text style={{ color: theme.accent, fontWeight: "900" }}>
+              Replying to{" "}
+              {replyTo.senderId === user?.id ? "yourself" : "a teammate"}
+            </Text>
+            <Muted>
+              {replyTo.content ??
+                (replyTo.attachments.length ? "Attachment" : "Message")}
+            </Muted>
+          </View>
+          <Pressable
+            accessibilityLabel="Cancel reply"
+            hitSlop={10}
+            onPress={() => setReplyTo(null)}
+          >
+            <X color={theme.muted} size={20} />
+          </Pressable>
+        </View>
+      ) : null}
       {files.length ? (
         <View style={[styles.files, { backgroundColor: theme.panelStrong }]}>
           <View style={styles.fileList}>
@@ -876,12 +1065,35 @@ export default function ConversationScreen() {
             onPress={() => {
               setEditingMessageId(null);
               setEditingAllowsEmpty(false);
+              setMentions([]);
               setContent("");
             }}
             variant="ghost"
           >
             Cancel
           </Button>
+        </View>
+      ) : null}
+      {mentionCandidates.length ? (
+        <View style={[styles.mentionPicker, { backgroundColor: theme.panel }]}>
+          {mentionCandidates.map((member) => (
+            <Pressable
+              accessibilityLabel={`Mention ${member.user.displayName}`}
+              key={member.user.id}
+              onPress={() => selectMention(member)}
+              style={styles.mentionCandidate}
+            >
+              <UserAvatar
+                assetId={member.user.avatarAssetId}
+                displayName={member.user.displayName}
+                externalUrl={member.user.avatarUrl}
+                size={30}
+              />
+              <Text style={{ color: theme.text, fontWeight: "800" }}>
+                {member.user.displayName}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       ) : null}
       <View
@@ -909,7 +1121,7 @@ export default function ConversationScreen() {
           maxLength={4000}
           multiline
           onBlur={() => stopTyping(conversationId)}
-          onChangeText={setContent}
+          onChangeText={changeContent}
           placeholder={`Message ${title}`}
           placeholderTextColor={theme.muted}
           style={[
@@ -930,6 +1142,18 @@ export default function ConversationScreen() {
           <Send color="#ffffff" size={20} />
         </Pressable>
       </View>
+      {organizationId ? (
+        <ComposerAiSheet
+          organizationId={organizationId}
+          onApply={(value) => {
+            setContent(value);
+            setMentions([]);
+          }}
+          onClose={() => setShowComposerAi(false)}
+          text={content}
+          visible={showComposerAi}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -964,6 +1188,12 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  replyPreview: {
+    borderLeftWidth: 3,
+    gap: 2,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
   reactions: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
   reaction: {
     minHeight: 30,
@@ -997,6 +1227,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  replyComposer: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  mentionPicker: { gap: 2, maxHeight: 250, padding: 8 },
+  mentionCandidate: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 46,
+    paddingHorizontal: 8,
   },
   fileList: { flex: 1, gap: 4 },
   fileRow: { alignItems: "center", flexDirection: "row", gap: 8 },

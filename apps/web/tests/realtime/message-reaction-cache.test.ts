@@ -17,6 +17,8 @@ describe("message reaction cache", () => {
       attachments: [],
       reactions: [],
       currentUserReaction: null,
+      mentions: [],
+      replyTo: null,
     };
     const second = { ...first, id: "64f000000000000000000002" };
     const data = {

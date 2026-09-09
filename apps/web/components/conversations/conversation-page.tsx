@@ -6,6 +6,7 @@ import {
   Hash,
   Lock,
   MessageCircle,
+  MessageSquareReply,
   Pencil,
   Paperclip,
   Phone,
@@ -37,6 +38,7 @@ import {
   updateMessageSchema,
   type MessageDto,
   type MessageListResponse,
+  type MessageMention,
   type MessageReadReceiptSummaryDto,
 } from "@intouch/shared/messages";
 import {
@@ -100,6 +102,7 @@ import {
   useMessageContext,
   useMessages,
   useOrganization,
+  useParticipants,
 } from "@/lib/query/hooks";
 import { queryKeys } from "@/lib/query/keys";
 import { useRealtime } from "@/lib/realtime/provider";
@@ -114,6 +117,29 @@ const formatTime = (value: string) =>
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+
+const renderMentionedContent = (
+  content: string,
+  mentions: MessageMention[],
+) => {
+  let cursor = 0;
+  const fragments = mentions.flatMap((mention, index) => {
+    const before = content.slice(cursor, mention.start);
+    const value = content.slice(mention.start, mention.end);
+    cursor = mention.end;
+    return [
+      before ? <span key={`before-${index}`}>{before}</span> : null,
+      <strong
+        className="rounded bg-primary/10 px-0.5 font-semibold text-primary"
+        key={`mention-${mention.userId}-${mention.start}`}
+      >
+        {value}
+      </strong>,
+    ];
+  });
+  fragments.push(<span key="after-mentions">{content.slice(cursor)}</span>);
+  return fragments;
+};
 
 const callLabel = (message: MessageDto, currentUserId?: string) => {
   const call = message.call;
@@ -245,10 +271,17 @@ export function ConversationPage({
   const messages = useMessages(conversationId, !anchorMessageId);
   const messageContext = useMessageContext(conversationId, anchorMessageId);
   const members = useMembers(organizationId);
+  const participants = useParticipants(
+    conversationId,
+    expectedType === "CHANNEL",
+  );
   const [content, setContent] = useState("");
+  const [mentions, setMentions] = useState<MessageMention[]>([]);
+  const [replyTarget, setReplyTarget] = useState<MessageDto | null>(null);
   const [focused, setFocused] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [editingMentions, setEditingMentions] = useState<MessageMention[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<MessageDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
@@ -516,14 +549,20 @@ export function ConversationPage({
   ]);
 
   const sendMessage = useMutation({
-    mutationFn: (input: { content?: string; uploadIds?: string[] }) =>
-      messagesApi.create(conversationId, input),
+    mutationFn: (input: {
+      content?: string;
+      uploadIds?: string[];
+      replyToMessageId?: string;
+      mentions?: MessageMention[];
+    }) => messagesApi.create(conversationId, input),
     onSuccess: (message) => {
       queryClient.setQueryData<InfiniteData<MessageListResponse>>(
         queryKeys.conversations.messages(conversationId),
         (current) => upsertCachedMessage(current, message),
       );
       setContent("");
+      setMentions([]);
+      setReplyTarget(null);
       uploads.clear();
       stopTyping(conversationId);
       if (anchorMessageId) {
@@ -538,16 +577,23 @@ export function ConversationPage({
     mutationFn: ({
       messageId,
       messageContent,
+      messageMentions,
     }: {
       messageId: string;
       messageContent: string | null;
-    }) => messagesApi.update(messageId, { content: messageContent }),
+      messageMentions: MessageMention[];
+    }) =>
+      messagesApi.update(messageId, {
+        content: messageContent,
+        mentions: messageMentions,
+      }),
     onSuccess: (message) => {
       queryClient.setQueryData<InfiniteData<MessageListResponse>>(
         queryKeys.conversations.messages(conversationId),
         (current) => upsertCachedMessage(current, message),
       );
       setEditingId(null);
+      setEditingMentions([]);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.messageContext(
           conversationId,
@@ -633,6 +679,7 @@ export function ConversationPage({
       return;
     }
     setContent(insertion.content);
+    setMentions([]);
     setError(null);
     window.requestAnimationFrame(() => {
       composerRef.current?.focus();
@@ -640,12 +687,46 @@ export function ConversationPage({
     });
   };
 
+  const changeComposerContent = (next: string) => {
+    setContent(next);
+    setMentions((current) =>
+      current.filter(
+        ({ start, end }) =>
+          next.slice(start, end) === content.slice(start, end),
+      ),
+    );
+  };
+
+  const selectMention = (memberUser: { id: string; displayName: string }) => {
+    const match = content.match(/(?:^|\s)@([^@\n]*)$/);
+    if (!match || match.index === undefined) return;
+    const start = match.index + match[0].lastIndexOf("@");
+    const label = `@${memberUser.displayName}`;
+    setContent(`${content.slice(0, start)}${label} `);
+    setMentions((current) => [
+      ...current.filter(({ end }) => end <= start),
+      { userId: memberUser.id, start, end: start + label.length },
+    ]);
+    window.requestAnimationFrame(() => composerRef.current?.focus());
+  };
+
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const leadingWhitespace = content.length - content.trimStart().length;
     const parsed = createMessageSchema.safeParse({
       ...(content.trim() ? { content } : {}),
       ...(uploads.completedUploadIds.length > 0
         ? { uploadIds: uploads.completedUploadIds }
+        : {}),
+      ...(replyTarget ? { replyToMessageId: replyTarget.id } : {}),
+      ...(mentions.length
+        ? {
+            mentions: mentions.map((mention) => ({
+              ...mention,
+              start: mention.start - leadingWhitespace,
+              end: mention.end - leadingWhitespace,
+            })),
+          }
         : {}),
     });
     if (!parsed.success) {
@@ -723,6 +804,28 @@ export function ConversationPage({
     ? members.data?.find((member) => member.user.id === directMessagePeerId)
         ?.user
     : undefined;
+  const mentionMatch = content.match(/(?:^|\s)@([^@\n]*)$/);
+  const mentionQuery = mentionMatch?.[1]?.toLocaleLowerCase() ?? null;
+  const participantIds = new Set([
+    ...(participants.data?.map(({ userId }) => userId) ?? []),
+    ...(conversation.data.type === "DIRECT" ? [conversation.data.peer.id] : []),
+  ]);
+  const restrictMentions =
+    conversation.data.type === "DIRECT" ||
+    (conversation.data.type === "CHANNEL" &&
+      conversation.data.visibility === "PRIVATE");
+  const mentionCandidates =
+    mentionQuery === null
+      ? []
+      : (members.data ?? [])
+          .filter((member) => member.user.id !== user?.id)
+          .filter(
+            (member) => !restrictMentions || participantIds.has(member.user.id),
+          )
+          .filter((member) =>
+            member.user.displayName.toLocaleLowerCase().includes(mentionQuery),
+          )
+          .slice(0, 6);
   if (directCallOpen && conversation.data.type === "DIRECT") {
     return (
       <DirectCallPage
@@ -971,6 +1074,23 @@ export function ConversationPage({
                           <div className="ml-auto flex gap-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
                             {!message.deletedAt &&
                               message.messageType !== "CALL" && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  aria-label="Reply to message"
+                                  onClick={() => {
+                                    setReplyTarget(message);
+                                    setEditingId(null);
+                                    setEditingMentions([]);
+                                    composerRef.current?.focus();
+                                  }}
+                                >
+                                  <MessageSquareReply />
+                                </Button>
+                              )}
+                            {!message.deletedAt &&
+                              message.messageType !== "CALL" && (
                                 <MessageReactionPicker
                                   currentReaction={message.currentUserReaction}
                                   disabled={
@@ -999,6 +1119,8 @@ export function ConversationPage({
                                   onClick={() => {
                                     setEditingId(message.id);
                                     setEditingContent(message.content ?? "");
+                                    setEditingMentions(message.mentions);
+                                    setReplyTarget(null);
                                   }}
                                 >
                                   <Pencil />
@@ -1021,6 +1143,29 @@ export function ConversationPage({
                             )}
                           </div>
                         </div>
+                        {message.replyTo ? (
+                          <button
+                            type="button"
+                            className="mt-3 block w-full rounded-xl border-l-4 border-primary bg-primary/5 px-3 py-2 text-left"
+                            onClick={() =>
+                              router.push(
+                                `?messageId=${message.replyTo?.id ?? ""}`,
+                              )
+                            }
+                          >
+                            <span className="block text-xs font-semibold text-primary">
+                              {message.replyTo.sender.displayName}
+                            </span>
+                            <span className="line-clamp-2 text-xs text-muted-foreground">
+                              {message.replyTo.deletedAt
+                                ? "Original message deleted"
+                                : (message.replyTo.content ??
+                                  (message.replyTo.messageType === "CALL"
+                                    ? "Voice call"
+                                    : "Attachment"))}
+                            </span>
+                          </button>
+                        ) : null}
                         {message.messageType === "CALL" ? (
                           <div className="mt-3 flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 p-3">
                             <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
@@ -1056,11 +1201,13 @@ export function ConversationPage({
                               event.preventDefault();
                               const parsed = updateMessageSchema.safeParse({
                                 content: editingContent,
+                                mentions: editingMentions,
                               });
                               if (parsed.success) {
                                 editMessage.mutate({
                                   messageId: message.id,
                                   messageContent: parsed.data.content,
+                                  messageMentions: parsed.data.mentions ?? [],
                                 });
                               }
                             }}
@@ -1070,9 +1217,17 @@ export function ConversationPage({
                               name="content"
                               aria-label="Edit message"
                               value={editingContent}
-                              onChange={(event) =>
-                                setEditingContent(event.target.value)
-                              }
+                              onChange={(event) => {
+                                const next = event.target.value;
+                                setEditingContent(next);
+                                setEditingMentions((current) =>
+                                  current.filter(
+                                    ({ start, end }) =>
+                                      next.slice(start, end) ===
+                                      editingContent.slice(start, end),
+                                  ),
+                                );
+                              }}
                             />
                             <Button
                               type="submit"
@@ -1092,7 +1247,10 @@ export function ConversationPage({
                           >
                             {message.deletedAt
                               ? "Message deleted"
-                              : message.content}
+                              : renderMentionedContent(
+                                  message.content ?? "",
+                                  message.mentions,
+                                )}
                           </p>
                         ) : null}
                         {!message.deletedAt &&
@@ -1183,6 +1341,33 @@ export function ConversationPage({
             }}
           >
             <TypingIndicator names={typingNames} />
+            {replyTarget ? (
+              <div className="mb-2 flex items-center gap-3 rounded-xl border-l-4 border-primary bg-primary/5 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-primary">
+                    Replying to{" "}
+                    {replyTarget.senderId === user?.id
+                      ? "yourself"
+                      : "a teammate"}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {replyTarget.content ??
+                      (replyTarget.attachments.length
+                        ? "Attachment"
+                        : "Message")}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  aria-label="Cancel reply"
+                  onClick={() => setReplyTarget(null)}
+                >
+                  <X />
+                </Button>
+              </div>
+            ) : null}
             {uploads.items.length > 0 && (
               <div className="mb-2 grid gap-2 sm:grid-cols-2">
                 {uploads.items.map((item) => (
@@ -1237,6 +1422,29 @@ export function ConversationPage({
                 ))}
               </div>
             )}
+            {mentionCandidates.length > 0 && (
+              <div className="mb-2 overflow-hidden rounded-xl border border-border bg-popover shadow-lg">
+                {mentionCandidates.map((member) => (
+                  <button
+                    type="button"
+                    key={member.user.id}
+                    className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectMention(member.user)}
+                  >
+                    <UserAvatar
+                      className="size-7"
+                      displayName={member.user.displayName}
+                      avatarAssetId={member.user.avatarAssetId}
+                      avatarUrl={member.user.avatarUrl}
+                    />
+                    <span className="font-medium">
+                      {member.user.displayName}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2 rounded-2xl border border-border bg-background/50 p-2 focus-within:border-primary/40">
               <span className="mb-2 grid size-8 place-items-center text-muted-foreground">
                 {conversation.data.type === "CHANNEL" ? (
@@ -1255,7 +1463,7 @@ export function ConversationPage({
                 name="content"
                 aria-label={`Message ${title}`}
                 value={content}
-                onChange={(event) => setContent(event.target.value)}
+                onChange={(event) => changeComposerContent(event.target.value)}
                 onPaste={(event) => {
                   const images = [...event.clipboardData.files].filter((file) =>
                     file.type.startsWith("image/"),
@@ -1325,6 +1533,7 @@ export function ConversationPage({
                 disabled={sendMessage.isPending || uploads.isUploading}
                 onReplace={(next) => {
                   setContent(next);
+                  setMentions([]);
                   setError(null);
                   window.requestAnimationFrame(() =>
                     composerRef.current?.focus(),

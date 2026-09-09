@@ -1,6 +1,7 @@
 import { NotificationType } from "@intouch/shared/notifications";
 import type { Logger } from "pino";
 
+import { getObservabilityMetrics } from "../../infrastructure/observability/index.js";
 import type { NotificationService } from "../notifications/notification.service.js";
 import type { PushTokenCipher } from "./push.crypto.js";
 import type { PushDeviceRepository } from "./push-device.repository.js";
@@ -47,6 +48,16 @@ const notificationCopy = (
         title: `${value.actor.displayName} reacted ${value.emoji}`,
         body: `They reacted to your message in ${value.organization.name}.`,
       };
+    case NotificationType.CHANNEL_MENTION_RECEIVED:
+      return {
+        title: `${value.actor.displayName} mentioned you`,
+        body: `Open the conversation in ${value.organization.name}.`,
+      };
+    case NotificationType.MESSAGE_REPLY_RECEIVED:
+      return {
+        title: `${value.actor.displayName} replied to you`,
+        body: `Open the conversation in ${value.organization.name}.`,
+      };
   }
 };
 
@@ -68,6 +79,13 @@ const notificationData = (
       }
     : {}),
   ...(notification.type === NotificationType.MESSAGE_REACTION_RECEIVED
+    ? {
+        conversationId: notification.conversationId,
+        messageId: notification.messageId,
+      }
+    : {}),
+  ...(notification.type === NotificationType.CHANNEL_MENTION_RECEIVED ||
+  notification.type === NotificationType.MESSAGE_REPLY_RECEIVED
     ? {
         conversationId: notification.conversationId,
         messageId: notification.messageId,
@@ -95,6 +113,7 @@ export const deliverPush = async (
     record.pushVersion,
   );
   if (!notification) {
+    getObservabilityMetrics().recordPushOutcome("suppressed");
     await dependencies.outbox.markComplete(record.id, now);
     return;
   }
@@ -102,6 +121,7 @@ export const deliverPush = async (
     record.recipientUserId,
   );
   if (devices.length === 0) {
+    getObservabilityMetrics().recordPushOutcome("suppressed");
     await dependencies.outbox.markComplete(record.id, now);
     return;
   }
@@ -115,6 +135,7 @@ export const deliverPush = async (
       token: dependencies.cipher.decrypt(device),
       ...copy,
       data: notificationData(notification.notification),
+      badge: notification.unreadCount ?? 0,
     })),
   );
   if (tickets.length !== devices.length) {
@@ -127,8 +148,10 @@ export const deliverPush = async (
     if (!ticket || !device) continue;
     if (ticket.status === "OK" && ticket.ticketId) {
       accepted.push({ deviceId: device.id, ticketId: ticket.ticketId });
+      getObservabilityMetrics().recordPushOutcome("sent");
       continue;
     }
+    getObservabilityMetrics().recordPushOutcome("rejected");
     if (ticket.errorCode === "DeviceNotRegistered") {
       await dependencies.devices.disableById(device.id, now);
     }
@@ -171,6 +194,7 @@ export const checkPushReceipts = async (
       await dependencies.devices.disableById(ticket.deviceId, now);
     }
     if (receipt.status === "ERROR") {
+      getObservabilityMetrics().recordPushOutcome("rejected");
       dependencies.logger.warn(
         { pushOutboxId: record.id, errorCode: receipt.errorCode },
         "Push notification receipt reported a failure",
@@ -201,12 +225,14 @@ export const handlePushDeliveryFailure = async (
     now.getTime() + delay < record.expiresAt.getTime();
   const errorCode = getErrorCode(error);
   if (canRetry) {
+    getObservabilityMetrics().recordPushOutcome("retried");
     await dependencies.outbox.scheduleDispatchRetry(
       record.id,
       new Date(now.getTime() + delay),
       errorCode,
     );
   } else {
+    getObservabilityMetrics().recordPushOutcome("failed");
     await dependencies.outbox.markFailed(record.id, now, errorCode);
   }
   dependencies.logger.warn(

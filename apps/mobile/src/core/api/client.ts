@@ -1,6 +1,7 @@
 import { errorResponseSchema } from "@intouch/shared/common";
 
 import { mobileConfig } from "@/core/config";
+import { captureNetworkFailure } from "@/core/monitoring/sentry";
 
 interface ResponseSchema<T> {
   parse(input: unknown): T;
@@ -32,7 +33,7 @@ export const configureAuthTransport = (transport: AuthTransport) => {
   authTransport = transport;
 };
 
-const parseError = async (response: Response) => {
+export const parseError = async (response: Response) => {
   const requestId = response.headers.get("X-Request-Id");
 
   try {
@@ -57,6 +58,46 @@ const parseError = async (response: Response) => {
   );
 };
 
+type FetchImplementation = (
+  input: string,
+  init?: RequestInit,
+) => Promise<Response>;
+
+export const authenticatedFetch = async (
+  path: `/api/v1/${string}`,
+  init: RequestInit = {},
+  fetchImplementation: FetchImplementation = fetch,
+  retryAfterRefresh = true,
+): Promise<Response> => {
+  const headers = new Headers(init.headers);
+  const accessToken = authTransport.getAccessToken();
+
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  if (init.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImplementation(`${mobileConfig.apiUrl}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    captureNetworkFailure({ error, path });
+    throw error;
+  }
+
+  if (response.status === 401 && retryAfterRefresh) {
+    const refreshedToken = await authTransport.refresh();
+    if (refreshedToken) {
+      return authenticatedFetch(path, init, fetchImplementation, false);
+    }
+  }
+
+  return response;
+};
+
 export const noContentSchema = {
   parse(input: unknown) {
     if (input !== undefined) throw new TypeError("Expected an empty response");
@@ -70,25 +111,20 @@ export const apiRequest = async <T>(
   init: RequestInit = {},
   retryAfterRefresh = true,
 ): Promise<T> => {
-  const headers = new Headers(init.headers);
-  const accessToken = authTransport.getAccessToken();
+  const response = await authenticatedFetch(
+    path,
+    init,
+    fetch,
+    retryAfterRefresh,
+  );
 
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (!response.ok) {
+    const error = await parseError(response);
+    if (response.status >= 500) {
+      captureNetworkFailure({ error, path, status: response.status });
+    }
+    throw error;
   }
-
-  const response = await fetch(`${mobileConfig.apiUrl}${path}`, {
-    ...init,
-    headers,
-  });
-
-  if (response.status === 401 && retryAfterRefresh) {
-    const refreshedToken = await authTransport.refresh();
-    if (refreshedToken) return apiRequest(path, schema, init, false);
-  }
-
-  if (!response.ok) throw await parseError(response);
   if (response.status === 204) return schema.parse(undefined);
   return schema.parse(await response.json());
 };

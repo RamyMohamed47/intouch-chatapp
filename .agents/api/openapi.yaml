@@ -467,6 +467,98 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /users/me/notification-preferences:
+    get:
+      tags: [Users, Notifications]
+      summary: Get the caller's notification categories and active mutes
+      responses:
+        "200":
+          $ref: "#/components/responses/NotificationPreferencesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Users, Notifications]
+      summary: Replace the caller's notification category preferences
+      requestBody:
+        $ref: "#/components/requestBodies/UpdateNotificationPreferencesRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/NotificationPreferencesResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /users/me/notification-mutes/organizations/{organizationId}:
+    put:
+      tags: [Users, Notifications]
+      summary: Mute notification interruption from one workspace
+      description: A null expiry mutes indefinitely. Organization invitations are never suppressed by a workspace mute.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        $ref: "#/components/requestBodies/NotificationMuteRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/NotificationPreferencesResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [Users, Notifications]
+      summary: Remove the caller's workspace notification mute
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/NotificationPreferencesResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /users/me/notification-mutes/conversations/{conversationId}:
+    put:
+      tags: [Users, Notifications]
+      summary: Mute notification interruption from one conversation
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        $ref: "#/components/requestBodies/NotificationMuteRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/NotificationPreferencesResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [Users, Notifications]
+      summary: Remove the caller's conversation notification mute
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/NotificationPreferencesResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /users/me/chat-wallpaper:
     get:
       tags: [Users]
@@ -2099,6 +2191,21 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/UpdateMessageInput"
+    UpdateNotificationPreferencesRequest:
+      description: Replace all four notification category switches.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateNotificationPreferencesInput"
+
+    NotificationMuteRequest:
+      description: Mute until the supplied future instant, or indefinitely when null.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/NotificationMuteInput"
 
     CreateUploadRequest:
       description: Strict avatar or message-attachment upload intent.
@@ -2454,6 +2561,18 @@ components:
             properties:
               wallpaper:
                 $ref: "#/components/schemas/ChatWallpaper"
+
+    NotificationPreferencesResponse:
+      description: The caller's notification categories and currently active mutes.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [preferences]
+            properties:
+              preferences:
+                $ref: "#/components/schemas/NotificationPreferences"
 
     ConversationListResponse:
       description: Accessible conversation list.
@@ -3360,6 +3479,14 @@ components:
           items:
             type: string
             pattern: "^[a-fA-F0-9]{24}$"
+        replyToMessageId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        mentions:
+          type: array
+          maxItems: 25
+          items:
+            $ref: "#/components/schemas/MessageMention"
 
     UpdateMessageInput:
       type: object
@@ -3373,6 +3500,28 @@ components:
               maxLength: 4000
               pattern: ".*\\S.*"
             - type: "null"
+        mentions:
+          type: array
+          maxItems: 25
+          items:
+            $ref: "#/components/schemas/MessageMention"
+
+    MessageMention:
+      type: object
+      additionalProperties: false
+      required: [userId, start, end]
+      properties:
+        userId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        start:
+          type: integer
+          minimum: 0
+          description: Inclusive UTF-16 offset into message content.
+        end:
+          type: integer
+          minimum: 1
+          description: Exclusive UTF-16 offset into message content.
 
     JoinVoiceSessionInput:
       type: object
@@ -3691,7 +3840,7 @@ components:
     MessageCore:
       type: object
       required:
-        [id, conversationId, senderId, content, messageType, editedAt, deletedAt, createdAt, updatedAt, attachments]
+        [id, conversationId, senderId, content, messageType, editedAt, deletedAt, createdAt, updatedAt, attachments, mentions, replyTo]
       properties:
         id:
           type: string
@@ -3727,10 +3876,39 @@ components:
           maxItems: 5
           items:
             $ref: "#/components/schemas/Attachment"
+        mentions:
+          type: array
+          maxItems: 25
+          items:
+            $ref: "#/components/schemas/MessageMention"
+        replyTo:
+          oneOf:
+            - $ref: "#/components/schemas/MessageReplyPreview"
+            - type: "null"
         call:
           oneOf:
             - $ref: "#/components/schemas/CallSummary"
             - type: "null"
+
+    MessageReplyPreview:
+      type: object
+      additionalProperties: false
+      required: [id, sender, content, messageType, deletedAt]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        sender:
+          $ref: "#/components/schemas/PublicUserSummary"
+        content:
+          type: [string, "null"]
+          maxLength: 160
+        messageType:
+          type: string
+          enum: [TEXT, ATTACHMENT, CALL]
+        deletedAt:
+          type: [string, "null"]
+          format: date-time
 
     MessageReactionSummary:
       type: object
@@ -4079,6 +4257,8 @@ components:
         - $ref: "#/components/schemas/InvitationAcceptedNotification"
         - $ref: "#/components/schemas/DirectMessageNotification"
         - $ref: "#/components/schemas/MessageReactionNotification"
+        - $ref: "#/components/schemas/ChannelMentionNotification"
+        - $ref: "#/components/schemas/MessageReplyNotification"
       discriminator:
         propertyName: type
 
@@ -4139,6 +4319,96 @@ components:
               type: string
             emoji:
               type: string
+
+    ChannelMentionNotification:
+      allOf:
+        - $ref: "#/components/schemas/NotificationBase"
+        - type: object
+          required: [type, conversationId, messageId]
+          properties:
+            type:
+              type: string
+              const: CHANNEL_MENTION_RECEIVED
+            conversationId:
+              type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            messageId:
+              type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+
+    MessageReplyNotification:
+      allOf:
+        - $ref: "#/components/schemas/NotificationBase"
+        - type: object
+          required: [type, conversationId, messageId]
+          properties:
+            type:
+              type: string
+              const: MESSAGE_REPLY_RECEIVED
+            conversationId:
+              type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+            messageId:
+              type: string
+              pattern: "^[a-fA-F0-9]{24}$"
+
+    NotificationCategoryPreferences:
+      type: object
+      additionalProperties: false
+      required: [invitations, directMessages, mentionsAndReplies, reactions]
+      properties:
+        invitations:
+          type: boolean
+        directMessages:
+          type: boolean
+        mentionsAndReplies:
+          type: boolean
+        reactions:
+          type: boolean
+
+    UpdateNotificationPreferencesInput:
+      type: object
+      additionalProperties: false
+      required: [categories]
+      properties:
+        categories:
+          $ref: "#/components/schemas/NotificationCategoryPreferences"
+
+    NotificationMuteInput:
+      type: object
+      additionalProperties: false
+      required: [mutedUntil]
+      properties:
+        mutedUntil:
+          type: [string, "null"]
+          format: date-time
+
+    NotificationMute:
+      type: object
+      additionalProperties: false
+      required: [organizationId, conversationId, mutedUntil]
+      properties:
+        organizationId:
+          type: string
+          pattern: "^[a-fA-F0-9]{24}$"
+        conversationId:
+          type: [string, "null"]
+          pattern: "^[a-fA-F0-9]{24}$"
+        mutedUntil:
+          type: [string, "null"]
+          format: date-time
+
+    NotificationPreferences:
+      type: object
+      additionalProperties: false
+      required: [categories, mutes]
+      properties:
+        categories:
+          $ref: "#/components/schemas/NotificationCategoryPreferences"
+        mutes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationMute"
 
     CreateOrganizationInput:
       type: object

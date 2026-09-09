@@ -25,6 +25,8 @@ const message: MessageRecord = {
 };
 const messageView = {
   ...message,
+  mentions: [],
+  replyTo: null,
   reactions: [],
   currentUserReaction: null,
 };

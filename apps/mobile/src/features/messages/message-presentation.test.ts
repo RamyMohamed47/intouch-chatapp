@@ -18,6 +18,8 @@ const message = (call: MessageDto["call"]): MessageDto => ({
   attachments: [],
   reactions: [],
   currentUserReaction: null,
+  mentions: [],
+  replyTo: null,
   call,
 });
 

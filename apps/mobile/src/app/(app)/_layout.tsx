@@ -40,6 +40,7 @@ export default function ProtectedLayout() {
         options={{ swipeEnabled: false }}
       />
       <Drawer.Screen name="notifications" options={{ swipeEnabled: false }} />
+      <Drawer.Screen name="search" options={{ swipeEnabled: false }} />
     </Drawer>
   );
 }

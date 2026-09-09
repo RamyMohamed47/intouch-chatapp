@@ -13,6 +13,7 @@ export default tseslint.config(
       "apps/*/.next/**",
       "apps/web/*.config.mjs",
       "apps/mobile/*.config.cjs",
+      "apps/mobile/*.config.js",
       "apps/mobile/*.config.mjs",
       "apps/mobile/app.config.ts",
       "apps/mobile/expo-env.d.ts",

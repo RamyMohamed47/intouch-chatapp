@@ -35,7 +35,9 @@ All keys are under `${REDIS_KEY_PREFIX}:bullmq`.
   transition is idempotent so duplicate, delayed, or out-of-order jobs are safe.
 - `push-delivery`: reconciles every two seconds, sends safe activity-only copy
   through Expo Push Service, and checks provider receipts after 15 minutes.
-  Tokens are encrypted in MongoDB and never enter BullMQ payloads.
+  Tokens are encrypted in MongoDB and never enter BullMQ payloads. Category
+  preferences and active workspace/conversation mutes are checked immediately
+  before dispatch; suppressed jobs complete successfully without calling Expo.
 
 Every mutation remains idempotent through repository-level leases and status
 conditions. Reconciliation recovers committed MongoDB work after API crashes,

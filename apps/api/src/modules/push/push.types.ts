@@ -21,6 +21,7 @@ export interface PushProviderMessage {
   title: string;
   body: string;
   data: Record<string, string>;
+  badge?: number;
 }
 
 export interface PushProviderTicket {
@@ -44,4 +45,5 @@ export interface PushProvider {
 export interface PushNotificationView {
   notification: NotificationDto;
   recipientUserId: string;
+  unreadCount?: number;
 }

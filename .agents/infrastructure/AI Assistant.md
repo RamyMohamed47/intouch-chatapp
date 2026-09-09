@@ -6,6 +6,12 @@ authorized context and stream model output to the requesting browser over SSE.
 Closing the response aborts provider generation and releases its concurrency
 lease.
 
+Mobile V1.2 consumes the same endpoint through `expo/fetch`, incrementally
+parses SSE across arbitrary network chunk boundaries, and supports cancellation.
+Its six-message context exists in memory only and clears on logout, workspace
+switch, or process restart. Composer transformations always show a preview and
+require explicit user application before changing the draft.
+
 ## Data Boundaries
 
 - The API key is server-only.

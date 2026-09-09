@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+import { NotificationStatus } from "@intouch/shared/notifications";
 import { router } from "expo-router";
 import {
   createContext,
@@ -94,6 +95,15 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
   const queryClient = useQueryClient();
   const [state, setState] = useState<PushState>("checking");
   const registrationPromiseRef = useRef<Promise<void> | null>(null);
+
+  const reconcileBadge = useCallback(async () => {
+    if (status !== "authenticated") {
+      await Notifications.setBadgeCountAsync(0).catch(() => false);
+      return;
+    }
+    const page = await notificationsApi.list(NotificationStatus.UNREAD);
+    await Notifications.setBadgeCountAsync(page.unreadCount).catch(() => false);
+  }, [status]);
 
   const register = useCallback(
     (devicePushToken?: Notifications.DevicePushToken) => {
@@ -216,6 +226,7 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
     if (status !== "authenticated") return;
     const received = Notifications.addNotificationReceivedListener(() => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void reconcileBadge();
     });
     const response = Notifications.addNotificationResponseReceivedListener(
       (event) => {
@@ -224,6 +235,7 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
           setActiveOrganizationId,
         );
         void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        void reconcileBadge();
       },
     );
     const token = Notifications.addPushTokenListener((devicePushToken) => {
@@ -237,12 +249,19 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
       );
       void Notifications.clearLastNotificationResponseAsync();
     });
+    const appState = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        void reconcileBadge().catch(() => undefined);
+      }
+    });
+    void reconcileBadge().catch(() => undefined);
     return () => {
       received.remove();
       response.remove();
       token.remove();
+      appState.remove();
     };
-  }, [queryClient, register, setActiveOrganizationId, status]);
+  }, [queryClient, reconcileBadge, register, setActiveOrganizationId, status]);
 
   return (
     <PushContext.Provider value={{ disable, enable: register, state }}>

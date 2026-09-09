@@ -8,6 +8,21 @@ export type {
   NotificationStatusValue,
 } from "./notification.schema.js";
 export {
+  notificationCategoryPreferencesSchema,
+  notificationMuteDtoSchema,
+  notificationMuteRequestSchema,
+  notificationPreferencesDtoSchema,
+  notificationPreferencesResponseSchema,
+  updateNotificationPreferencesSchema,
+} from "./notification-preferences.schema.js";
+export type {
+  NotificationCategoryPreferences,
+  NotificationMuteDto,
+  NotificationMuteInput,
+  NotificationPreferencesDto,
+  UpdateNotificationPreferencesInput,
+} from "./notification-preferences.schema.js";
+export {
   directMessageReceivedNotificationDtoSchema,
   messageReactionReceivedNotificationDtoSchema,
   NotificationChangeKind,

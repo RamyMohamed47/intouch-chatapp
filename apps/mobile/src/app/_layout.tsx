@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
+import { useNavigationContainerRef } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
+import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ToastProvider } from "@/components/ui/toast-provider";
@@ -10,8 +12,10 @@ import { AuthProvider } from "@/features/auth/auth-provider";
 import { WorkspaceProvider } from "@/features/organizations/workspace-provider";
 import { RealtimeProvider } from "@/features/realtime/realtime-provider";
 import { PushProvider } from "@/features/push/push-provider";
+import { navigationIntegration, Sentry } from "@/core/monitoring/sentry";
 
-export default function RootLayout() {
+function RootLayout() {
+  const navigationRef = useNavigationContainerRef();
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -21,6 +25,10 @@ export default function RootLayout() {
         },
       }),
   );
+
+  useEffect(() => {
+    navigationIntegration.registerNavigationContainer(navigationRef);
+  }, [navigationRef]);
 
   return (
     <SafeAreaProvider>
@@ -43,3 +51,5 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+export default Sentry.wrap(RootLayout);

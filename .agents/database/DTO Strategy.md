@@ -77,3 +77,14 @@ asset-access resource. `avatarAssetId` is nullable in public-user DTOs and is
 resolved the same way, while `avatarUrl` remains an optional external fallback.
 Organization DTOs expose nullable `logoAssetId`; external organization logo
 URLs are not accepted or returned.
+
+Message DTOs expose validated mention metadata and a nullable, safe reply
+preview. Mention ranges use JavaScript/UTF-16 offsets so web and React Native
+select the same substring. Reply previews contain only the original message ID,
+public sender summary, message type, short excerpt, and deletion state; storage
+records and notification-deduplication metadata remain private.
+
+Notification preferences are strict all-fields category replacements plus the
+caller's currently active workspace/conversation mutes. Missing persistence
+records map to all-enabled defaults rather than changing the public response
+shape.

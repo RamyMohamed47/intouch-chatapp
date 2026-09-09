@@ -13,3 +13,8 @@ export type {
   UpsertDirectMessageNotificationInput,
   UpsertReactionNotificationInput,
 } from "./notification.types.js";
+export { default as createMongooseNotificationPreferenceRepository } from "./notification-preference.repository.js";
+export type { NotificationPreferenceRepository } from "./notification-preference.repository.js";
+export { default as createNotificationPreferenceService } from "./notification-preference.service.js";
+export { default as createNotificationPreferenceController } from "./notification-preference.controller.js";
+export { default as createNotificationPreferenceRouter } from "./notification-preference.routes.js";

@@ -27,6 +27,13 @@ The `preview` EAS environment must provide `EXPO_PUBLIC_API_URL` and
 `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`. Preview builds use the `preview` EAS Update
 channel and do not require Metro or a development machine after installation.
 
+Mobile V1.2 also supports a dedicated optional Sentry project. Add
+`EXPO_PUBLIC_SENTRY_DSN` to the EAS runtime environment, then configure
+`SENTRY_AUTH_TOKEN` as a sensitive build value, `SENTRY_ORG` as the organization
+slug, and `SENTRY_PROJECT=intouch-mobile`. Leave the DSN empty to keep Sentry
+disabled locally. A fresh development and preview build is required after
+adding the native SDK.
+
 ## Push Notifications
 
 Push notifications require an Android development or preview build; Expo Go is
@@ -52,6 +59,9 @@ Test delivery on a physical device. Background the app, trigger each supported
 notification from another account, tap it, and verify that InTouch opens the
 correct invitation, workspace, conversation, or exact message. Also verify
 foreground activity does not produce both a Socket.IO toast and a system banner.
+Category switches and active workspace/conversation mutes suppress push only;
+the durable inbox remains complete. Android launcher badge support varies by
+launcher and must not be treated as a registration failure.
 
 ## Automated Preview Deployment
 
@@ -89,3 +99,6 @@ npm run test:mobile
 npm run build:mobile
 npm run mobile:doctor
 ```
+
+The complete V1.2 acceptance matrix is documented in
+[Mobile V1.2](../../.agents/mobile/Mobile%20V1.2.md).

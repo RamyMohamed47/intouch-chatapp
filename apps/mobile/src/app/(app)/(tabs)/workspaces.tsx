@@ -18,6 +18,7 @@ import {
   uploadFiles,
   type LocalUploadFile,
 } from "@/features/uploads/upload-client";
+import { requestMediaLibraryAccess } from "@/features/uploads/media-library-permission";
 
 export default function WorkspacesScreen() {
   const { theme } = useAppearance();
@@ -64,6 +65,7 @@ export default function WorkspacesScreen() {
   });
 
   const pickLogo = async () => {
+    if (!(await requestMediaLibraryAccess())) return;
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 1,

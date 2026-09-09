@@ -9,6 +9,8 @@ export const NotificationType = {
   ORGANIZATION_INVITATION_ACCEPTED: "ORGANIZATION_INVITATION_ACCEPTED",
   DIRECT_MESSAGE_RECEIVED: "DIRECT_MESSAGE_RECEIVED",
   MESSAGE_REACTION_RECEIVED: "MESSAGE_REACTION_RECEIVED",
+  CHANNEL_MENTION_RECEIVED: "CHANNEL_MENTION_RECEIVED",
+  MESSAGE_REPLY_RECEIVED: "MESSAGE_REPLY_RECEIVED",
 } as const;
 
 export const notificationTypeSchema = z.enum(NotificationType);
@@ -66,11 +68,33 @@ export const messageReactionReceivedNotificationDtoSchema = z
   })
   .strict();
 
+const messageReferenceNotificationBase = {
+  ...notificationBase,
+  conversationId: identifierDtoSchema,
+  messageId: identifierDtoSchema,
+};
+
+export const channelMentionReceivedNotificationDtoSchema = z
+  .object({
+    ...messageReferenceNotificationBase,
+    type: z.literal(NotificationType.CHANNEL_MENTION_RECEIVED),
+  })
+  .strict();
+
+export const messageReplyReceivedNotificationDtoSchema = z
+  .object({
+    ...messageReferenceNotificationBase,
+    type: z.literal(NotificationType.MESSAGE_REPLY_RECEIVED),
+  })
+  .strict();
+
 export const notificationDtoSchema = z.discriminatedUnion("type", [
   organizationInvitationReceivedNotificationDtoSchema,
   organizationInvitationAcceptedNotificationDtoSchema,
   directMessageReceivedNotificationDtoSchema,
   messageReactionReceivedNotificationDtoSchema,
+  channelMentionReceivedNotificationDtoSchema,
+  messageReplyReceivedNotificationDtoSchema,
 ]);
 
 export const notificationResponseSchema = z
