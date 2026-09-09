@@ -496,13 +496,15 @@ const createAuthService = ({
       };
     },
 
-    async logout(token: string | undefined): Promise<void> {
-      if (!token) return;
+    async logout(token: string | undefined): Promise<string | null> {
+      if (!token) return null;
 
       const parsedToken = refreshTokens.parse(token);
-      if (!parsedToken) return;
+      if (!parsedToken) return null;
 
+      const userId = await sessions.findUserIdById(parsedToken.sessionId);
       await sessions.deleteById(parsedToken.sessionId);
+      return userId;
     },
 
     async getCurrentUser(userId: string) {

@@ -79,6 +79,7 @@ const authService: AuthService = {
   }),
   logout: async (token) => {
     loggedOutToken = token;
+    return user.id;
   },
   getCurrentUser: async () => user,
 };

@@ -183,6 +183,8 @@ const createHarness = () => {
     deleteById: async (sessionId) => {
       sessionRecords.delete(sessionId);
     },
+    findUserIdById: async (sessionId) =>
+      sessionRecords.get(sessionId)?.userId ?? null,
     deleteByUserId: async (userId) => {
       for (const [sessionId, record] of sessionRecords) {
         if (record.userId === userId) sessionRecords.delete(sessionId);

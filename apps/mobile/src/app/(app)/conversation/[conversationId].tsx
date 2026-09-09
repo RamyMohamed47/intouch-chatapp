@@ -38,7 +38,7 @@ import {
   type ViewToken,
 } from "react-native";
 
-import { Button, Muted } from "@/components/ui/controls";
+import { BackButton, Button, Muted } from "@/components/ui/controls";
 import { MessageActionSheet } from "@/components/message-action-sheet";
 import { Screen, StateView } from "@/components/ui/screen";
 import { UserAvatar } from "@/components/user-avatar";
@@ -63,9 +63,11 @@ import {
 import { uploadsApi } from "@/features/uploads/uploads-api";
 
 export default function ConversationScreen() {
-  const { conversationId = "" } = useLocalSearchParams<{
+  const { conversationId = "", messageId } = useLocalSearchParams<{
     conversationId: string;
+    messageId?: string;
   }>();
+  const anchorMessageId = typeof messageId === "string" ? messageId : "";
   const { theme } = useAppearance();
   const { user } = useAuth();
   const isFocused = useIsFocused();
@@ -81,13 +83,20 @@ export default function ConversationScreen() {
   const listRef = useRef<FlatList<MessageDto>>(null);
   const pendingReceiptMessageIdRef = useRef<string | null>(null);
   const failedReceiptMessageIdRef = useRef<string | null>(null);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const [content, setContent] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingAllowsEmpty, setEditingAllowsEmpty] = useState(false);
   const [files, setFiles] = useState<LocalUploadFile[]>([]);
   const [completedUploadIds, setCompletedUploadIds] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFileIndex, setUploadingFileIndex] = useState<number | null>(
+    null,
+  );
   const [showJump, setShowJump] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null);
   const [showReaders, setShowReaders] = useState(false);
   const [reactionViewer, setReactionViewer] = useState<{
     messageId: string;
@@ -122,11 +131,24 @@ export default function ConversationScreen() {
     queryFn: ({ pageParam }) => messagesApi.list(conversationId, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: ({ nextCursor }) => nextCursor ?? undefined,
+    enabled: !anchorMessageId,
   });
-  const allMessages = useMemo(
-    () => messages.data?.pages.flatMap((page) => page.messages) ?? [],
-    [messages.data],
-  );
+  const messageContext = useQuery({
+    queryKey: ["messages", conversationId, "context", anchorMessageId],
+    queryFn: () => messagesApi.context(conversationId, anchorMessageId),
+    enabled: Boolean(anchorMessageId),
+  });
+  const allMessages = useMemo(() => {
+    const source = anchorMessageId
+      ? (messageContext.data?.messages ?? [])
+      : (messages.data?.pages.flatMap((page) => page.messages) ?? []);
+    return source
+      .filter(
+        (message, index, list) =>
+          list.findIndex(({ id }) => id === message.id) === index,
+      )
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }, [anchorMessageId, messageContext.data, messages.data]);
   const selectedMessage = allMessages.find(
     ({ id }) => id === selectedMessageId,
   );
@@ -162,6 +184,8 @@ export default function ConversationScreen() {
   }, [content, conversationId, startTyping, stopTyping]);
 
   const latest = allMessages[0];
+  const atLatestMessage =
+    !anchorMessageId || messageContext.data?.hasLater === false;
   const latestOutgoing = allMessages.find(
     (message) =>
       message.senderId === user?.id &&
@@ -223,6 +247,7 @@ export default function ConversationScreen() {
   useEffect(() => {
     if (
       !latest ||
+      !atLatestMessage ||
       !latestVisible ||
       !appIsActive ||
       !isFocused ||
@@ -253,8 +278,28 @@ export default function ConversationScreen() {
     isFocused,
     latest,
     latestVisible,
+    atLatestMessage,
     receipt,
   ]);
+
+  useEffect(() => {
+    if (!anchorMessageId || !messageContext.data) return;
+    const index = allMessages.findIndex(({ id }) => id === anchorMessageId);
+    if (index < 0) return;
+    const frame = requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({
+        index,
+        animated: false,
+        viewPosition: 0.5,
+      });
+      setHighlightedMessageId(anchorMessageId);
+    });
+    const timeout = setTimeout(() => setHighlightedMessageId(null), 2_400);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timeout);
+    };
+  }, [allMessages, anchorMessageId, messageContext.data]);
 
   const send = useMutation({
     mutationFn: async () => {
@@ -265,11 +310,21 @@ export default function ConversationScreen() {
       }
       let uploadIds = completedUploadIds;
       if (files.length && uploadIds.length === 0) {
-        uploadIds = await uploadFiles(
-          { purpose: "MESSAGE_ATTACHMENT", conversationId, files },
-          (index, progress) =>
-            setUploadProgress((index + progress) / files.length),
-        );
+        const controller = new AbortController();
+        uploadAbortControllerRef.current = controller;
+        try {
+          uploadIds = await uploadFiles(
+            { purpose: "MESSAGE_ATTACHMENT", conversationId, files },
+            (index, progress) => {
+              setUploadingFileIndex(index);
+              setUploadProgress((index + progress) / files.length);
+            },
+            controller.signal,
+          );
+        } finally {
+          uploadAbortControllerRef.current = null;
+          setUploadingFileIndex(null);
+        }
         setCompletedUploadIds(uploadIds);
       }
       return messagesApi.create(conversationId, {
@@ -284,6 +339,7 @@ export default function ConversationScreen() {
       setFiles([]);
       setCompletedUploadIds([]);
       setUploadProgress(0);
+      setUploadingFileIndex(null);
       stopTyping(conversationId);
       await queryClient.invalidateQueries({
         queryKey: ["messages", conversationId],
@@ -293,10 +349,13 @@ export default function ConversationScreen() {
   });
 
   const clearAttachments = async () => {
+    uploadAbortControllerRef.current?.abort();
     const uploadIds = completedUploadIds;
     setFiles([]);
     setCompletedUploadIds([]);
     setUploadProgress(0);
+    setUploadingFileIndex(null);
+    send.reset();
     await Promise.allSettled(uploadIds.map((id) => uploadsApi.cancel(id)));
   };
 
@@ -385,7 +444,7 @@ export default function ConversationScreen() {
     },
   ).current;
 
-  if (conversation.isLoading) {
+  if (conversation.isLoading || (anchorMessageId && messageContext.isLoading)) {
     return (
       <StateView
         loading
@@ -397,9 +456,7 @@ export default function ConversationScreen() {
   if (isVoice) {
     return (
       <Screen>
-        <Button onPress={() => router.back()} variant="ghost">
-          Back
-        </Button>
+        <BackButton onPress={() => router.back()} />
         <StateView
           title="Voice is available on web"
           message="Mobile audio rooms arrive after the V1 text foundation."
@@ -426,9 +483,7 @@ export default function ConversationScreen() {
           { borderBottomColor: theme.border, backgroundColor: theme.panel },
         ]}
       >
-        <Pressable onPress={() => router.back()}>
-          <Text style={{ color: theme.accent }}>Back</Text>
-        </Pressable>
+        <BackButton onPress={() => router.back()} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
           <Muted>{connected ? "Live" : "Reconnecting"}</Muted>
@@ -440,6 +495,32 @@ export default function ConversationScreen() {
           <Palette color={theme.accent} size={22} />
         </Pressable>
       </View>
+      {anchorMessageId ? (
+        <View
+          style={[
+            styles.contextBanner,
+            {
+              backgroundColor: theme.accentSoft,
+              borderBottomColor: theme.border,
+            },
+          ]}
+        >
+          <Text style={[styles.contextText, { color: theme.text }]}>
+            Viewing a notification in context
+          </Text>
+          <Button
+            onPress={() =>
+              router.replace({
+                pathname: "/conversation/[conversationId]",
+                params: { conversationId },
+              })
+            }
+            variant="ghost"
+          >
+            Jump to latest
+          </Button>
+        </View>
+      ) : null}
       <View style={styles.history}>
         <ChatWallpaper wallpaper={wallpaper.data} />
         <FlatList
@@ -454,10 +535,18 @@ export default function ConversationScreen() {
           keyExtractor={({ id }) => id}
           contentContainerStyle={styles.messages}
           onEndReached={() =>
-            messages.hasNextPage && void messages.fetchNextPage()
+            !anchorMessageId &&
+            messages.hasNextPage &&
+            void messages.fetchNextPage()
           }
           onEndReachedThreshold={0.35}
           onViewableItemsChanged={onViewableItemsChanged}
+          onScrollToIndexFailed={({ index }) =>
+            listRef.current?.scrollToOffset({
+              offset: index * 120,
+              animated: false,
+            })
+          }
           renderItem={({ item }) => {
             const sender = members.data?.find(
               (member) => member.user.id === item.senderId,
@@ -483,7 +572,11 @@ export default function ConversationScreen() {
                     styles.bubble,
                     {
                       backgroundColor: mine ? theme.accentSoft : theme.panel,
-                      borderColor: theme.border,
+                      borderColor:
+                        highlightedMessageId === item.id
+                          ? theme.accent
+                          : theme.border,
+                      borderWidth: highlightedMessageId === item.id ? 2 : 1,
                     },
                   ]}
                 >
@@ -737,14 +830,25 @@ export default function ConversationScreen() {
       </View>
       {files.length ? (
         <View style={[styles.files, { backgroundColor: theme.panelStrong }]}>
-          <Text style={{ color: theme.text }}>
-            {files.length} file(s) ready
-          </Text>
-          {send.isPending ? (
-            <Muted>Uploading {Math.round(uploadProgress * 100)}%</Muted>
-          ) : null}
+          <View style={styles.fileList}>
+            {files.map((file, index) => (
+              <View key={`${file.uri}:${index}`} style={styles.fileRow}>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.fileName, { color: theme.text }]}
+                >
+                  {file.fileName}
+                </Text>
+                <Muted>
+                  {send.isPending && uploadingFileIndex === index
+                    ? `${Math.round((uploadProgress * files.length - index) * 100)}%`
+                    : `${Math.max(1, Math.round(file.size / 1024))} KB`}
+                </Muted>
+              </View>
+            ))}
+          </View>
           <Button onPress={() => void clearAttachments()} variant="ghost">
-            Clear
+            {send.isPending ? "Cancel upload" : "Clear"}
           </Button>
         </View>
       ) : null}
@@ -839,6 +943,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   title: { fontSize: 18, fontWeight: "900" },
+  contextBanner: {
+    alignItems: "center",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  contextText: { flex: 1, fontSize: 13, fontWeight: "700" },
   history: { flex: 1 },
   messages: { padding: 14, gap: 9 },
   messageRow: { alignItems: "flex-start" },
@@ -884,6 +998,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  fileList: { flex: 1, gap: 4 },
+  fileRow: { alignItems: "center", flexDirection: "row", gap: 8 },
+  fileName: { flex: 1, fontSize: 13, fontWeight: "700" },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",

@@ -20,6 +20,8 @@ interface NotificationDocument {
   dedupeKey?: string;
   activeGroupKey?: string;
   readAt?: Date;
+  pushVersion: number;
+  pushEnqueuedVersion: number;
   lastActivityAt: Date;
   expiresAt: Date;
   createdAt: Date;
@@ -54,12 +56,18 @@ const notificationSchema = new Schema<NotificationDocument>(
     dedupeKey: { type: String },
     activeGroupKey: { type: String },
     readAt: { type: Date },
+    pushVersion: { type: Number, default: 1, min: 1, required: true },
+    pushEnqueuedVersion: { type: Number, default: 0, min: 0, required: true },
     lastActivityAt: { type: Date, required: true },
     expiresAt: { type: Date, required: true },
   },
   { timestamps: true },
 );
 
+notificationSchema.index(
+  { pushVersion: 1, pushEnqueuedVersion: 1, expiresAt: 1 },
+  { name: "notifications_pending_push" },
+);
 notificationSchema.index(
   { recipientUserId: 1, lastActivityAt: -1, _id: -1 },
   { name: "notifications_by_recipient_activity" },

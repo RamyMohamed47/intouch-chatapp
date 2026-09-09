@@ -18,6 +18,7 @@ import { configureAuthTransport } from "@/core/api/client";
 import { mobileConfig } from "@/core/config";
 import { authApi } from "@/features/auth/auth-api";
 import { sessionStore } from "@/features/auth/session-store";
+import { pushDeviceStore } from "@/features/push/push-device-store";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -130,11 +131,16 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   }, [setSession]);
 
   const logout = useCallback(async () => {
-    const refreshToken = await sessionStore.getRefreshToken();
+    const [refreshToken, installationId] = await Promise.all([
+      sessionStore.getRefreshToken(),
+      pushDeviceStore.getInstallationId(),
+    ]);
     await clearSession();
 
     await Promise.allSettled([
-      refreshToken ? authApi.logout(refreshToken) : Promise.resolve(),
+      refreshToken
+        ? authApi.logout(refreshToken, installationId)
+        : Promise.resolve(),
       GoogleOneTapSignIn.signOut(),
     ]);
   }, [clearSession]);

@@ -35,6 +35,7 @@ export interface AppDependencies {
   organizationAccessRouter?: Router;
   organizationConversationRouter?: Router;
   organizationRouter?: Router;
+  pushDeviceRouter?: Router;
   readReceiptRouter?: Router;
   searchRouter?: Router;
   userChatWallpaperRouter?: Router;
@@ -66,6 +67,7 @@ const createApp = ({
   organizationAccessRouter,
   organizationConversationRouter,
   organizationRouter,
+  pushDeviceRouter,
   readReceiptRouter,
   searchRouter,
   userChatWallpaperRouter,
@@ -222,6 +224,10 @@ const createApp = ({
 
   if (userAvatarRouter) {
     app.use("/api/v1/users", userAvatarRouter);
+  }
+
+  if (pushDeviceRouter) {
+    app.use("/api/v1/users", pushDeviceRouter);
   }
 
   app.use((req, _res, next) => {

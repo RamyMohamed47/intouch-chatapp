@@ -16,6 +16,7 @@ import type {
   NotificationRecord,
   UpsertDirectMessageNotificationInput,
   UpsertReactionNotificationInput,
+  PushNotificationCandidate,
 } from "./notification.types.js";
 
 type LeanNotification = NotificationDocument & { _id: Types.ObjectId };
@@ -46,6 +47,8 @@ const toRecord = (notification: LeanNotification): NotificationRecord => ({
     : {}),
   ...(notification.emoji ? { emoji: notification.emoji } : {}),
   readAt: notification.readAt ?? null,
+  pushVersion: notification.pushVersion ?? 0,
+  pushEnqueuedVersion: notification.pushEnqueuedVersion ?? 0,
   lastActivityAt: notification.lastActivityAt,
   expiresAt: notification.expiresAt,
   createdAt: notification.createdAt,
@@ -79,6 +82,12 @@ export interface NotificationRepository {
     readAt: Date,
   ): Promise<NotificationRecord | null>;
   markAllRead(userId: string, readAt: Date): Promise<number>;
+  findById(id: string): Promise<NotificationRecord | null>;
+  listPendingPush(
+    now: Date,
+    limit: number,
+  ): Promise<PushNotificationCandidate[]>;
+  markPushEnqueued(id: string, version: number): Promise<void>;
   markDirectMessageReadThrough(
     userId: string,
     conversationId: string,
@@ -126,6 +135,8 @@ const createMongooseNotificationRepository = (
           $setOnInsert: {
             ...input,
             readAt: null,
+            pushVersion: 1,
+            pushEnqueuedVersion: 0,
           },
         },
         { upsert: true, new: true },
@@ -158,7 +169,7 @@ const createMongooseNotificationRepository = (
             lastActivityAt: input.lastActivityAt,
             expiresAt: input.expiresAt,
           },
-          $inc: { messageCount: 1 },
+          $inc: { messageCount: 1, pushVersion: 1 },
         },
         { upsert: true, new: true },
       ).lean<LeanNotification>();
@@ -189,6 +200,7 @@ const createMongooseNotificationRepository = (
             lastActivityAt: input.lastActivityAt,
             expiresAt: input.expiresAt,
           },
+          $inc: { pushVersion: 1 },
         },
         { upsert: true, new: true },
       ).lean<LeanNotification>();
@@ -247,6 +259,46 @@ const createMongooseNotificationRepository = (
         { $set: { readAt }, $unset: { activeGroupKey: "" } },
       );
       return (await withSession(query, session).exec()).modifiedCount;
+    },
+
+    async findById(id) {
+      if (!Types.ObjectId.isValid(id)) return null;
+      const query = NotificationModel.findById(id).lean<LeanNotification>();
+      const notification = await withSession(query, session).exec();
+      return notification ? toRecord(notification) : null;
+    },
+
+    async listPendingPush(now, limit) {
+      const query = NotificationModel.find({
+        expiresAt: { $gt: now },
+        readAt: null,
+        $expr: { $lt: ["$pushEnqueuedVersion", "$pushVersion"] },
+      })
+        .sort({ lastActivityAt: 1, _id: 1 })
+        .limit(limit)
+        .select({ recipientUserId: 1, pushVersion: 1 })
+        .lean<
+          {
+            _id: Types.ObjectId;
+            recipientUserId: Types.ObjectId;
+            pushVersion: number;
+          }[]
+        >();
+      return (await withSession(query, session).exec()).map((notification) => ({
+        id: notification._id.toString(),
+        recipientUserId: notification.recipientUserId.toString(),
+        pushVersion: notification.pushVersion,
+      }));
+    },
+
+    async markPushEnqueued(id, version) {
+      await withSession(
+        NotificationModel.updateOne(
+          { _id: id, pushEnqueuedVersion: { $lt: version } },
+          { $max: { pushEnqueuedVersion: version } },
+        ),
+        session,
+      ).exec();
     },
 
     async markDirectMessageReadThrough(

@@ -12,9 +12,12 @@
     "conversations/**/*.ts",
     "memberships/**/*.ts",
     "messages/**/*.ts",
+    "notifications/**/*.ts",
     "organizations/**/*.ts",
+    "push/**/*.ts",
     "realtime/**/*.ts",
     "search/**/*.ts",
+    "uploads/**/*.ts",
     "users/**/*.ts",
     "voice/**/*.ts",
     "tests/**/*.ts"

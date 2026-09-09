@@ -1,7 +1,28 @@
 import type { ComponentProps, ReactNode } from "react";
+import { ArrowLeft } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useAppearance } from "@/features/appearance/appearance-provider";
+
+export const BackButton = ({ onPress }: { onPress: () => void }) => {
+  const { theme } = useAppearance();
+
+  return (
+    <Pressable
+      accessibilityLabel="Go back"
+      accessibilityRole="button"
+      hitSlop={10}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.backButton,
+        { backgroundColor: theme.panelStrong, borderColor: theme.border },
+        pressed && styles.pressed,
+      ]}
+    >
+      <ArrowLeft color={theme.text} size={22} />
+    </Pressable>
+  );
+};
 
 export const Button = ({
   children,
@@ -85,13 +106,19 @@ export const Field = ({
   );
 };
 
-export const Card = ({ children }: { children: ReactNode }) => {
+export const Card = ({
+  children,
+  style,
+  ...props
+}: ComponentProps<typeof View>) => {
   const { theme } = useAppearance();
   return (
     <View
+      {...props}
       style={[
         styles.card,
         { backgroundColor: theme.panel, borderColor: theme.border },
+        style,
       ]}
     >
       {children}
@@ -112,6 +139,14 @@ export const Muted = ({ children }: { children: ReactNode }) => {
 };
 
 const styles = StyleSheet.create({
+  backButton: {
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
   button: {
     minHeight: 48,
     borderRadius: 14,

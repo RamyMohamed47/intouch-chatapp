@@ -2,7 +2,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Linking, Text, View } from "react-native";
 
 import { MainScreenHeader } from "@/components/app-shell";
 import { Button, Card, Muted } from "@/components/ui/controls";
@@ -16,6 +16,7 @@ import {
   uploadFiles,
 } from "@/features/uploads/upload-client";
 import { uploadsApi } from "@/features/uploads/uploads-api";
+import { usePush } from "@/features/push/push-provider";
 
 export default function ProfileScreen() {
   const { logout, updateUser, user } = useAuth();
@@ -23,6 +24,10 @@ export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const push = usePush();
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
 
   const replaceAvatar = async () => {
     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -33,6 +38,7 @@ export default function ProfileScreen() {
     const asset = picked.assets?.[0];
     if (picked.canceled || !asset?.width || !asset.height) return;
     setUploading(true);
+    setAvatarError(null);
     try {
       const file = await prepareSquareImage(
         asset.uri,
@@ -45,9 +51,30 @@ export default function ProfileScreen() {
       );
       if (uploadId) updateUser(await uploadsApi.setAvatar(uploadId));
       await queryClient.invalidateQueries({ queryKey: ["auth"] });
+    } catch (error) {
+      setAvatarError(
+        error instanceof Error
+          ? error.message
+          : "Profile picture update failed",
+      );
     } finally {
       setUploading(false);
       setProgress(0);
+    }
+  };
+
+  const updatePush = async (enabled: boolean) => {
+    setPushBusy(true);
+    setPushError(null);
+    try {
+      if (enabled) await push.enable();
+      else await push.disable();
+    } catch (error) {
+      setPushError(
+        error instanceof Error ? error.message : "Notification setting failed",
+      );
+    } finally {
+      setPushBusy(false);
     }
   };
 
@@ -77,6 +104,14 @@ export default function ProfileScreen() {
         {uploading ? (
           <Muted>Uploading {Math.round(progress * 100)}%</Muted>
         ) : null}
+        {avatarError ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ color: theme.danger }}
+          >
+            {avatarError}
+          </Text>
+        ) : null}
         <Button
           disabled={uploading}
           onPress={() => void replaceAvatar()}
@@ -86,7 +121,18 @@ export default function ProfileScreen() {
         </Button>
         {user?.avatarAssetId ? (
           <Button
-            onPress={() => void uploadsApi.removeAvatar().then(updateUser)}
+            onPress={() =>
+              void uploadsApi
+                .removeAvatar()
+                .then(updateUser)
+                .catch((error: unknown) =>
+                  setAvatarError(
+                    error instanceof Error
+                      ? error.message
+                      : "Profile picture removal failed",
+                  ),
+                )
+            }
             variant="ghost"
           >
             Remove custom picture
@@ -122,9 +168,62 @@ export default function ProfileScreen() {
       </Card>
 
       <Card>
+        <Text style={{ color: theme.text, fontSize: 17, fontWeight: "900" }}>
+          Push notifications
+        </Text>
         <Muted>
-          Voice, video, screen sharing, Echo, search, and push notifications
-          remain available on web or in a later mobile release.
+          {push.state === "enabled"
+            ? "Enabled for invitations, direct messages, and reactions."
+            : push.state === "blocked"
+              ? "Blocked in system settings. Enable notifications for InTouch from your device settings."
+              : push.state === "unavailable"
+                ? "Push registration is unavailable on this build or server."
+                : push.state === "checking"
+                  ? "Checking notification access..."
+                  : "Disabled on this device."}
+        </Muted>
+        {pushError ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ color: theme.danger }}
+          >
+            {pushError}
+          </Text>
+        ) : null}
+        {push.state === "blocked" ? (
+          <Button
+            onPress={() => void Linking.openSettings()}
+            variant="secondary"
+          >
+            Open system settings
+          </Button>
+        ) : push.state === "enabled" ? (
+          <Button
+            disabled={pushBusy}
+            onPress={() => void updatePush(false)}
+            variant="secondary"
+          >
+            Disable notifications
+          </Button>
+        ) : (
+          <Button
+            disabled={
+              pushBusy ||
+              push.state === "checking" ||
+              push.state === "unavailable"
+            }
+            onPress={() => void updatePush(true)}
+            variant="secondary"
+          >
+            Enable notifications
+          </Button>
+        )}
+      </Card>
+
+      <Card>
+        <Muted>
+          Voice, video, screen sharing, Echo, and search remain available on web
+          or in a later mobile release.
         </Muted>
         <Button destructive onPress={() => void logout()}>
           Sign out

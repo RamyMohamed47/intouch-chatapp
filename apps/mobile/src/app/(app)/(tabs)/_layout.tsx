@@ -7,6 +7,7 @@ export default function TabsLayout() {
   const { theme } = useAppearance();
   return (
     <Tabs
+      initialRouteName="workspaces"
       screenOptions={{
         headerShown: false,
         tabBarHideOnKeyboard: true,

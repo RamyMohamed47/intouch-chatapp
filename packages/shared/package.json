@@ -48,6 +48,10 @@
       "types": "./dist/notifications/index.d.ts",
       "import": "./dist/notifications/index.js"
     },
+    "./push": {
+      "types": "./dist/push/index.d.ts",
+      "import": "./dist/push/index.js"
+    },
     "./search": {
       "types": "./dist/search/index.d.ts",
       "import": "./dist/search/index.js"

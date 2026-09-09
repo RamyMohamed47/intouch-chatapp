@@ -19,6 +19,7 @@ export const uploadFiles = async (
         files: LocalUploadFile[];
       },
   onProgress?: (index: number, progress: number) => void,
+  signal?: AbortSignal,
 ) => {
   const descriptors = input.files.map(({ contentType, fileName, size }) => ({
     contentType,
@@ -41,6 +42,7 @@ export const uploadFiles = async (
   const completed: string[] = [];
   try {
     for (let index = 0; index < result.uploadTickets.length; index += 1) {
+      if (signal?.aborted) throw new Error("Upload cancelled");
       const ticket = result.uploadTickets[index];
       const file = input.files[index];
       if (!ticket || !file) throw new Error("Upload ticket mismatch");
@@ -59,7 +61,16 @@ export const uploadFiles = async (
           onProgress?.(index, progress);
         },
       );
-      const response = await task.uploadAsync();
+      const cancel = () => {
+        void task.cancelAsync();
+      };
+      signal?.addEventListener("abort", cancel, { once: true });
+      let response;
+      try {
+        response = await task.uploadAsync();
+      } finally {
+        signal?.removeEventListener("abort", cancel);
+      }
       if (!response || response.status < 200 || response.status >= 300) {
         throw new Error("Object upload failed");
       }

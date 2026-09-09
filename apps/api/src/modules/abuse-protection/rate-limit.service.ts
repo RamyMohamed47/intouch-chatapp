@@ -12,6 +12,7 @@ const balancedPolicies: Readonly<Record<RateLimitAction, TokenBucketPolicy>> = {
   [Action.MESSAGE_MUTATE]: { capacity: 10, refillIntervalMs: 3_000 },
   [Action.MESSAGE_REACTION]: { capacity: 20, refillIntervalMs: 1_000 },
   [Action.NOTIFICATION_MUTATE]: { capacity: 30, refillIntervalMs: 500 },
+  [Action.PUSH_DEVICE_MUTATE]: { capacity: 10, refillIntervalMs: 5_000 },
   [Action.INVITATION_CREATE]: { capacity: 5, refillIntervalMs: 60_000 },
   [Action.READ_RECEIPT_UPDATE]: { capacity: 30, refillIntervalMs: 500 },
   [Action.SEARCH]: { capacity: 20, refillIntervalMs: 500 },

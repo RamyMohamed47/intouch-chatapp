@@ -68,17 +68,20 @@
   JSON endpoints. Access tokens remain in memory and rotating refresh tokens
   are stored in Expo SecureStore; browser cookie and CSRF behavior is unchanged.
 
-## Mobile V1
+## Mobile V1.1
 
 - Expo SDK 57 and React Native 0.86 share `@intouch/shared` contracts with the
   API and web application.
-- Mobile V1 includes native authentication, workspace administration, text
+- Mobile includes native authentication, workspace administration, text
   channels and DMs, attachments, reactions, typing, presence, receipts,
   themes, and chat wallpapers.
 - TanStack Query owns API state. Socket.IO updates or reconciles those caches
   and disconnects while the app is backgrounded.
-- Voice, video, screen sharing, Echo, search, push notifications, persistent
-  offline data, and queued sends remain outside mobile V1.
+- V1.1 adds a durable notification inbox, Expo push delivery, exact-message
+  deep links, lifecycle reconciliation, upload cancellation, and targeted
+  error recovery while remaining online-first.
+- Voice, video, screen sharing, Echo, search, persistent offline data, and
+  queued sends remain outside mobile V1.1.
 
 ## Multi-tenancy
 
@@ -92,8 +95,9 @@ Single Database + organizationId
 - Notification writes and lifecycle cleanup share the source domain
   transaction; recipient-only Socket.IO events publish after commit.
 - Unread DMs group per conversation until the recipient's read state advances.
-- Notification records expire after 30 days. Email and push preferences remain
-  out of scope.
+- Notification records expire after 30 days. Mobile push tokens are encrypted
+  at rest, scoped to installation IDs, delivered through a durable BullMQ-backed
+  outbox, and removed when Expo reports `DeviceNotRegistered`.
 
 ## Private Assets
 

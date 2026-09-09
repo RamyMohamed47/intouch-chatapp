@@ -39,6 +39,7 @@ export default function ProtectedLayout() {
         name="workspace/[organizationId]"
         options={{ swipeEnabled: false }}
       />
+      <Drawer.Screen name="notifications" options={{ swipeEnabled: false }} />
     </Drawer>
   );
 }

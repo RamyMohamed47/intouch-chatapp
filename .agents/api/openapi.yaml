@@ -151,10 +151,10 @@ paths:
     post:
       tags: [Authentication]
       summary: Revoke a native mobile refresh session
-      description: Idempotently revokes the refresh credential supplied in the strict JSON body.
+      description: Idempotently revokes the refresh credential and, when supplied, removes the current app installation's push registration.
       security: []
       requestBody:
-        $ref: "#/components/requestBodies/MobileRefreshRequest"
+        $ref: "#/components/requestBodies/MobileLogoutRequest"
       responses:
         "204":
           description: Session revoked or already absent
@@ -432,6 +432,38 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /users/me/push-devices/{installationId}:
+    put:
+      tags: [Users, Notifications]
+      summary: Register or rotate this mobile installation's Expo push token
+      parameters:
+        - $ref: "#/components/parameters/PushInstallationId"
+      requestBody:
+        $ref: "#/components/requestBodies/RegisterPushDeviceRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/PushDeviceResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [Users, Notifications]
+      summary: Remove this mobile installation's push registration
+      parameters:
+        - $ref: "#/components/parameters/PushInstallationId"
+      responses:
+        "204":
+          description: Push registration removed or already absent
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
@@ -1890,6 +1922,14 @@ components:
         type: string
         pattern: "^[a-fA-F0-9]{24}$"
 
+    PushInstallationId:
+      name: installationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
   requestBodies:
 
     RegisterRequest:
@@ -1923,6 +1963,22 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/MobileRefreshInput"
+
+    MobileLogoutRequest:
+      description: Native refresh credential plus optional current installation identity.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MobileLogoutInput"
+
+    RegisterPushDeviceRequest:
+      description: Expo token registration for one authenticated app installation.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RegisterPushDeviceInput"
 
     VerifyEmailRequest:
       description: Defined by the shared email-confirmation contract.
@@ -2339,6 +2395,18 @@ components:
               unreadCount:
                 type: integer
                 minimum: 0
+
+    PushDeviceResponse:
+      description: Safe push-device metadata. Provider tokens are never returned.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [pushDevice]
+            properties:
+              pushDevice:
+                $ref: "#/components/schemas/PushDevice"
 
     CategoryResponse:
       description: Category returned successfully.
@@ -4200,6 +4268,50 @@ components:
           minLength: 1
           maxLength: 1024
           writeOnly: true
+
+    MobileLogoutInput:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          writeOnly: true
+        installationId:
+          type: string
+          format: uuid
+
+    RegisterPushDeviceInput:
+      type: object
+      additionalProperties: false
+      required: [expoPushToken, platform]
+      properties:
+        expoPushToken:
+          type: string
+          pattern: "^(ExponentPushToken|ExpoPushToken)\\[[A-Za-z0-9_-]+\\]$"
+          writeOnly: true
+        platform:
+          type: string
+          enum: [ANDROID, IOS]
+
+    PushDevice:
+      type: object
+      additionalProperties: false
+      required: [installationId, platform, enabled, updatedAt]
+      properties:
+        installationId:
+          type: string
+          format: uuid
+        platform:
+          type: string
+          enum: [ANDROID, IOS]
+        enabled:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
 
     AuthActionToken:
       type: string

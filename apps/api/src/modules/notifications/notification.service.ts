@@ -68,6 +68,7 @@ export interface NotificationServiceDependencies {
   notifications: NotificationRepository;
   organizations: Pick<OrganizationRepository, "findByIds">;
   realtime: NotificationRealtime;
+  push?: { enqueue(record: NotificationRecord): Promise<void> };
   users: Pick<UserRepository, "findPublicByIds">;
   now?: () => Date;
 }
@@ -77,6 +78,7 @@ const createNotificationService = ({
   notifications,
   organizations,
   realtime,
+  push,
   users,
   now = () => new Date(),
 }: NotificationServiceDependencies) => {
@@ -185,6 +187,16 @@ const createNotificationService = ({
         "Notification realtime delivery failed",
       );
     }
+    if (push && record.pushEnqueuedVersion < record.pushVersion) {
+      try {
+        await push.enqueue(record);
+      } catch (error) {
+        logger.error(
+          { err: error, notificationId: record.id },
+          "Notification push enqueue failed",
+        );
+      }
+    }
   };
 
   const publishDeleted = (record: NotificationRecord) => {
@@ -205,6 +217,22 @@ const createNotificationService = ({
     hydrate,
     publishUpsert,
     publishDeleted,
+
+    async findForPush(notificationId: string, pushVersion: number) {
+      const record = await notifications.findById(notificationId);
+      if (
+        !record ||
+        record.readAt ||
+        record.expiresAt <= now() ||
+        record.pushVersion !== pushVersion
+      ) {
+        return null;
+      }
+      const [notification] = await hydrate([record]);
+      return notification
+        ? { notification, recipientUserId: record.recipientUserId }
+        : null;
+    },
 
     async list(
       userId: string,

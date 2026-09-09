@@ -42,6 +42,10 @@ export interface AuthModuleConfig {
   mail: MailOutboxJobFactory;
   rateLimitsEnabled?: boolean;
   rateLimitStoreFactory?: (prefix: string) => Store;
+  removePushInstallation?: (
+    userId: string,
+    installationId: string,
+  ) => Promise<void>;
 }
 
 const createAuthModule = (config: AuthModuleConfig) => {
@@ -102,11 +106,16 @@ const createAuthModule = (config: AuthModuleConfig) => {
     mail: config.mail,
     mailProtection,
   });
-  const controller = createAuthController(service, config.cookie, {
-    frontendRedirectUrl: config.googleOAuth.frontendRedirectUrl,
-    stateCookie: config.googleOAuth.stateCookie,
-    states: oauthStates,
-  });
+  const controller = createAuthController(
+    service,
+    config.cookie,
+    {
+      frontendRedirectUrl: config.googleOAuth.frontendRedirectUrl,
+      stateCookie: config.googleOAuth.stateCookie,
+      states: oauthStates,
+    },
+    config.removePushInstallation,
+  );
   const middleware = createAuthMiddleware({
     accessTokens,
     cookie: config.cookie,

@@ -9,9 +9,12 @@ local-memory fallback and emergency rollback path.
 
 - MongoDB `MailOutbox` records own durable mail state and encrypted payloads.
 - MongoDB `StoredAsset` records own durable R2 lifecycle and cleanup state.
+- MongoDB `PushOutbox` records own durable mobile notification delivery and
+  Expo receipt state.
 - BullMQ owns dispatch, retry timing, shared concurrency, and short-lived job
   history only.
-- In-app notifications remain transactional MongoDB writes and are not queued.
+- In-app notifications remain transactional MongoDB writes. Their opaque IDs
+  are reconciled into the push outbox after commit.
 
 Redis payloads contain only opaque MongoDB IDs, cleanup mode, and an integer
 attempt version. They never contain recipients, tokens, filenames, object keys,
@@ -30,6 +33,9 @@ All keys are under `${REDIS_KEY_PREFIX}:bullmq`.
 - `voice-lifecycle`: processes ringing, accepted-media, and disconnect-grace
   timeouts and runs a repeatable reconciliation job every 30 seconds. Every
   transition is idempotent so duplicate, delayed, or out-of-order jobs are safe.
+- `push-delivery`: reconciles every two seconds, sends safe activity-only copy
+  through Expo Push Service, and checks provider receipts after 15 minutes.
+  Tokens are encrypted in MongoDB and never enter BullMQ payloads.
 
 Every mutation remains idempotent through repository-level leases and status
 conditions. Reconciliation recovers committed MongoDB work after API crashes,

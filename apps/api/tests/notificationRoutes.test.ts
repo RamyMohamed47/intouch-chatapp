@@ -49,6 +49,7 @@ const service: NotificationService = {
   hydrate: async () => [],
   publishUpsert: async () => undefined,
   publishDeleted: () => undefined,
+  findForPush: async () => null,
   list: async (_userId, query) => {
     receivedLimit = query.limit;
     receivedStatus = query.status;

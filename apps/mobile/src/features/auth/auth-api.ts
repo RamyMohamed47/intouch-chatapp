@@ -36,11 +36,17 @@ export const authApi = {
       { method: "POST", body: JSON.stringify({ refreshToken }) },
       false,
     ),
-  logout: (refreshToken: string) =>
+  logout: (refreshToken: string, installationId?: string) =>
     apiRequest(
       "/api/v1/auth/mobile/logout",
       noContentSchema,
-      { method: "POST", body: JSON.stringify({ refreshToken }) },
+      {
+        method: "POST",
+        body: JSON.stringify({
+          refreshToken,
+          ...(installationId ? { installationId } : {}),
+        }),
+      },
       false,
     ),
   me: async () =>

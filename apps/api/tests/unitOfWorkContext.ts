@@ -142,6 +142,8 @@ const notificationBase = (
   id: "507f1f77bcf86cd799439099",
   ...input,
   readAt: null,
+  pushVersion: 1,
+  pushEnqueuedVersion: 0,
   createdAt: input.lastActivityAt,
   updatedAt: input.lastActivityAt,
 });
@@ -180,6 +182,9 @@ const notifications: NotificationRepository = {
   countUnread: async () => 0,
   markRead: async () => null,
   markAllRead: async () => 0,
+  findById: async () => null,
+  listPendingPush: async () => [],
+  markPushEnqueued: async () => undefined,
   markDirectMessageReadThrough: async () => null,
   deleteReaction: async () => null,
   deleteByInvitationId: async () => [],

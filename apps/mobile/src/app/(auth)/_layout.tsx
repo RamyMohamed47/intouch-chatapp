@@ -10,7 +10,7 @@ export default function AuthLayout() {
       <StateView loading title="Restoring your session" message="One moment." />
     );
   }
-  if (status === "authenticated") return <Redirect href="/chats" />;
+  if (status === "authenticated") return <Redirect href="/workspaces" />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

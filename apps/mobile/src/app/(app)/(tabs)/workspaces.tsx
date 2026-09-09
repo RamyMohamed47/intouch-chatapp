@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 
 import { MainScreenHeader } from "@/components/app-shell";
 import { Button, Card, Field, Muted } from "@/components/ui/controls";
+import { useToast } from "@/components/ui/toast-provider";
 import { OrganizationAvatar } from "@/components/organization-avatar";
 import { Screen } from "@/components/ui/screen";
 import { useAppearance } from "@/features/appearance/appearance-provider";
@@ -21,6 +22,7 @@ import {
 export default function WorkspacesScreen() {
   const { theme } = useAppearance();
   const { activeOrganizationId, setActiveOrganizationId } = useWorkspace();
+  const showToast = useToast();
   const [name, setName] = useState("");
   const [logoFile, setLogoFile] = useState<LocalUploadFile | null>(null);
   const [logoUploadId, setLogoUploadId] = useState<string | null>(null);
@@ -73,12 +75,19 @@ export default function WorkspacesScreen() {
     setLogoProgress(0);
   };
   const respond = async (id: string, accept: boolean) => {
-    if (accept) await organizationsApi.acceptInvitation(id);
-    else await organizationsApi.declineInvitation(id);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["invitations"] }),
-      queryClient.invalidateQueries({ queryKey: ["organizations"] }),
-    ]);
+    try {
+      if (accept) await organizationsApi.acceptInvitation(id);
+      else await organizationsApi.declineInvitation(id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invitations"] }),
+        queryClient.invalidateQueries({ queryKey: ["organizations"] }),
+      ]);
+    } catch (error) {
+      Alert.alert(
+        "Invitation update failed",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    }
   };
 
   return (
@@ -93,44 +102,73 @@ export default function WorkspacesScreen() {
         title="Workspaces"
       />
 
-      {organizations.data?.map((organization) => (
-        <Pressable
-          accessibilityState={{
-            selected: activeOrganizationId === organization.id,
-          }}
-          key={organization.id}
-          onPress={() => setActiveOrganizationId(organization.id)}
-        >
-          <Card>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+      {organizations.data?.map((organization) => {
+        const isActive = activeOrganizationId === organization.id;
+
+        return (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: isActive }}
+            key={organization.id}
+            onPress={() => {
+              if (isActive) return;
+              setActiveOrganizationId(organization.id);
+              showToast(`Switched to ${organization.name}`);
+            }}
+            style={({ pressed }) => pressed && styles.workspacePressed}
+          >
+            <Card
+              style={
+                isActive
+                  ? {
+                      backgroundColor: theme.accentSoft,
+                      borderColor: theme.accent,
+                      borderWidth: 2,
+                    }
+                  : undefined
+              }
             >
-              <OrganizationAvatar
-                logoAssetId={organization.logoAssetId}
-                name={organization.name}
-              />
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{ color: theme.text, fontSize: 17, fontWeight: "900" }}
-                >
-                  {organization.name}
-                </Text>
-                <Muted>
-                  {organization.currentUserRole ?? "Public workspace"}
-                </Muted>
+              <View style={styles.workspaceIdentity}>
+                <OrganizationAvatar
+                  logoAssetId={organization.logoAssetId}
+                  name={organization.name}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      color: theme.text,
+                      fontSize: 17,
+                      fontWeight: "900",
+                    }}
+                  >
+                    {organization.name}
+                  </Text>
+                  <View style={styles.workspaceMeta}>
+                    <Muted>
+                      {organization.currentUserRole ?? "Public workspace"}
+                    </Muted>
+                    {isActive ? (
+                      <Text
+                        style={[styles.activeLabel, { color: theme.accent }]}
+                      >
+                        ACTIVE
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                {organization.currentUserRole ? (
+                  <Button
+                    onPress={() => router.push(`/workspace/${organization.id}`)}
+                    variant="ghost"
+                  >
+                    Manage
+                  </Button>
+                ) : null}
               </View>
-              {organization.currentUserRole ? (
-                <Button
-                  onPress={() => router.push(`/workspace/${organization.id}`)}
-                  variant="ghost"
-                >
-                  Manage
-                </Button>
-              ) : null}
-            </View>
-          </Card>
-        </Pressable>
-      ))}
+            </Card>
+          </Pressable>
+        );
+      })}
 
       <Text
         style={{
@@ -231,9 +269,27 @@ export default function WorkspacesScreen() {
 }
 
 const styles = {
+  activeLabel: {
+    fontFamily: "monospace" as const,
+    fontSize: 11,
+    fontWeight: "900" as const,
+    letterSpacing: 1.2,
+  },
   invitationIdentity: {
     alignItems: "center" as const,
     flexDirection: "row" as const,
     gap: 12,
   },
+  workspaceIdentity: {
+    alignItems: "center" as const,
+    flexDirection: "row" as const,
+    gap: 12,
+  },
+  workspaceMeta: {
+    alignItems: "center" as const,
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
+    gap: 8,
+  },
+  workspacePressed: { opacity: 0.78 },
 };

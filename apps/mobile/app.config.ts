@@ -1,5 +1,7 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
+const brandAssets = "../web/public/brand";
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Intouch Chat App",
@@ -21,7 +23,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   userInterfaceStyle: "automatic",
-  icon: "./assets/images/icon.png",
+  icon: `${brandAssets}/intouch-icon-512.png`,
   ios: {
     bundleIdentifier: "com.ramymohamed.intouch",
     supportsTablet: true,
@@ -31,19 +33,29 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     softwareKeyboardLayoutMode: "resize",
     adaptiveIcon: {
       backgroundColor: "#07101f",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
+      foregroundImage: `${brandAssets}/intouch-mark.png`,
     },
+    ...(process.env.GOOGLE_SERVICES_JSON
+      ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }
+      : {}),
   },
   plugins: [
     "expo-router",
     "expo-secure-store",
+    [
+      "expo-notifications",
+      {
+        color: "#168cff",
+        defaultChannel: "intouch-activity-v2",
+      },
+    ],
     "expo-sharing",
     [
       "expo-splash-screen",
       {
         backgroundColor: "#07101f",
-        image: "./assets/images/splash-icon.png",
-        imageWidth: 96,
+        image: `${brandAssets}/intouch-mark.png`,
+        imageWidth: 220,
       },
     ],
     [

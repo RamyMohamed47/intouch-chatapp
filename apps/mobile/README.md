@@ -27,6 +27,32 @@ The `preview` EAS environment must provide `EXPO_PUBLIC_API_URL` and
 `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`. Preview builds use the `preview` EAS Update
 channel and do not require Metro or a development machine after installation.
 
+## Push Notifications
+
+Push notifications require an Android development or preview build; Expo Go is
+not supported. Configure Firebase Cloud Messaging V1 for the Expo project,
+upload its service-account key through EAS credentials, and provide
+`google-services.json` as an EAS file environment variable named
+`GOOGLE_SERVICES_JSON` for each build environment.
+
+The API requires these production variables:
+
+```dotenv
+PUSH_PROVIDER=expo
+EXPO_ACCESS_TOKEN=replace-with-an-expo-access-token
+PUSH_TOKEN_ENCRYPTION_SECRET=replace-with-an-independent-32-byte-secret
+```
+
+Use `PUSH_PROVIDER=disabled` locally when push delivery is not being tested.
+When enabled, the device registers after permission is granted, unregisters on
+logout, and can be managed from Profile. Lock-screen copy contains the actor and
+activity type but never message text or attachment names.
+
+Test delivery on a physical device. Background the app, trigger each supported
+notification from another account, tap it, and verify that InTouch opens the
+correct invitation, workspace, conversation, or exact message. Also verify
+foreground activity does not produce both a Socket.IO toast and a system banner.
+
 ## Automated Preview Deployment
 
 `.eas/workflows/deploy-preview.yml` runs for pushes to `main` that affect the

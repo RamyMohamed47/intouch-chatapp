@@ -1,5 +1,6 @@
 import {
   messageListResponseSchema,
+  messageContextResponseSchema,
   messageReadReceiptSummaryResponseSchema,
   messageReactionStateResponseSchema,
   messageReactionUsersResponseSchema,
@@ -21,6 +22,11 @@ export const messagesApi = {
       messageListResponseSchema,
     );
   },
+  context: (conversationId: string, messageId: string) =>
+    apiRequest(
+      `/api/v1/conversations/${conversationId}/messages/${messageId}/context`,
+      messageContextResponseSchema,
+    ),
   create: async (conversationId: string, input: CreateMessageInput) =>
     (
       await apiRequest(

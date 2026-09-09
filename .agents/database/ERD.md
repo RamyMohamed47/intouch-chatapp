@@ -239,10 +239,41 @@ erDiagram
         string dedupeKey
         string activeGroupKey
         datetime readAt
+        int pushVersion
+        int pushEnqueuedVersion
         datetime lastActivityAt
         datetime expiresAt
         datetime createdAt
         datetime updatedAt
+    }
+
+    PushDevice {
+        ObjectId id
+        ObjectId userId
+        string installationId
+        enum platform
+        string tokenHash
+        string ciphertext
+        string iv
+        string authTag
+        boolean enabled
+        datetime lastRegisteredAt
+        datetime invalidatedAt
+        datetime purgeAt
+    }
+
+    PushOutbox {
+        ObjectId id
+        ObjectId notificationId
+        ObjectId recipientUserId
+        int pushVersion
+        enum status
+        int attempts
+        int receiptAttempts
+        datetime availableAt
+        datetime receiptAvailableAt
+        datetime expiresAt
+        datetime purgeAt
     }
 
     User ||--o{ Membership : joins
@@ -315,6 +346,12 @@ erDiagram
     Conversation ||--o{ Notification : references
 
     Message ||--o{ Notification : references
+
+    User ||--o{ PushDevice : registers
+
+    User ||--o{ PushOutbox : receives
+
+    Notification ||--o{ PushOutbox : delivers
 ```
 
 `LoginProvider.providerAccountId` stores the Google `sub` for Google identities.
@@ -448,6 +485,15 @@ lifecycle-cleanup, and TTL indexes support inbox pagination, unread counts,
 idempotency, and transactional deletion. Notification creation and cleanup
 participate in the source domain transaction; Socket.IO publication occurs only
 after commit and carries safe hydrated DTOs to the recipient's user room.
+
+`PushDevice` stores one encrypted Expo token per app installation. The token
+hash enforces global uniqueness without making the provider token queryable,
+and invalid registrations receive a delayed TTL cleanup timestamp.
+`PushOutbox` stores only notification/user references, a notification version,
+provider ticket IDs, bounded retry state, and receipt timing. BullMQ carries
+opaque outbox IDs; MongoDB reconciliation recovers enqueue gaps after crashes.
+The final mobile logout request may include its installation ID so session and
+push registration are removed together from the user's perspective.
 
 Search does not introduce a persistence entity. Native development search uses
 text indexes on `Message.content`, `Conversation.name`, and the weighted

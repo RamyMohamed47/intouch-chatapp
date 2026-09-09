@@ -30,6 +30,14 @@ export type RuntimeStateConfig =
   | { provider: "memory"; keyPrefix: string }
   | { provider: "redis"; keyPrefix: string; url: string };
 
+export type PushConfig =
+  | { provider: "disabled" }
+  | {
+      provider: "expo";
+      accessToken: string;
+      tokenEncryptionSecret: string;
+    };
+
 export type ObservabilityConfig =
   | {
       provider: "disabled";
@@ -106,6 +114,7 @@ export interface AppConfig {
   organizationStorageBytes: number;
   observability: ObservabilityConfig;
   runtimeState: RuntimeStateConfig;
+  push: PushConfig;
   voice: VoiceConfig;
 }
 
@@ -138,7 +147,9 @@ const requireEnv = (
     | "LIVEKIT_URL"
     | "LIVEKIT_API_KEY"
     | "LIVEKIT_API_SECRET"
-    | "GEMINI_API_KEY",
+    | "GEMINI_API_KEY"
+    | "EXPO_ACCESS_TOKEN"
+    | "PUSH_TOKEN_ENCRYPTION_SECRET",
 ) => {
   const value = env[name];
 
@@ -328,6 +339,28 @@ const parseRuntimeState = (
     throw new Error("REDIS_URL must use redis:// or rediss://");
   }
   return { provider, keyPrefix, url: url.toString() };
+};
+
+const parsePush = (
+  env: NodeJS.ProcessEnv,
+  isProduction: boolean,
+): PushConfig => {
+  const provider = env.PUSH_PROVIDER ?? (isProduction ? undefined : "disabled");
+  if (provider === undefined) {
+    throw new Error("PUSH_PROVIDER env var is required in production");
+  }
+  if (provider === "disabled") return { provider };
+  if (provider !== "expo") {
+    throw new Error("PUSH_PROVIDER must be expo or disabled");
+  }
+  return {
+    provider,
+    accessToken: requireEnv(env, "EXPO_ACCESS_TOKEN"),
+    tokenEncryptionSecret: validateSecret(
+      requireEnv(env, "PUSH_TOKEN_ENCRYPTION_SECRET"),
+      "PUSH_TOKEN_ENCRYPTION_SECRET",
+    ),
+  };
 };
 
 const parseBackgroundJobsProvider = (
@@ -682,6 +715,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     ),
     observability: parseObservabilityConfig(env),
     runtimeState,
+    push: parsePush(env, isProduction),
     voice: parseVoice(env, isProduction),
     trustProxy: isProduction ? 1 : "loopback",
     webAppUrl: parseWebAppUrl(

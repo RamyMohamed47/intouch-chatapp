@@ -7,7 +7,13 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Button, Card, Heading, Muted } from "@/components/ui/controls";
+import {
+  BackButton,
+  Button,
+  Card,
+  Heading,
+  Muted,
+} from "@/components/ui/controls";
 import { Screen } from "@/components/ui/screen";
 import { ChatWallpaper } from "@/features/appearance/chat-wallpaper";
 import { useAppearance } from "@/features/appearance/appearance-provider";
@@ -76,9 +82,7 @@ export default function WallpaperScreen() {
 
   return (
     <Screen>
-      <Button onPress={() => router.back()} variant="ghost">
-        Back
-      </Button>
+      <BackButton onPress={() => router.back()} />
       <Heading>Chat atmosphere</Heading>
       <Muted>
         {isDefault

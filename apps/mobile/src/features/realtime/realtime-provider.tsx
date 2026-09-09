@@ -11,6 +11,7 @@ import {
   membershipJoinedEventSchema,
   messageEventSchema,
   messageReactionsChangedEventSchema,
+  notificationChangedEventSchema,
   presenceEventSchema,
   readReceiptEventSchema,
   socketAcknowledgementSchema,
@@ -166,6 +167,17 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
         queryKey: ["messages", parsed.data.conversationId],
       });
     });
+    next.on("notification:changed", (value: unknown) => {
+      const parsed = notificationChangedEventSchema.safeParse(value);
+      if (!parsed.success) return;
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      if (
+        parsed.data.kind === "UPSERTED" &&
+        parsed.data.notification.type === "ORGANIZATION_INVITATION_RECEIVED"
+      ) {
+        void queryClient.invalidateQueries({ queryKey: ["invitations"] });
+      }
+    });
     for (const event of ["message:updated", "message:deleted"] as const) {
       next.on(event, (value: unknown) => {
         const parsed = messageEventSchema.safeParse(value);
@@ -316,6 +328,8 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
       });
       if (activeConversationRef.current === parsed.data.conversationId) {
         showToast("Your access to this conversation changed");
+        activeConversationRef.current = null;
+        router.replace("/chats");
       }
     });
     next.on("voice-channel:occupancy-updated", (value: unknown) => {
@@ -330,8 +344,11 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
     const appStateSubscription = AppState.addEventListener(
       "change",
       (state) => {
-        if (state === "active") next.connect();
-        else next.disconnect();
+        if (state === "active") {
+          next.connect();
+          void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          void queryClient.invalidateQueries({ queryKey: ["organizations"] });
+        } else next.disconnect();
       },
     );
 

@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -50,11 +51,11 @@ export const WorkspaceProvider = ({ children }: PropsWithChildren) => {
     }
   }, [activeOrganizationId, organizations.data]);
 
-  const setActiveOrganizationId = (id: string | null) => {
+  const setActiveOrganizationId = useCallback((id: string | null) => {
     setActiveOrganizationIdState(id);
     if (id) void AsyncStorage.setItem(ACTIVE_ORGANIZATION_KEY, id);
     else void AsyncStorage.removeItem(ACTIVE_ORGANIZATION_KEY);
-  };
+  }, []);
 
   return (
     <WorkspaceContext.Provider

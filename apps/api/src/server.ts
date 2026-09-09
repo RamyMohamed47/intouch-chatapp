@@ -32,8 +32,11 @@ import createAuthModule from "./modules/auth/index.js";
 import createAbuseProtectionModule, {
   createRedisRateLimitStore,
   createRedisSocketConnectionStore,
+  RateLimitAction,
 } from "./modules/abuse-protection/index.js";
+import createAuthenticatedRateLimit from "./middleware/authenticatedRateLimit.js";
 import createOrganizationModule from "./modules/organizations/index.js";
+import { createMongooseNotificationRepository } from "./modules/notifications/index.js";
 import createAiModule, { createRedisAiQuotaStore } from "./modules/ai/index.js";
 import configureSocket from "./sockets/socket.js";
 import {
@@ -77,6 +80,18 @@ import {
   createLiveKitVoiceMediaProvider,
   createRedisVoiceSessionStore,
 } from "./modules/voice/index.js";
+import {
+  createBullMqPushJobs,
+  createExpoPushProvider,
+  createMongoosePushDeviceRepository,
+  createMongoosePushOutboxRepository,
+  createPushDeviceController,
+  createPushDeviceRouter,
+  createPushDeviceService,
+  createPushPublisher,
+  createPushTokenCipher,
+  createPushWorker,
+} from "./modules/push/index.js";
 
 const logger = getLogger();
 type InTouchServer = Server<
@@ -323,6 +338,9 @@ const voiceJobs =
 const presenceStore = runtimeState.command
   ? createRedisPresenceStore(runtimeState.command, runtimeState.keyPrefix)
   : undefined;
+const pushRemovalRef: {
+  current?: { remove(userId: string, installationId: string): Promise<void> };
+} = {};
 const auth = createAuthModule({
   actionTokenSecret: config.authActionTokenSecret,
   accessTokenSecret: config.accessTokenSecret,
@@ -352,6 +370,8 @@ const auth = createAuthModule({
     windowMs: config.loginAttemptWindowMs,
   },
   mail: mailJobs,
+  removePushInstallation: (userId, installationId) =>
+    pushRemovalRef.current?.remove(userId, installationId) ?? Promise.resolve(),
   ...(runtimeState.command
     ? {
         rateLimitStoreFactory: createRedisAuthRateLimitStoreFactory(
@@ -361,6 +381,37 @@ const auth = createAuthModule({
       }
     : {}),
 });
+const pushRuntime =
+  config.push.provider === "expo"
+    ? (() => {
+        const cipher = createPushTokenCipher(config.push.tokenEncryptionSecret);
+        const devices = createMongoosePushDeviceRepository();
+        const outbox = createMongoosePushOutboxRepository();
+        const notificationRepository = createMongooseNotificationRepository();
+        const publisher = createPushPublisher(outbox, notificationRepository);
+        const deviceService = createPushDeviceService({ cipher, devices });
+        pushRemovalRef.current = deviceService;
+        const deviceController = createPushDeviceController(deviceService);
+        const deviceLimit = createAuthenticatedRateLimit(
+          abuseProtection.rateLimits,
+          RateLimitAction.PUSH_DEVICE_MUTATE,
+          "Too many push-device updates",
+        );
+        return {
+          cipher,
+          devices,
+          outbox,
+          notificationRepository,
+          publisher,
+          provider: createExpoPushProvider(config.push.accessToken),
+          router: createPushDeviceRouter(
+            deviceController,
+            auth.requireAccessToken,
+            deviceLimit,
+          ),
+        };
+      })()
+    : undefined;
 const organizations = createOrganizationModule({
   conversationActivityRealtime: realtimeGateway,
   conversationRealtime: realtimeGateway,
@@ -368,6 +419,7 @@ const organizations = createOrganizationModule({
   messageBroadcaster: realtimeGateway,
   messageReactionRealtime: realtimeGateway,
   notificationRealtime: realtimeGateway,
+  ...(pushRuntime ? { pushPublisher: pushRuntime.publisher } : {}),
   logger,
   presenceRealtime: realtimeGateway,
   ...(presenceStore ? { presenceStore } : {}),
@@ -408,6 +460,17 @@ const assetCleanupWorker = createAssetCleanupWorker({
   storage,
   logger,
 });
+const pushWorker = pushRuntime
+  ? createPushWorker({
+      cipher: pushRuntime.cipher,
+      devices: pushRuntime.devices,
+      logger,
+      notifications: organizations.notificationService,
+      notificationRepository: pushRuntime.notificationRepository,
+      outbox: pushRuntime.outbox,
+      provider: pushRuntime.provider,
+    })
+  : undefined;
 let backgroundJobs: BackgroundJobsRuntime;
 if (config.backgroundJobsProvider === "bullmq") {
   if (config.runtimeState.provider !== "redis") {
@@ -443,6 +506,22 @@ if (config.backgroundJobsProvider === "bullmq") {
         telemetry: observabilityMetrics,
       }),
       voiceJobs,
+      ...(pushRuntime
+        ? [
+            createBullMqPushJobs({
+              cipher: pushRuntime.cipher,
+              devices: pushRuntime.devices,
+              logger,
+              notifications: organizations.notificationService,
+              notificationRepository: pushRuntime.notificationRepository,
+              outbox: pushRuntime.outbox,
+              provider: pushRuntime.provider,
+              redisKeyPrefix: config.runtimeState.keyPrefix,
+              redisUrl: config.runtimeState.url,
+              telemetry: observabilityMetrics,
+            }),
+          ]
+        : []),
     ],
     logger,
   );
@@ -451,6 +530,7 @@ if (config.backgroundJobsProvider === "bullmq") {
     mailWorker,
     assetCleanupWorker,
     voiceJobs,
+    ...(pushWorker ? [pushWorker] : []),
   ]);
 }
 resources.closeBackgroundJobs = () => backgroundJobs.close();
@@ -485,6 +565,7 @@ const app = createApp({
   messageRouter: organizations.messageRouter,
   messageReactionRouter: organizations.messageReactionRouter,
   notificationRouter: organizations.notificationRouter,
+  ...(pushRuntime ? { pushDeviceRouter: pushRuntime.router } : {}),
   organizationAccessRouter: organizations.accessRouter,
   organizationConversationRouter: organizations.organizationConversationRouter,
   organizationRouter: organizations.router,

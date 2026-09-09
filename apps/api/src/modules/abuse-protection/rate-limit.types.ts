@@ -4,6 +4,7 @@ export const RateLimitAction = {
   MESSAGE_MUTATE: "message:mutate",
   MESSAGE_REACTION: "message:reaction",
   NOTIFICATION_MUTATE: "notification:mutate",
+  PUSH_DEVICE_MUTATE: "push-device:mutate",
   INVITATION_CREATE: "invitation:create",
   READ_RECEIPT_UPDATE: "read-receipt:update",
   SEARCH: "search:query",

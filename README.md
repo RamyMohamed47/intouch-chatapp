@@ -84,6 +84,13 @@ Set `MOBILE_APP_URL=intouch://` in `apps/api/config.env` so mobile-requested
 verification and reset emails can open the app. `EXPO_PUBLIC_*` values are
 embedded public configuration and must never contain provider secrets.
 
+Mobile push uses Expo Push Service with FCM V1. Production API deployments set
+`PUSH_PROVIDER=expo`, `EXPO_ACCESS_TOKEN`, and an independent
+`PUSH_TOKEN_ENCRYPTION_SECRET`. EAS build environments provide
+`GOOGLE_SERVICES_JSON` as a file variable and the Firebase service-account key
+through EAS credentials. Local development may keep
+`PUSH_PROVIDER=disabled` unless push delivery is under test.
+
 Google sign-in requires an InTouch development build, an Android OAuth client
 for `com.ramymohamed.intouch`, and the SHA-1 fingerprint of the development or
 EAS signing certificate. From `apps/mobile`, initialize the EAS project once,
@@ -208,6 +215,8 @@ values are:
 - `STORAGE_PROVIDER`; production requires `r2`
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
   `R2_BUCKET_NAME` when R2 storage is enabled
+- `PUSH_PROVIDER`; use `expo` for mobile push or `disabled` to turn it off
+- `EXPO_ACCESS_TOKEN` and `PUSH_TOKEN_ENCRYPTION_SECRET` when Expo push is enabled
 
 Production observability is optional. When enabled, set
 `OBSERVABILITY_PROVIDER=otlp`, the Grafana Cloud

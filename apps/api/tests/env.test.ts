@@ -21,6 +21,7 @@ const validEnv: NodeJS.ProcessEnv = {
   MAIL_OUTBOX_ENCRYPTION_SECRET:
     "a-mail-outbox-encryption-secret-over-32-bytes",
   MAIL_PROVIDER: "smtp",
+  PUSH_PROVIDER: "disabled",
   VOICE_PROVIDER: "livekit",
   LIVEKIT_URL: "wss://intouch-test.livekit.cloud",
   LIVEKIT_API_KEY: "livekit-api-key",
@@ -390,6 +391,49 @@ describe("auth environment configuration", () => {
             "https://app.example.com/api/v1/auth/oauth/google/callback",
         }),
       /MAIL_PROVIDER env var is required in production/,
+    );
+  });
+
+  test("requires an explicit push provider in production and validates Expo", () => {
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          NODE_ENV: "production",
+          PUSH_PROVIDER: undefined,
+          SEARCH_PROVIDER: "atlas",
+          STORAGE_PROVIDER: "r2",
+          R2_ACCOUNT_ID: "account-id",
+          R2_ACCESS_KEY_ID: "access-key-id",
+          R2_SECRET_ACCESS_KEY: "secret-access-key",
+          R2_BUCKET_NAME: "intouch-private",
+          GOOGLE_OAUTH_CALLBACK_URL:
+            "https://app.example.com/api/v1/auth/oauth/google/callback",
+        }),
+      /PUSH_PROVIDER env var is required in production/,
+    );
+    assert.deepEqual(
+      loadConfig({
+        ...validEnv,
+        PUSH_PROVIDER: "expo",
+        EXPO_ACCESS_TOKEN: "expo-access-token",
+        PUSH_TOKEN_ENCRYPTION_SECRET:
+          "a-push-token-encryption-secret-over-32-bytes",
+      }).push,
+      {
+        provider: "expo",
+        accessToken: "expo-access-token",
+        tokenEncryptionSecret: "a-push-token-encryption-secret-over-32-bytes",
+      },
+    );
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnv,
+          PUSH_PROVIDER: "expo",
+          EXPO_ACCESS_TOKEN: undefined,
+        }),
+      /EXPO_ACCESS_TOKEN env var is required/,
     );
   });
 

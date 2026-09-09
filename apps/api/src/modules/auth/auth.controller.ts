@@ -130,6 +130,10 @@ const createAuthController = (
   authService: AuthService,
   cookie: AuthCookieConfig,
   googleOAuth: GoogleOAuthControllerConfig,
+  removePushInstallation?: (
+    userId: string,
+    installationId: string,
+  ) => Promise<void>,
 ): AuthController => ({
   googleStart: (_req, res) => {
     const state = googleOAuth.states.create();
@@ -242,8 +246,11 @@ const createAuthController = (
   }),
 
   mobileLogout: catchAsync(async (req, res) => {
-    const { refreshToken } = req.body as MobileLogoutInput;
-    await authService.logout(refreshToken);
+    const { refreshToken, installationId } = req.body as MobileLogoutInput;
+    const userId = await authService.logout(refreshToken);
+    if (userId && installationId && removePushInstallation) {
+      await removePushInstallation(userId, installationId);
+    }
     res.status(204).send();
   }),
 

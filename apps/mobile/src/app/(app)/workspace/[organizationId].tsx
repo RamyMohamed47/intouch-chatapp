@@ -15,7 +15,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 
-import { Button, Card, Field, Heading, Muted } from "@/components/ui/controls";
+import {
+  BackButton,
+  Button,
+  Card,
+  Field,
+  Heading,
+  Muted,
+} from "@/components/ui/controls";
 import { OrganizationAvatar } from "@/components/organization-avatar";
 import { Screen } from "@/components/ui/screen";
 import { UserAvatar } from "@/components/user-avatar";
@@ -253,9 +260,7 @@ export default function WorkspaceDetailScreen() {
       }
       refreshing={organization.isRefetching || members.isRefetching}
     >
-      <Button onPress={() => router.back()} variant="ghost">
-        Back
-      </Button>
+      <BackButton onPress={() => router.back()} />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
         <OrganizationAvatar
           logoAssetId={organization.data?.logoAssetId ?? null}

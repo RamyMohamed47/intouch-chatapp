@@ -9,6 +9,7 @@ import { AppearanceProvider } from "@/features/appearance/appearance-provider";
 import { AuthProvider } from "@/features/auth/auth-provider";
 import { WorkspaceProvider } from "@/features/organizations/workspace-provider";
 import { RealtimeProvider } from "@/features/realtime/realtime-provider";
+import { PushProvider } from "@/features/push/push-provider";
 
 export default function RootLayout() {
   const [queryClient] = useState(
@@ -28,10 +29,12 @@ export default function RootLayout() {
           <AuthProvider>
             <WorkspaceProvider>
               <ToastProvider>
-                <RealtimeProvider>
-                  <StatusBar style="auto" />
-                  <Stack screenOptions={{ headerShown: false }} />
-                </RealtimeProvider>
+                <PushProvider>
+                  <RealtimeProvider>
+                    <StatusBar style="auto" />
+                    <Stack screenOptions={{ headerShown: false }} />
+                  </RealtimeProvider>
+                </PushProvider>
               </ToastProvider>
             </WorkspaceProvider>
           </AuthProvider>

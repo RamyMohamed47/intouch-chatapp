@@ -12,7 +12,9 @@ export const mobileRefreshSchema = z
   .object({ refreshToken: z.string().trim().min(1).max(1_024) })
   .strict();
 
-export const mobileLogoutSchema = mobileRefreshSchema;
+export const mobileLogoutSchema = mobileRefreshSchema.extend({
+  installationId: z.uuid().optional(),
+});
 
 export type MobileLoginInput = z.infer<typeof mobileLoginSchema>;
 export type MobileGoogleInput = z.infer<typeof mobileGoogleSchema>;

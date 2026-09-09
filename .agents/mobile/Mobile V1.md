@@ -9,8 +9,9 @@ contracts. It is online-first and does not persist server data or queue sends.
 V1 includes email/password and Google authentication, workspaces and supported
 administration, text channels and direct messages, attachments, reactions,
 editing, redaction, typing, presence, receipts, themes, and wallpapers. Voice,
-video, screen sharing, Echo, search, push notifications, and offline sync are
-deferred.
+video, screen sharing, Echo, search, and offline sync are deferred. V1.1 adds a
+durable notification inbox, Expo push delivery, exact-message deep links,
+upload cancellation, lifecycle reconciliation, and targeted error recovery.
 
 ## Local Setup
 
@@ -64,6 +65,12 @@ Production EAS builds set `EXPO_PUBLIC_API_URL` to the public Railway API origin
 and use the same Google web-client audience. Public Expo variables are not
 secrets. Never place Google client secrets, R2 credentials, JWT secrets, or
 refresh tokens in them.
+
+Android push builds also need Firebase Cloud Messaging V1. Upload the Firebase
+service-account key through EAS credentials and create a file-type EAS variable
+named `GOOGLE_SERVICES_JSON` containing `google-services.json`. The API uses
+`PUSH_PROVIDER=expo`, an Expo access token, and a separate token-encryption
+secret. Local API runs may use `PUSH_PROVIDER=disabled` unless push is under test.
 
 iOS structure is present, but runtime acceptance is deferred. Before an iOS
 build, set the real reversed Google client URL scheme and plan Sign in with
@@ -127,7 +134,14 @@ API.
    verify authentication, subscriptions, and summaries reconcile.
 9. Test Ink, Cloud, Aurora, and Ember with each wallpaper preset, dimming,
    portrait/landscape rotation, dynamic text, and screen-reader labels.
-10. Build and install the preview APK and repeat the critical auth, chat,
+10. Enable notifications on a physical device. Background the app and verify
+    invitation, invitation-accepted, DM, and reaction pushes from another user.
+    Confirm push copy contains no message body or filename, and taps open the
+    correct destination without duplicate foreground banners.
+11. Disable push from Profile, log out, rotate the Expo token, and simulate a
+    `DeviceNotRegistered` receipt. Confirm stale registrations stop receiving
+    pushes while the durable in-app notification remains available.
+12. Build and install the preview APK and repeat the critical auth, chat,
     attachment, and foreground-reconnect flows against Railway.
 
 ## Validation

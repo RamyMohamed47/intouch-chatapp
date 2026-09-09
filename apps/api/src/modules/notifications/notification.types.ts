@@ -17,6 +17,8 @@ export interface NotificationRecord {
   messageCount?: number;
   emoji?: string;
   readAt: Date | null;
+  pushVersion: number;
+  pushEnqueuedVersion: number;
   lastActivityAt: Date;
   expiresAt: Date;
   createdAt: Date;
@@ -32,6 +34,12 @@ export interface NotificationPage {
   notifications: NotificationDto[];
   nextCursor: string | null;
   unreadCount: number;
+}
+
+export interface PushNotificationCandidate {
+  id: string;
+  recipientUserId: string;
+  pushVersion: number;
 }
 
 export interface CreateNotificationInput {

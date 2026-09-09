@@ -15,5 +15,7 @@ export default function IndexScreen() {
     );
   }
 
-  return <Redirect href={status === "authenticated" ? "/chats" : "/login"} />;
+  return (
+    <Redirect href={status === "authenticated" ? "/workspaces" : "/login"} />
+  );
 }

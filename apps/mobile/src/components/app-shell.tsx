@@ -9,6 +9,7 @@ import { Menu, MessageCircle, UserRound, Warehouse } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { OrganizationAvatar } from "@/components/organization-avatar";
+import { NotificationBell } from "@/components/notification-bell";
 import { useAppearance } from "@/features/appearance/appearance-provider";
 import { organizationsApi } from "@/features/organizations/organizations-api";
 import { useWorkspace } from "@/features/organizations/workspace-provider";
@@ -50,6 +51,7 @@ export const MainScreenHeader = ({
           </Text>
         ) : null}
       </View>
+      <NotificationBell />
     </View>
   );
 };
