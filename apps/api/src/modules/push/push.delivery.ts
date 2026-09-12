@@ -93,6 +93,14 @@ const notificationData = (
     : {}),
 });
 
+export const notificationThread = (notification: {
+  conversationId?: string;
+  organization: { id: string };
+}) =>
+  notification.conversationId
+    ? `conversation:${notification.conversationId}`
+    : `organization:${notification.organization.id}`;
+
 export interface PushDeliveryDependencies {
   cipher: PushTokenCipher;
   devices: PushDeviceRepository;
@@ -136,6 +144,7 @@ export const deliverPush = async (
       ...copy,
       data: notificationData(notification.notification),
       badge: notification.unreadCount ?? 0,
+      threadId: notificationThread(notification.notification),
     })),
   );
   if (tickets.length !== devices.length) {

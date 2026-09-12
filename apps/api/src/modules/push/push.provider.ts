@@ -15,21 +15,26 @@ const errorCode = (value: unknown) =>
     ? value.error
     : "PUSH_PROVIDER_ERROR";
 
+export const toExpoPushMessage = (
+  message: PushProviderMessage,
+): ExpoPushMessage => ({
+  to: message.token,
+  title: message.title,
+  body: message.body,
+  data: message.data,
+  ...(message.badge === undefined ? {} : { badge: message.badge }),
+  ...(message.threadId ? { threadId: message.threadId } : {}),
+  channelId: "intouch-activity-v2",
+  sound: "default",
+  priority: "high",
+});
+
 export const createExpoPushProvider = (accessToken: string): PushProvider => {
   const expo = new Expo({ accessToken });
 
   return {
     async send(messages: readonly PushProviderMessage[]) {
-      const providerMessages: ExpoPushMessage[] = messages.map((message) => ({
-        to: message.token,
-        title: message.title,
-        body: message.body,
-        data: message.data,
-        ...(message.badge === undefined ? {} : { badge: message.badge }),
-        channelId: "intouch-activity-v2",
-        sound: "default",
-        priority: "high",
-      }));
+      const providerMessages = messages.map(toExpoPushMessage);
       const tickets = (
         await Promise.all(
           expo

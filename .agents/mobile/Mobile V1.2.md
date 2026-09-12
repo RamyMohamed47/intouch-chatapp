@@ -4,11 +4,11 @@ Mobile V1.2 advances the online-first Expo client with Echo, organization
 search, reply and mention semantics, notification controls, and mobile error
 monitoring. LiveKit media remains web-only until mobile V2.0.
 
-## Delivered Features
+## V1.2 Baseline
 
 - Echo is the fourth protected tab. It supports workspace/conversation asking,
-  summaries, action items, source navigation, cancellation, retryable failures,
-  owner enablement, member consent, and six-message in-memory context.
+  summaries, action items, source navigation, cancellation, owner enablement,
+  member consent, and six-message in-memory context.
 - The message composer offers explicit-preview Echo actions for professional
   rewrite, shortening, grammar correction, and translation. Generated text is
   never sent automatically or persisted by the mobile client.
@@ -32,6 +32,38 @@ monitoring. LiveKit media remains web-only until mobile V2.0.
 - A dedicated optional Sentry React Native integration captures sanitized
   JavaScript/native failures and route/network failures. Replay, tracing, PII,
   credentials, content, filenames, and signed query values are excluded.
+
+## V1.2.1 Completion
+
+- Echo uses a searchable context sheet populated by accessible text channels
+  and cursor-paginated direct conversations. Voice channels are excluded.
+  Workspace scope is the default for Ask; Summary and Actions require a
+  conversation. Loading another DM page does not clear the selected context.
+- Each Echo turn retains its original validated request. Only network,
+  `AI_UNAVAILABLE`, and `AI_CONTEXT_UNAVAILABLE` failures expose Retry, and
+  retry updates the existing turn rather than adding a duplicate. Cancellation
+  is a non-error terminal state.
+- Foreground interruption is evaluated from cached notification preferences.
+  Direct-message banners honor the direct-message category, organization and
+  conversation mutes suppress matching activity, and expired timed mutes are
+  ignored. Missing or failed preference state fails closed without blocking
+  message, unread, or inbox cache updates.
+- Socket.IO activity and Expo foreground notifications share a short-lived
+  scope deduplicator so the same activity causes at most one foreground
+  interruption. New organization invitations remain exempt from organization
+  mutes.
+- Push messages carry a best-effort grouping thread derived from the
+  conversation, or from the organization when no conversation exists. It maps
+  to Expo `threadId`; Android retains the existing activity channel and does
+  not use replacement semantics such as `tag` or `collapseId`.
+- Regression coverage includes Echo scope selection, retries, cancellation,
+  source navigation and history clearing; new-DM selection; initial chat
+  positioning; photo-permission denial; private-channel-only participant
+  loading; foreground notification policy; and push thread selection.
+
+V1.2.1 introduces no REST routes, Socket.IO events, database models,
+migrations, secrets, environment variables, native dependencies, or config
+plugins.
 
 ## Configuration
 
@@ -78,11 +110,20 @@ native fingerprint, so create new development and preview builds.
 7. Stream Echo responses, cancel mid-response, retry a provider failure, open
    source references, switch workspaces, and restart the app. Verify session
    history clears and auto-scroll stops while reading older output.
-8. Exercise each Echo composer action and verify the draft changes only after
+8. Verify Entire workspace is the initial Ask context, voice channels never
+   appear, additional DM pages load without clearing selection, and Summary or
+   Actions cannot run without a selected conversation. Verify quota, consent,
+   disabled-AI, and blocked-response failures do not offer Retry.
+9. With both Socket.IO and Expo delivery active, verify one incoming activity
+   produces only one foreground banner and remains present in the durable inbox.
+10. Open a chat, deny photo access, and verify the picker does not open. Start a
+    new DM from the picker, then open conversations with and without a message
+    anchor and verify the initial list position is correct.
+11. Exercise each Echo composer action and verify the draft changes only after
    pressing the explicit apply action.
-9. In a Sentry-enabled preview build, trigger a controlled test failure and
-   confirm the stack is symbolicated and contains no token, email, content,
-   filename, request body, or signed URL query.
+12. In a Sentry-enabled preview build, trigger a controlled test failure and
+    confirm the stack is symbolicated and contains no token, email, content,
+    filename, request body, or signed URL query.
 
 ## Deferred
 

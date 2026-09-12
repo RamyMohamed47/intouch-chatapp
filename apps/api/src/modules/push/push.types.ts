@@ -22,6 +22,7 @@ export interface PushProviderMessage {
   body: string;
   data: Record<string, string>;
   badge?: number;
+  threadId?: string;
 }
 
 export interface PushProviderTicket {

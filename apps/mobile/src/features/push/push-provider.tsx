@@ -17,6 +17,11 @@ import {
 import { Alert, AppState, Platform } from "react-native";
 
 import { useAuth } from "@/features/auth/auth-provider";
+import {
+  foregroundInterruptionDeduper,
+  getForegroundNotificationPreferences,
+  shouldShowForegroundPush,
+} from "@/features/notifications/foreground-notification-policy";
 import { notificationsApi } from "@/features/notifications/notifications-api";
 import { useWorkspace } from "@/features/organizations/workspace-provider";
 import { pushApi } from "@/features/push/push-api";
@@ -36,13 +41,30 @@ const PROMPT_KEY_PREFIX = "intouch.push-prompt.v1";
 const DISABLED_KEY_PREFIX = "intouch.push-disabled.v1";
 
 Notifications.setNotificationHandler({
-  handleNotification: () =>
-    Promise.resolve({
-      shouldPlaySound: AppState.currentState !== "active",
+  handleNotification: (notification) => {
+    const foreground = AppState.currentState === "active";
+    const data = notification.request.content.data ?? {};
+    const organizationId = data.organizationId;
+    const conversationId = data.conversationId;
+    const interrupt =
+      foreground &&
+      typeof organizationId === "string" &&
+      shouldShowForegroundPush(data, getForegroundNotificationPreferences()) &&
+      foregroundInterruptionDeduper.claim(
+        {
+          organizationId,
+          ...(typeof conversationId === "string" ? { conversationId } : {}),
+        },
+        "EXPO",
+      );
+
+    return Promise.resolve({
+      shouldPlaySound: !foreground,
       shouldSetBadge: true,
-      shouldShowBanner: AppState.currentState !== "active",
+      shouldShowBanner: !foreground || interrupt,
       shouldShowList: true,
-    }),
+    });
+  },
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

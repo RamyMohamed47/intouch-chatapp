@@ -5,7 +5,11 @@ import { NotificationType } from "@intouch/shared/notifications";
 
 import { createPushTokenCipher } from "../src/modules/push/push.crypto.js";
 import { createPushDeviceService } from "../src/modules/push/push-device.service.js";
-import { deliverPush } from "../src/modules/push/push.delivery.js";
+import {
+  deliverPush,
+  notificationThread,
+} from "../src/modules/push/push.delivery.js";
+import { toExpoPushMessage } from "../src/modules/push/push.provider.js";
 import type { PushDeviceRepository } from "../src/modules/push/push-device.repository.js";
 import type { PushOutboxRepository } from "../src/modules/push/push-outbox.repository.js";
 import type {
@@ -162,7 +166,33 @@ describe("push delivery", () => {
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.token, token);
     assert.equal(sent[0]?.body.includes("hello"), false);
+    assert.equal(sent[0]?.threadId, "conversation:507f1f77bcf86cd799439016");
     assert.deepEqual(invalidated, ["507f1f77bcf86cd799439011"]);
     assert.equal(dispatched, true);
+  });
+
+  test("groups by conversation when available and otherwise by organization", () => {
+    assert.equal(
+      notificationThread({
+        organization: { id: "organization-id" },
+        conversationId: "conversation-id",
+      }),
+      "conversation:conversation-id",
+    );
+    assert.equal(
+      notificationThread({ organization: { id: "organization-id" } }),
+      "organization:organization-id",
+    );
+
+    const message = toExpoPushMessage({
+      token,
+      title: "Activity",
+      body: "Open InTouch",
+      data: { organizationId: "organization-id" },
+      threadId: "conversation:conversation-id",
+    });
+    assert.equal(message.threadId, "conversation:conversation-id");
+    assert.equal("tag" in message, false);
+    assert.equal("collapseId" in message, false);
   });
 });

@@ -2,14 +2,18 @@ import {
   AiScopeKind,
   AiSummaryMode,
   AiTask,
-  type AiHistoryMessage,
+  aiResponseRequestSchema,
   type AiResponseRequest,
   type AiWorkspaceSource,
 } from "@intouch/shared/ai";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Send, Sparkles, Square } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -20,10 +24,21 @@ import {
 } from "react-native";
 
 import { MainScreenHeader } from "@/components/app-shell";
+import { EchoConversationPicker } from "@/components/echo-conversation-picker";
 import { Button, Card, Muted } from "@/components/ui/controls";
 import { Screen, StateView } from "@/components/ui/screen";
 import { aiApi, streamAiResponse } from "@/features/ai/ai-api";
+import {
+  buildEchoConversationOptions,
+  type EchoConversationOption,
+} from "@/features/ai/echo-conversations";
+import {
+  buildEchoHistory,
+  describeEchoFailure,
+  isRetryableEchoFailure,
+} from "@/features/ai/echo-turn";
 import { useAppearance } from "@/features/appearance/appearance-provider";
+import { conversationsApi } from "@/features/conversations/conversations-api";
 import { useWorkspace } from "@/features/organizations/workspace-provider";
 
 interface EchoTurn {
@@ -33,6 +48,9 @@ interface EchoTurn {
   sources: AiWorkspaceSource[];
   pending: boolean;
   error: string | null;
+  errorCode: string | null;
+  request: AiResponseRequest;
+  retryable: boolean;
 }
 
 const DISCLOSURE_ACKNOWLEDGEMENT = true as const;
@@ -45,7 +63,8 @@ export default function EchoScreen() {
   const controllerRef = useRef<AbortController | null>(null);
   const previousOrganizationRef = useRef(activeOrganizationId);
   const [prompt, setPrompt] = useState("");
-  const [conversationId, setConversationId] = useState("");
+  const [selectedConversation, setSelectedConversation] =
+    useState<EchoConversationOption | null>(null);
   const [mode, setMode] = useState<"ASK" | "SUMMARY" | "ACTION_ITEMS">("ASK");
   const [turns, setTurns] = useState<EchoTurn[]>([]);
   const [nearBottom, setNearBottom] = useState(true);
@@ -55,13 +74,44 @@ export default function EchoScreen() {
     queryFn: () => aiApi.getSettings(activeOrganizationId ?? ""),
     enabled: Boolean(activeOrganizationId),
   });
+  const channels = useQuery({
+    queryKey: [
+      "organizations",
+      activeOrganizationId,
+      "conversations",
+      "channels",
+    ],
+    queryFn: () => conversationsApi.channels(activeOrganizationId ?? ""),
+    enabled: Boolean(activeOrganizationId),
+  });
+  const directMessages = useInfiniteQuery({
+    queryKey: [
+      "organizations",
+      activeOrganizationId,
+      "conversations",
+      "directs",
+    ],
+    queryFn: ({ pageParam }) =>
+      conversationsApi.directMessages(activeOrganizationId ?? "", pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: ({ nextCursor }) => nextCursor ?? undefined,
+    enabled: Boolean(activeOrganizationId),
+  });
+  const conversationOptions = useMemo(
+    () =>
+      buildEchoConversationOptions(
+        channels.data ?? [],
+        directMessages.data?.pages.flatMap((page) => page.directMessages) ?? [],
+      ),
+    [channels.data, directMessages.data],
+  );
 
   useEffect(() => {
     if (previousOrganizationRef.current !== activeOrganizationId) {
       controllerRef.current?.abort();
       setTurns([]);
       setPrompt("");
-      setConversationId("");
+      setSelectedConversation(null);
       previousOrganizationRef.current = activeOrganizationId;
     }
   }, [activeOrganizationId]);
@@ -98,60 +148,8 @@ export default function EchoScreen() {
     });
   };
 
-  const submit = async () => {
+  const runTurn = async (id: string, input: AiResponseRequest) => {
     if (!activeOrganizationId || controllerRef.current) return;
-    const trimmedPrompt = prompt.trim();
-    if (mode === "ASK" && trimmedPrompt.length < 2) return;
-    if (mode !== "ASK" && !conversationId.trim()) return;
-
-    const id = `${Date.now()}-${Math.random()}`;
-    const history: AiHistoryMessage[] = turns
-      .flatMap((turn) => [
-        { role: "user" as const, content: turn.prompt },
-        ...(turn.response
-          ? [{ role: "assistant" as const, content: turn.response }]
-          : []),
-      ])
-      .slice(-6);
-    const input: AiResponseRequest =
-      mode === "ASK"
-        ? {
-            task: AiTask.ASK,
-            prompt: trimmedPrompt,
-            scope: conversationId.trim()
-              ? {
-                  kind: AiScopeKind.CONVERSATION,
-                  conversationId: conversationId.trim(),
-                }
-              : { kind: AiScopeKind.ORGANIZATION },
-            ...(history.length ? { history } : {}),
-          }
-        : {
-            task: AiTask.SUMMARIZE,
-            conversationId: conversationId.trim(),
-            mode:
-              mode === "SUMMARY"
-                ? AiSummaryMode.SUMMARY
-                : AiSummaryMode.ACTION_ITEMS,
-          };
-    const turnPrompt =
-      mode === "ASK"
-        ? trimmedPrompt
-        : mode === "SUMMARY"
-          ? "Summarize this conversation"
-          : "Extract action items";
-    setPrompt("");
-    setTurns((current) => [
-      ...current,
-      {
-        id,
-        prompt: turnPrompt,
-        response: "",
-        sources: [],
-        pending: true,
-        error: null,
-      },
-    ]);
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
@@ -173,7 +171,13 @@ export default function EchoScreen() {
                 return { ...turn, pending: false };
               }
               if (event.type === "error") {
-                return { ...turn, pending: false, error: event.message };
+                return {
+                  ...turn,
+                  pending: false,
+                  error: event.message,
+                  errorCode: event.code,
+                  retryable: isRetryableEchoFailure({ code: event.code }),
+                };
               }
               return turn;
             }),
@@ -187,26 +191,101 @@ export default function EchoScreen() {
       );
     } catch (error) {
       setTurns((current) =>
-        current.map((turn) =>
-          turn.id === id
-            ? {
-                ...turn,
-                pending: false,
-                ...(controller.signal.aborted
-                  ? {}
-                  : {
-                      error:
-                        error instanceof Error
-                          ? error.message
-                          : "Echo is temporarily unavailable",
-                    }),
-              }
-            : turn,
-        ),
+        current.map((turn) => {
+          if (turn.id !== id) return turn;
+          if (controller.signal.aborted) {
+            return { ...turn, pending: false, error: null, retryable: false };
+          }
+          const failure = describeEchoFailure(error);
+          return {
+            ...turn,
+            pending: false,
+            error: failure.message,
+            errorCode: failure.code,
+            retryable: failure.retryable,
+          };
+        }),
       );
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null;
     }
+  };
+
+  const submit = async () => {
+    if (!activeOrganizationId || controllerRef.current) return;
+    const trimmedPrompt = prompt.trim();
+    const selectedConversationId = selectedConversation?.id;
+    if (mode === "ASK" && trimmedPrompt.length < 2) return;
+    if (mode !== "ASK" && !selectedConversationId) return;
+
+    const id = `${Date.now()}-${Math.random()}`;
+    const history = buildEchoHistory(turns);
+    let input: AiResponseRequest;
+    if (mode === "ASK") {
+      input = aiResponseRequestSchema.parse({
+        task: AiTask.ASK,
+        prompt: trimmedPrompt,
+        scope: selectedConversation
+          ? {
+              kind: AiScopeKind.CONVERSATION,
+              conversationId: selectedConversation.id,
+            }
+          : { kind: AiScopeKind.ORGANIZATION },
+        ...(history.length ? { history } : {}),
+      });
+    } else {
+      if (!selectedConversationId) return;
+      input = aiResponseRequestSchema.parse({
+        task: AiTask.SUMMARIZE,
+        conversationId: selectedConversationId,
+        mode:
+          mode === "SUMMARY"
+            ? AiSummaryMode.SUMMARY
+            : AiSummaryMode.ACTION_ITEMS,
+      });
+    }
+    const turnPrompt =
+      mode === "ASK"
+        ? trimmedPrompt
+        : mode === "SUMMARY"
+          ? "Summarize this conversation"
+          : "Extract action items";
+    setPrompt("");
+    setTurns((current) => [
+      ...current,
+      {
+        id,
+        prompt: turnPrompt,
+        response: "",
+        sources: [],
+        pending: true,
+        error: null,
+        errorCode: null,
+        request: input,
+        retryable: false,
+      },
+    ]);
+    await runTurn(id, input);
+  };
+
+  const retry = async (turn: EchoTurn) => {
+    if (controllerRef.current || !turn.retryable) return;
+    setTurns((current) =>
+      current.map((candidate) =>
+        candidate.id === turn.id
+          ? {
+              ...candidate,
+              response: "",
+              sources: [],
+              pending: true,
+              error: null,
+              errorCode: null,
+              retryable: false,
+            }
+          : candidate,
+      ),
+    );
+    await runTurn(turn.id, turn.request);
   };
 
   if (!activeOrganizationId) {
@@ -342,7 +421,18 @@ export default function EchoScreen() {
                     (item.pending ? "Echo is thinking..." : "No response")}
                 </Text>
                 {item.error ? (
-                  <Text style={{ color: theme.danger }}>{item.error}</Text>
+                  <View style={styles.failure}>
+                    <Text style={{ color: theme.danger }}>{item.error}</Text>
+                    {item.retryable ? (
+                      <Button
+                        disabled={running}
+                        onPress={() => void retry(item)}
+                        variant="secondary"
+                      >
+                        Retry
+                      </Button>
+                    ) : null}
+                  </View>
                 ) : null}
                 {item.sources.map((source) => (
                   <Pressable
@@ -376,19 +466,14 @@ export default function EchoScreen() {
             { borderColor: theme.border, backgroundColor: theme.panel },
           ]}
         >
-          <TextInput
-            accessibilityLabel="Conversation ID"
-            autoCapitalize="none"
-            onChangeText={setConversationId}
-            placeholder={
-              mode === "ASK" ? "Conversation ID (optional)" : "Conversation ID"
-            }
-            placeholderTextColor={theme.muted}
-            style={[
-              styles.scopeInput,
-              { color: theme.text, borderColor: theme.border },
-            ]}
-            value={conversationId}
+          <EchoConversationPicker
+            allowWorkspace={mode === "ASK"}
+            hasMoreDirectMessages={Boolean(directMessages.hasNextPage)}
+            loadingMoreDirectMessages={directMessages.isFetchingNextPage}
+            onLoadMoreDirectMessages={() => void directMessages.fetchNextPage()}
+            onSelect={setSelectedConversation}
+            options={conversationOptions}
+            selected={selectedConversation}
           />
           {mode === "ASK" ? (
             <TextInput
@@ -419,7 +504,7 @@ export default function EchoScreen() {
               disabled={
                 mode === "ASK"
                   ? prompt.trim().length < 2
-                  : !conversationId.trim()
+                  : !selectedConversation
               }
               onPress={() => void submit()}
               style={[styles.send, { backgroundColor: theme.accent }]}
@@ -459,6 +544,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   source: { borderTopWidth: 1, gap: 3, paddingTop: 9 },
+  failure: { gap: 8 },
   composer: {
     alignItems: "flex-end",
     borderRadius: 18,
@@ -467,12 +553,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     padding: 9,
-  },
-  scopeInput: {
-    borderBottomWidth: 1,
-    flexBasis: "100%",
-    minHeight: 38,
-    paddingHorizontal: 8,
   },
   input: {
     borderRadius: 14,

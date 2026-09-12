@@ -19,7 +19,11 @@ import {
   voiceOccupancyUpdatedEventSchema,
   type SocketAcknowledgementResult,
 } from "@intouch/shared/realtime";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { router } from "expo-router";
 import {
   createContext,
@@ -42,6 +46,12 @@ import {
 } from "@/features/messages/receipt-cache";
 import { mergeReactionStateIntoMessagePages } from "@/features/messages/reaction-cache";
 import { messagesApi } from "@/features/messages/messages-api";
+import {
+  foregroundInterruptionDeduper,
+  setForegroundNotificationPreferences,
+  shouldShowForegroundMessageBanner,
+} from "@/features/notifications/foreground-notification-policy";
+import { notificationsApi } from "@/features/notifications/notifications-api";
 import { useWorkspace } from "@/features/organizations/workspace-provider";
 
 interface RealtimeValue {
@@ -86,6 +96,30 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
   const seenActivities = useRef(new Set<string>());
+  const notificationPreferences = useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: () => notificationsApi.getPreferences(),
+    enabled: status === "authenticated",
+  });
+  const notificationPreferencesRef = useRef(notificationPreferences.data);
+
+  useEffect(() => {
+    const preferences =
+      status === "authenticated" && notificationPreferences.isSuccess
+        ? notificationPreferences.data
+        : undefined;
+    notificationPreferencesRef.current = preferences;
+    setForegroundNotificationPreferences(preferences ?? null);
+    if (status !== "authenticated") {
+      foregroundInterruptionDeduper.clear();
+      queryClient.removeQueries({ queryKey: ["notification-preferences"] });
+    }
+  }, [
+    notificationPreferences.data,
+    notificationPreferences.isSuccess,
+    queryClient,
+    status,
+  ]);
 
   const clearTyping = useCallback(() => {
     for (const timer of typingTimers.current.values()) clearTimeout(timer);
@@ -145,6 +179,24 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
         parsed.data.kind === "MESSAGE_CREATED" &&
         activeConversationRef.current !== parsed.data.conversationId
       ) {
+        const shouldInterrupt = shouldShowForegroundMessageBanner({
+          conversationId: parsed.data.conversationId,
+          conversationType: parsed.data.conversationType,
+          organizationId: parsed.data.organizationId,
+          preferences: notificationPreferencesRef.current,
+        });
+        if (
+          !shouldInterrupt ||
+          !foregroundInterruptionDeduper.claim(
+            {
+              conversationId: parsed.data.conversationId,
+              organizationId: parsed.data.organizationId,
+            },
+            "SOCKET",
+          )
+        ) {
+          return;
+        }
         const members = queryClient.getQueryData<OrganizationMemberDto[]>([
           "organizations",
           parsed.data.organizationId,
@@ -347,6 +399,9 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
         if (state === "active") {
           next.connect();
           void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          void queryClient.invalidateQueries({
+            queryKey: ["notification-preferences"],
+          });
           void queryClient.invalidateQueries({ queryKey: ["organizations"] });
         } else next.disconnect();
       },

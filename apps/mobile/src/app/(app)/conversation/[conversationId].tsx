@@ -58,6 +58,10 @@ import { useAppearance } from "@/features/appearance/appearance-provider";
 import { ChatWallpaper } from "@/features/appearance/chat-wallpaper";
 import { wallpaperApi } from "@/features/appearance/wallpaper-api";
 import { useAuth } from "@/features/auth/auth-provider";
+import {
+  shouldLoadConversationParticipants,
+  shouldPositionAtLatestMessage,
+} from "@/features/conversations/conversation-screen-policy";
 import { conversationsApi } from "@/features/conversations/conversations-api";
 import { messagesApi } from "@/features/messages/messages-api";
 import { mergeReactionStateIntoMessagePages } from "@/features/messages/reaction-cache";
@@ -143,9 +147,9 @@ export default function ConversationScreen() {
   const participants = useQuery({
     queryKey: ["conversations", conversationId, "participants"],
     queryFn: () => conversationsApi.participants(conversationId),
-    enabled:
-      conversation.data?.type === ConversationType.CHANNEL &&
-      conversation.data.visibility === ConversationVisibility.PRIVATE,
+    enabled: conversation.data
+      ? shouldLoadConversationParticipants(conversation.data)
+      : false,
   });
   const wallpaper = useQuery({
     queryKey: ["conversations", conversationId, "wallpaper"],
@@ -361,9 +365,12 @@ export default function ConversationScreen() {
 
   useEffect(() => {
     if (
-      anchorMessageId ||
-      allMessages.length === 0 ||
-      initiallyPositionedConversationRef.current === conversationId
+      !shouldPositionAtLatestMessage({
+        anchorMessageId,
+        conversationId,
+        messageCount: allMessages.length,
+        positionedConversationId: initiallyPositionedConversationRef.current,
+      })
     ) {
       return;
     }
