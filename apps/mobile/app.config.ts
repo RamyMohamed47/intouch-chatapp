@@ -27,6 +27,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: "com.ramymohamed.intouch",
     supportsTablet: true,
+    infoPlist: {
+      UIBackgroundModes: ["audio"],
+      NSMicrophoneUsageDescription:
+        "InTouch uses your microphone for voice and video calls.",
+      NSCameraUsageDescription:
+        "InTouch uses your camera when you enable video calls.",
+    },
   },
   android: {
     package: "com.ramymohamed.intouch",
@@ -35,12 +42,36 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#07101f",
       foregroundImage: `${brandAssets}/intouch-mark.png`,
     },
+    permissions: [
+      "android.permission.RECORD_AUDIO",
+      "android.permission.CAMERA",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+      "android.permission.FOREGROUND_SERVICE_CAMERA",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+      "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+      "android.permission.POST_NOTIFICATIONS",
+    ],
     ...(process.env.GOOGLE_SERVICES_JSON
       ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }
       : {}),
   },
   plugins: [
     "expo-router",
+    [
+      "@livekit/react-native-expo-plugin",
+      {
+        android: {
+          audioType: "communication",
+          enableScreenShareService: true,
+        },
+        ios: { enableMultitaskingCameraAccess: false },
+      },
+    ],
+    "@config-plugins/react-native-webrtc",
+    "./plugins/with-voice-foreground-service.cjs",
+    "expo-audio",
     "@sentry/react-native/expo",
     "expo-secure-store",
     [
@@ -48,6 +79,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         color: "#168cff",
         defaultChannel: "intouch-activity-v2",
+        enableBackgroundRemoteNotifications: true,
+        sounds: ["./assets/audio/intouch-call.wav"],
       },
     ],
     "expo-sharing",

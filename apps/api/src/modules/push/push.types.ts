@@ -23,6 +23,13 @@ export interface PushProviderMessage {
   data: Record<string, string>;
   badge?: number;
   threadId?: string;
+  channelId?: string;
+  sound?: string | null;
+  ttlSeconds?: number;
+  collapseId?: string;
+  tag?: string;
+  contentAvailable?: boolean;
+  interruptionLevel?: "active" | "time-sensitive";
 }
 
 export interface PushProviderTicket {

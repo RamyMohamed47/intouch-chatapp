@@ -135,7 +135,7 @@ import {
   type VoiceSessionStore,
   type VoiceTelemetry,
 } from "../voice/index.js";
-import type { PushPublisher } from "../push/index.js";
+import type { CallAlertPublisher, PushPublisher } from "../push/index.js";
 
 type OrganizationTelemetry = NonNullable<
   SearchServiceDependencies["telemetry"]
@@ -150,6 +150,7 @@ export interface OrganizationModuleDependencies {
   messageReactionRealtime: MessageReactionRealtime;
   notificationRealtime: NotificationRealtime;
   pushPublisher?: PushPublisher;
+  callAlertPublisher?: CallAlertPublisher;
   logger: Logger;
   presenceRealtime: PresenceRealtime;
   presenceStore?: PresenceStore;
@@ -176,6 +177,7 @@ const createOrganizationModule = ({
   messageReactionRealtime,
   notificationRealtime,
   pushPublisher,
+  callAlertPublisher,
   logger,
   presenceRealtime,
   presenceStore,
@@ -417,6 +419,7 @@ const createOrganizationModule = ({
     participants: conversationParticipants,
     realtime: voiceRealtime,
     sessions: voiceSessions,
+    ...(callAlertPublisher ? { callAlerts: callAlertPublisher } : {}),
     ...(telemetry ? { telemetry } : {}),
     unitOfWork,
   });
@@ -655,6 +658,9 @@ const createOrganizationModule = ({
     voiceService,
     voiceSessionRouter,
     voiceWebhookRouter,
+    calls,
+    notificationPreferences,
+    users,
   };
 };
 

@@ -14,6 +14,7 @@ export const DEFAULT_NOTIFICATION_CATEGORIES: NotificationCategoryPreferences =
     directMessages: true,
     mentionsAndReplies: true,
     reactions: true,
+    calls: true,
   };
 
 const categoryFor = (
@@ -58,7 +59,38 @@ export interface NotificationPreferenceRepository {
     conversationId?: string;
     now: Date;
   }): Promise<boolean>;
+  allowsCallInterruption(input: {
+    userId: string;
+    organizationId: string;
+    conversationId: string;
+    now: Date;
+  }): Promise<boolean>;
 }
+
+const activeMuteExists = async (input: {
+  userId: string;
+  organizationId: string;
+  conversationId?: string;
+  now: Date;
+}) =>
+  (await NotificationMuteModel.exists({
+    userId: input.userId,
+    organizationId: input.organizationId,
+    $or: [
+      { conversationId: { $exists: false } },
+      ...(input.conversationId
+        ? [{ conversationId: input.conversationId }]
+        : []),
+    ],
+    $and: [
+      {
+        $or: [
+          { mutedUntil: { $exists: false } },
+          { mutedUntil: { $gt: input.now } },
+        ],
+      },
+    ],
+  }).exec()) !== null;
 
 const createMongooseNotificationPreferenceRepository =
   (): NotificationPreferenceRepository => ({
@@ -66,7 +98,10 @@ const createMongooseNotificationPreferenceRepository =
       const record = await NotificationPreferenceModel.findOne({ userId })
         .lean()
         .exec();
-      return record?.categories ?? { ...DEFAULT_NOTIFICATION_CATEGORIES };
+      return {
+        ...DEFAULT_NOTIFICATION_CATEGORIES,
+        ...(record?.categories ?? {}),
+      };
     },
 
     async updateCategories(userId, categories) {
@@ -137,25 +172,12 @@ const createMongooseNotificationPreferenceRepository =
       if (input.type === NotificationType.ORGANIZATION_INVITATION_RECEIVED) {
         return true;
       }
-      const mute = await NotificationMuteModel.exists({
-        userId: input.userId,
-        organizationId: input.organizationId,
-        $or: [
-          { conversationId: { $exists: false } },
-          ...(input.conversationId
-            ? [{ conversationId: input.conversationId }]
-            : []),
-        ],
-        $and: [
-          {
-            $or: [
-              { mutedUntil: { $exists: false } },
-              { mutedUntil: { $gt: input.now } },
-            ],
-          },
-        ],
-      }).exec();
-      return mute === null;
+      return !(await activeMuteExists(input));
+    },
+
+    async allowsCallInterruption(input) {
+      const categories = await this.getCategories(input.userId);
+      return categories.calls && !(await activeMuteExists(input));
     },
   });
 

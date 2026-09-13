@@ -176,6 +176,7 @@ export default function ProfileScreen() {
                 ["directMessages", "Direct messages"],
                 ["mentionsAndReplies", "Mentions and replies"],
                 ["reactions", "Reactions"],
+                ["calls", "Incoming calls"],
               ] as const
             ).map(([key, label]) => (
               <View key={key} style={styles.preferenceRow}>
@@ -242,7 +243,7 @@ export default function ProfileScreen() {
         </Text>
         <Muted>
           {push.state === "enabled"
-            ? "Enabled for invitations, direct messages, and reactions."
+            ? "Enabled for activity and incoming calls."
             : push.state === "blocked"
               ? "Blocked in system settings. Enable notifications for InTouch from your device settings."
               : push.state === "unavailable"
@@ -290,10 +291,6 @@ export default function ProfileScreen() {
       </Card>
 
       <Card>
-        <Muted>
-          Voice, video, and screen sharing remain available on web or in a later
-          mobile release.
-        </Muted>
         <Button destructive onPress={() => void logout()}>
           Sign out
         </Button>

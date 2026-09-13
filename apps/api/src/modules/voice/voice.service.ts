@@ -29,6 +29,7 @@ import type { MembershipService } from "../memberships/index.js";
 import type { MessageRecord } from "../message/message.types.js";
 import { MessageType } from "../message/message.types.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
+import type { CallAlertPublisher } from "../push/call-alert.publisher.js";
 import type { CallSessionRepository } from "./call.repository.js";
 import {
   CallConflictError,
@@ -94,10 +95,11 @@ export interface VoiceServiceDependencies {
   sessions: VoiceSessionStore;
   telemetry?: VoiceTelemetry;
   unitOfWork: OrganizationUnitOfWork;
+  callAlerts?: CallAlertPublisher;
 }
 
 const createVoiceService = (dependencies: VoiceServiceDependencies) => {
-  const publishCall = (call: CallSessionRecord) => {
+  const publishCall = async (call: CallSessionRecord) => {
     try {
       dependencies.realtime.callUpdated(
         [call.callerUserId, call.recipientUserId],
@@ -105,6 +107,16 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
       );
     } catch (error) {
       dependencies.logger.error({ err: error }, "Voice call delivery failed");
+    }
+    if (call.status !== CallStatus.RINGING) {
+      try {
+        await dependencies.callAlerts?.stateChanged(call);
+      } catch (error) {
+        dependencies.logger.error(
+          { err: error },
+          "Call state push scheduling failed",
+        );
+      }
     }
   };
 
@@ -211,7 +223,7 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
         outcome: reason.toLowerCase(),
       });
     }
-    publishCall(result);
+    await publishCall(result);
     return result;
   };
 
@@ -345,7 +357,7 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
       [CallStatus.CONNECTING],
       { status: CallStatus.ACTIVE, answeredAt: new Date() },
     );
-    if (active) publishCall(active);
+    if (active) await publishCall(active);
   };
 
   const service = {
@@ -565,7 +577,15 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
           "Incoming voice call delivery failed",
         );
       }
-      publishCall(result.call);
+      try {
+        await dependencies.callAlerts?.incoming(result.call);
+      } catch (error) {
+        dependencies.logger.error(
+          { err: error },
+          "Incoming call push scheduling failed",
+        );
+      }
+      await publishCall(result.call);
       return { call: dto, credentials };
     },
 
@@ -587,7 +607,7 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
         throw new CallConflictError("Call reservation expired");
       }
       const credentials = await issueCredentials(session);
-      publishCall(transitioned);
+      await publishCall(transitioned);
       await dependencies.jobs.schedule(
         call.id,
         VoiceCallJobKind.CONNECT_TIMEOUT,
@@ -1015,6 +1035,11 @@ const createVoiceService = (dependencies: VoiceServiceDependencies) => {
               if (providerIdentities.has(session.participantIdentity)) {
                 if (session.connectedAt === null) {
                   await activateProviderSession(session);
+                } else {
+                  await dependencies.sessions.heartbeat(
+                    session.userId,
+                    session.id,
+                  );
                 }
                 continue;
               }

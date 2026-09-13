@@ -15,6 +15,7 @@ export default tseslint.config(
       "apps/mobile/*.config.cjs",
       "apps/mobile/*.config.js",
       "apps/mobile/*.config.mjs",
+      "apps/mobile/plugins/**/*.cjs",
       "apps/mobile/app.config.ts",
       "apps/mobile/expo-env.d.ts",
       "packages/*/dist/**",

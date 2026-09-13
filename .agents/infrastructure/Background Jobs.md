@@ -11,6 +11,8 @@ local-memory fallback and emergency rollback path.
 - MongoDB `StoredAsset` records own durable R2 lifecycle and cleanup state.
 - MongoDB `PushOutbox` records own durable mobile notification delivery and
   Expo receipt state.
+- MongoDB `CallAlertOutbox` records own short-lived direct-call interruption
+  and stale-ringing cancellation state.
 - BullMQ owns dispatch, retry timing, shared concurrency, and short-lived job
   history only.
 - In-app notifications remain transactional MongoDB writes. Their opaque IDs
@@ -38,6 +40,11 @@ All keys are under `${REDIS_KEY_PREFIX}:bullmq`.
   Tokens are encrypted in MongoDB and never enter BullMQ payloads. Category
   preferences and active workspace/conversation mutes are checked immediately
   before dispatch; suppressed jobs complete successfully without calling Expo.
+- `call-alert-delivery`: reconciles every second with concurrency 5, delivers a
+  high-priority incoming-call interruption during the 30-second ringing window,
+  and follows it with a data-only stale-ringing cancellation signal. The calls
+  preference and active workspace/conversation mutes are evaluated immediately
+  before dispatch. Four bounded attempts use 1, 3, and 7 second retry delays.
 
 Every mutation remains idempotent through repository-level leases and status
 conditions. Reconciliation recovers committed MongoDB work after API crashes,

@@ -297,6 +297,23 @@ erDiagram
         datetime purgeAt
     }
 
+    CallAlertOutbox {
+        ObjectId id
+        string callId
+        ObjectId recipientUserId
+        enum kind
+        enum status
+        int attempts
+        datetime availableAt
+        datetime expiresAt
+        datetime dispatchedAt
+        datetime leaseUntil
+        string lastError
+        datetime purgeAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
     User ||--o{ Membership : joins
     User ||--o{ LoginProvider : embeds
     User ||--o{ AuthSession : authenticates
@@ -381,6 +398,10 @@ erDiagram
     User ||--o{ PushOutbox : receives
 
     Notification ||--o{ PushOutbox : delivers
+
+    CallSession ||--o{ CallAlertOutbox : interrupts
+
+    User ||--o{ CallAlertOutbox : receives
 ```
 
 `LoginProvider.providerAccountId` stores the Google `sub` for Google identities.
@@ -522,7 +543,7 @@ idempotency, and transactional deletion. Notification creation and cleanup
 participate in the source domain transaction; Socket.IO publication occurs only
 after commit and carries safe hydrated DTOs to the recipient's user room.
 
-`NotificationPreference` is unique per user and stores the four category
+`NotificationPreference` is unique per user and stores the five category
 switches. Its absence resolves to all categories enabled. `NotificationMute`
 is unique per user and organization/conversation scope; an absent `mutedUntil`
 means indefinite and a TTL index removes expired timed mutes. Preferences and
@@ -537,6 +558,16 @@ provider ticket IDs, bounded retry state, and receipt timing. BullMQ carries
 opaque outbox IDs; MongoDB reconciliation recovers enqueue gaps after crashes.
 The final mobile logout request may include its installation ID so session and
 push registration are removed together from the user's perspective.
+
+`CallAlertOutbox` stores short-lived direct-call interruption work separately
+from the durable notification inbox. The incoming alert is unique per call and
+recipient, expires with the 30-second ringing window, and is delivered only
+while the call remains `RINGING`. The first terminal or connecting state update
+enqueues a data-only cancellation signal so mobile clients can dismiss stale
+ringing UI. Delivery checks the calls category and current organization or
+conversation mutes immediately before contacting Expo. Repository leases,
+bounded retries, reconciliation, and TTL cleanup make MongoDB authoritative;
+BullMQ carries only the opaque outbox ID.
 
 Search does not introduce a persistence entity. Native development search uses
 text indexes on `Message.content`, `Conversation.name`, and the weighted

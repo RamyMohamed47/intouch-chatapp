@@ -8,6 +8,8 @@ import type {
   MessageListResponse,
   MessageMention,
 } from "@intouch/shared/messages";
+import { MembershipRole } from "@intouch/shared/memberships";
+import { CallMediaMode, VoiceSessionKind } from "@intouch/shared/voice";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -29,8 +31,10 @@ import {
   ImagePlus,
   Palette,
   Paperclip,
+  Phone,
   Send,
   Sparkles,
+  Video,
   X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -79,6 +83,8 @@ import {
   type LocalUploadFile,
 } from "@/features/uploads/upload-client";
 import { uploadsApi } from "@/features/uploads/uploads-api";
+import { VoiceStage } from "@/features/voice/voice-ui";
+import { useVoice } from "@/features/voice/voice-provider";
 
 export default function ConversationScreen() {
   const { conversationId = "", messageId } = useLocalSearchParams<{
@@ -88,6 +94,7 @@ export default function ConversationScreen() {
   const anchorMessageId = typeof messageId === "string" ? messageId : "";
   const { theme } = useAppearance();
   const { user } = useAuth();
+  const voice = useVoice();
   const isFocused = useIsFocused();
   const {
     connected,
@@ -214,9 +221,69 @@ export default function ConversationScreen() {
     participants.data,
     user?.id,
   ]);
-  const isVoice =
+  const voiceChannel =
     conversation.data?.type === ConversationType.CHANNEL &&
-    conversation.data.kind === ChannelKind.VOICE;
+    conversation.data.kind === ChannelKind.VOICE
+      ? conversation.data
+      : null;
+  const isVoice = Boolean(voiceChannel);
+  const voiceParticipantLabels = useMemo(() => {
+    const labels = new Map<
+      string,
+      {
+        avatarAssetId?: string | null;
+        avatarUrl?: string | null;
+        displayName: string;
+        userId: string;
+      }
+    >();
+    if (!voiceChannel) {
+      return labels;
+    }
+    for (const participant of voiceChannel.occupancy.participants) {
+      const member = members.data?.find(
+        ({ user: memberUser }) => memberUser.id === participant.userId,
+      )?.user;
+      labels.set(participant.participantIdentity, {
+        userId: participant.userId,
+        displayName:
+          member?.displayName ??
+          (participant.userId === user?.id ? "You" : "Teammate"),
+        ...(member?.avatarAssetId
+          ? { avatarAssetId: member.avatarAssetId }
+          : {}),
+        ...(member?.avatarUrl ? { avatarUrl: member.avatarUrl } : {}),
+      });
+    }
+    return labels;
+  }, [members.data, user?.id, voiceChannel]);
+  const startDirectCall = (
+    mediaMode: (typeof CallMediaMode)[keyof typeof CallMediaMode],
+  ) => {
+    const start = (replace: boolean) =>
+      void voice
+        .startCall(conversationId, mediaMode, replace)
+        .catch((error: unknown) =>
+          Alert.alert(
+            "Call unavailable",
+            error instanceof Error
+              ? error.message
+              : "The call could not be started",
+          ),
+        );
+    if (voice.activeSession) {
+      Alert.alert(
+        "Switch voice sessions?",
+        "Starting this call will leave your current call or voice channel.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Switch", style: "destructive", onPress: () => start(true) },
+        ],
+      );
+      return;
+    }
+    start(false);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -573,13 +640,78 @@ export default function ConversationScreen() {
     );
   }
   if (isVoice) {
+    const joined =
+      voice.activeSession?.kind === VoiceSessionKind.VOICE_CHANNEL &&
+      voice.activeSession.conversationId === conversationId;
+    const joinChannel = (replace: boolean) =>
+      void voice
+        .joinChannel(conversationId, replace)
+        .catch((error: unknown) =>
+          Alert.alert(
+            "Voice unavailable",
+            error instanceof Error
+              ? error.message
+              : "The voice channel could not be joined",
+          ),
+        );
+    const join = () => {
+      if (voice.activeSession && !joined) {
+        Alert.alert(
+          "Switch voice sessions?",
+          "Joining this channel will leave your current call or voice channel.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Switch",
+              style: "destructive",
+              onPress: () => joinChannel(true),
+            },
+          ],
+        );
+        return;
+      }
+      joinChannel(false);
+    };
     return (
-      <Screen>
-        <BackButton onPress={() => router.back()} />
-        <StateView
-          title="Voice is available on web"
-          message="Mobile audio rooms arrive after the V1 text foundation."
-        />
+      <Screen scroll={false}>
+        <View
+          style={[
+            styles.header,
+            { borderBottomColor: theme.border, backgroundColor: theme.panel },
+          ]}
+        >
+          <BackButton onPress={() => router.back()} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: theme.text }]}>
+              {conversation.data?.type === ConversationType.CHANNEL
+                ? conversation.data.name
+                : "Voice channel"}
+            </Text>
+            <Muted>Mobile voice lounge</Muted>
+          </View>
+          <NotificationMuteButton
+            scope={{ kind: "conversation", conversationId }}
+          />
+        </View>
+        {joined ? (
+          <VoiceStage
+            canModerate={
+              members.data?.find(
+                ({ user: memberUser }) => memberUser.id === user?.id,
+              )?.role === MembershipRole.OWNER
+            }
+            participantLabels={voiceParticipantLabels}
+            title="Voice lounge"
+          />
+        ) : (
+          <View style={styles.voiceJoin}>
+            <StateView
+              title="Join the conversation"
+              message={`${voiceChannel?.occupancy.participantUserIds.length ?? 0}/10 members connected.`}
+            />
+            <Button onPress={join}>Join voice channel</Button>
+          </View>
+        )}
       </Screen>
     );
   }
@@ -626,6 +758,22 @@ export default function ConversationScreen() {
         <NotificationMuteButton
           scope={{ kind: "conversation", conversationId }}
         />
+        {conversation.data?.type === ConversationType.DIRECT ? (
+          <>
+            <Pressable
+              accessibilityLabel="Start voice call"
+              onPress={() => startDirectCall(CallMediaMode.AUDIO)}
+            >
+              <Phone color={theme.accent} size={22} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Start video call"
+              onPress={() => startDirectCall(CallMediaMode.VIDEO)}
+            >
+              <Video color={theme.accent} size={23} />
+            </Pressable>
+          </>
+        ) : null}
       </View>
       {anchorMessageId ? (
         <View
@@ -1184,6 +1332,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   contextText: { flex: 1, fontSize: 13, fontWeight: "700" },
+  voiceJoin: { flex: 1, justifyContent: "center", padding: 24 },
   history: { flex: 1 },
   messages: { padding: 14, gap: 9 },
   messageRow: { alignItems: "flex-start" },

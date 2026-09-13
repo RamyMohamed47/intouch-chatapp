@@ -81,8 +81,12 @@ import {
   createRedisVoiceSessionStore,
 } from "./modules/voice/index.js";
 import {
+  createBullMqCallAlertJobs,
   createBullMqPushJobs,
+  createCallAlertPublisher,
+  createCallAlertWorker,
   createExpoPushProvider,
+  createMongooseCallAlertOutboxRepository,
   createMongoosePushDeviceRepository,
   createMongoosePushOutboxRepository,
   createPushDeviceController,
@@ -387,8 +391,10 @@ const pushRuntime =
         const cipher = createPushTokenCipher(config.push.tokenEncryptionSecret);
         const devices = createMongoosePushDeviceRepository();
         const outbox = createMongoosePushOutboxRepository();
+        const callAlertOutbox = createMongooseCallAlertOutboxRepository();
         const notificationRepository = createMongooseNotificationRepository();
         const publisher = createPushPublisher(outbox, notificationRepository);
+        const callAlertPublisher = createCallAlertPublisher(callAlertOutbox);
         const deviceService = createPushDeviceService({ cipher, devices });
         pushRemovalRef.current = deviceService;
         const deviceController = createPushDeviceController(deviceService);
@@ -401,8 +407,10 @@ const pushRuntime =
           cipher,
           devices,
           outbox,
+          callAlertOutbox,
           notificationRepository,
           publisher,
+          callAlertPublisher,
           provider: createExpoPushProvider(config.push.accessToken),
           router: createPushDeviceRouter(
             deviceController,
@@ -420,6 +428,9 @@ const organizations = createOrganizationModule({
   messageReactionRealtime: realtimeGateway,
   notificationRealtime: realtimeGateway,
   ...(pushRuntime ? { pushPublisher: pushRuntime.publisher } : {}),
+  ...(pushRuntime
+    ? { callAlertPublisher: pushRuntime.callAlertPublisher }
+    : {}),
   logger,
   presenceRealtime: realtimeGateway,
   ...(presenceStore ? { presenceStore } : {}),
@@ -471,6 +482,18 @@ const pushWorker = pushRuntime
       provider: pushRuntime.provider,
     })
   : undefined;
+const callAlertWorker = pushRuntime
+  ? createCallAlertWorker({
+      calls: organizations.calls,
+      cipher: pushRuntime.cipher,
+      devices: pushRuntime.devices,
+      logger,
+      outbox: pushRuntime.callAlertOutbox,
+      preferences: organizations.notificationPreferences,
+      provider: pushRuntime.provider,
+      users: organizations.users,
+    })
+  : undefined;
 let backgroundJobs: BackgroundJobsRuntime;
 if (config.backgroundJobsProvider === "bullmq") {
   if (config.runtimeState.provider !== "redis") {
@@ -520,6 +543,19 @@ if (config.backgroundJobsProvider === "bullmq") {
               redisUrl: config.runtimeState.url,
               telemetry: observabilityMetrics,
             }),
+            createBullMqCallAlertJobs({
+              calls: organizations.calls,
+              cipher: pushRuntime.cipher,
+              devices: pushRuntime.devices,
+              logger,
+              outbox: pushRuntime.callAlertOutbox,
+              preferences: organizations.notificationPreferences,
+              provider: pushRuntime.provider,
+              users: organizations.users,
+              redisKeyPrefix: config.runtimeState.keyPrefix,
+              redisUrl: config.runtimeState.url,
+              telemetry: observabilityMetrics,
+            }),
           ]
         : []),
     ],
@@ -531,6 +567,7 @@ if (config.backgroundJobsProvider === "bullmq") {
     assetCleanupWorker,
     voiceJobs,
     ...(pushWorker ? [pushWorker] : []),
+    ...(callAlertWorker ? [callAlertWorker] : []),
   ]);
 }
 resources.closeBackgroundJobs = () => backgroundJobs.close();

@@ -8,6 +8,7 @@ export const notificationCategoryPreferencesSchema = z
     directMessages: z.boolean(),
     mentionsAndReplies: z.boolean(),
     reactions: z.boolean(),
+    calls: z.boolean(),
   })
   .strict();
 

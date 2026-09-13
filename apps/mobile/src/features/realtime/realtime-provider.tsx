@@ -16,9 +16,18 @@ import {
   readReceiptEventSchema,
   socketAcknowledgementSchema,
   typingEventSchema,
+  callIncomingEventSchema,
+  callUpdatedEventSchema,
+  screenShareStopRequestedEventSchema,
   voiceOccupancyUpdatedEventSchema,
   type SocketAcknowledgementResult,
 } from "@intouch/shared/realtime";
+import type {
+  CallIncomingEvent,
+  CallUpdatedEvent,
+  ScreenShareStopRequestedEvent,
+  VoiceOccupancyUpdatedEvent,
+} from "@intouch/shared/voice";
 import {
   useQuery,
   useQueryClient,
@@ -61,7 +70,21 @@ interface RealtimeValue {
   startTyping: (id: string) => void;
   stopTyping: (id: string) => void;
   typingUserIds: (id: string) => string[];
+  heartbeatVoice: (sessionId: string) => Promise<SocketAcknowledgementResult>;
+  setVoiceSessionActive: (active: boolean) => void;
+  subscribeVoice: (listener: VoiceRealtimeListener) => () => void;
 }
+
+export type VoiceRealtimeEvent =
+  | { kind: "CALL_INCOMING"; value: CallIncomingEvent }
+  | { kind: "CALL_UPDATED"; value: CallUpdatedEvent }
+  | { kind: "OCCUPANCY_UPDATED"; value: VoiceOccupancyUpdatedEvent }
+  | {
+      kind: "SCREEN_SHARE_STOP_REQUESTED";
+      value: ScreenShareStopRequestedEvent;
+    };
+
+type VoiceRealtimeListener = (event: VoiceRealtimeEvent) => void;
 
 const RealtimeContext = createContext<RealtimeValue | null>(null);
 const unavailable: SocketAcknowledgementResult = {
@@ -102,6 +125,8 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
     enabled: status === "authenticated",
   });
   const notificationPreferencesRef = useRef(notificationPreferences.data);
+  const voiceSessionActiveRef = useRef(false);
+  const voiceListenersRef = useRef(new Set<VoiceRealtimeListener>());
 
   useEffect(() => {
     const preferences =
@@ -388,7 +413,44 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
       const parsed = voiceOccupancyUpdatedEventSchema.safeParse(value);
       if (parsed.success && activeOrganizationId) {
         void queryClient.invalidateQueries({
+          queryKey: ["conversations", parsed.data.conversationId],
+        });
+        void queryClient.invalidateQueries({
           queryKey: ["organizations", activeOrganizationId, "conversations"],
+        });
+        for (const listener of voiceListenersRef.current) {
+          listener({ kind: "OCCUPANCY_UPDATED", value: parsed.data });
+        }
+      }
+    });
+    next.on("call:incoming", (value: unknown) => {
+      const parsed = callIncomingEventSchema.safeParse(value);
+      if (!parsed.success) return;
+      for (const listener of voiceListenersRef.current) {
+        listener({ kind: "CALL_INCOMING", value: parsed.data });
+      }
+    });
+    next.on("call:updated", (value: unknown) => {
+      const parsed = callUpdatedEventSchema.safeParse(value);
+      if (!parsed.success) return;
+      queryClient.setQueryData(
+        ["calls", parsed.data.call.id],
+        parsed.data.call,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["messages", parsed.data.call.conversationId],
+      });
+      for (const listener of voiceListenersRef.current) {
+        listener({ kind: "CALL_UPDATED", value: parsed.data });
+      }
+    });
+    next.on("screen-share:stop-requested", (value: unknown) => {
+      const parsed = screenShareStopRequestedEventSchema.safeParse(value);
+      if (!parsed.success) return;
+      for (const listener of voiceListenersRef.current) {
+        listener({
+          kind: "SCREEN_SHARE_STOP_REQUESTED",
+          value: parsed.data,
         });
       }
     });
@@ -403,7 +465,7 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
             queryKey: ["notification-preferences"],
           });
           void queryClient.invalidateQueries({ queryKey: ["organizations"] });
-        } else next.disconnect();
+        } else if (!voiceSessionActiveRef.current) next.disconnect();
       },
     );
 
@@ -451,6 +513,29 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
     [socket],
   );
   const typingUserIds = useCallback((id: string) => typing[id] ?? [], [typing]);
+  const heartbeatVoice = useCallback(
+    (sessionId: string) =>
+      new Promise<SocketAcknowledgementResult>((resolve) => {
+        if (!socket?.connected) return resolve(unavailable);
+        socket.emit("voice:heartbeat", { sessionId }, (value: unknown) => {
+          const parsed = socketAcknowledgementSchema.safeParse(value);
+          resolve(parsed.success ? parsed.data : unavailable);
+        });
+      }),
+    [socket],
+  );
+  const setVoiceSessionActive = useCallback(
+    (active: boolean) => {
+      voiceSessionActiveRef.current = active;
+      if (active) socket?.connect();
+      else if (AppState.currentState !== "active") socket?.disconnect();
+    },
+    [socket],
+  );
+  const subscribeVoice = useCallback((listener: VoiceRealtimeListener) => {
+    voiceListenersRef.current.add(listener);
+    return () => voiceListenersRef.current.delete(listener);
+  }, []);
 
   return (
     <RealtimeContext.Provider
@@ -461,6 +546,9 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
         startTyping,
         stopTyping,
         typingUserIds,
+        heartbeatVoice,
+        setVoiceSessionActive,
+        subscribeVoice,
       }}
     >
       {children}

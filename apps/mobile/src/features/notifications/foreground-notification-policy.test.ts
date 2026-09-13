@@ -6,6 +6,7 @@ import {
 
 import {
   createForegroundInterruptionDeduper,
+  shouldShowForegroundCall,
   shouldShowForegroundMessageBanner,
   shouldShowForegroundPush,
 } from "@/features/notifications/foreground-notification-policy";
@@ -21,6 +22,7 @@ const preferences = (
     directMessages: true,
     mentionsAndReplies: true,
     reactions: true,
+    calls: true,
   },
   mutes: [],
   ...overrides,
@@ -137,6 +139,33 @@ describe("foreground notification policy", () => {
     ).toBe(false);
   });
 
+  it("applies the calls category and conversation mutes to incoming calls", () => {
+    const data = {
+      type: "CALL_INCOMING",
+      organizationId,
+      conversationId,
+    };
+    expect(shouldShowForegroundCall(data, preferences(), now)).toBe(true);
+    expect(
+      shouldShowForegroundCall(
+        data,
+        preferences({
+          categories: { ...preferences().categories, calls: false },
+        }),
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      shouldShowForegroundCall(
+        data,
+        preferences({
+          mutes: [{ organizationId, conversationId, mutedUntil: null }],
+        }),
+        now,
+      ),
+    ).toBe(false);
+  });
+
   it("deduplicates Socket.IO and Expo interruptions for the same scope", () => {
     const deduper = createForegroundInterruptionDeduper(5_000);
     const scope = { organizationId, conversationId };
@@ -144,5 +173,23 @@ describe("foreground notification policy", () => {
     expect(deduper.claim(scope, "EXPO", now + 1_000)).toBe(false);
     expect(deduper.claim(scope, "SOCKET", now + 2_000)).toBe(true);
     expect(deduper.claim(scope, "EXPO", now + 7_000)).toBe(true);
+  });
+
+  it("does not deduplicate a call against ordinary conversation activity", () => {
+    const deduper = createForegroundInterruptionDeduper(5_000);
+    expect(
+      deduper.claim({ organizationId, conversationId }, "SOCKET", now),
+    ).toBe(true);
+    expect(
+      deduper.claim(
+        {
+          organizationId,
+          conversationId,
+          dedupeKey: "call:507f1f77bcf86cd799439013",
+        },
+        "EXPO",
+        now + 1_000,
+      ),
+    ).toBe(true);
   });
 });

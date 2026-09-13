@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  CallPushEventType,
   PushPlatform,
+  callPushDataSchema,
   pushDeviceResponseSchema,
   registerPushDeviceSchema,
 } from "../push/index.js";
@@ -35,6 +37,33 @@ describe("push contracts", () => {
       pushDeviceResponseSchema.safeParse({
         pushDevice: { ...response.pushDevice, expoPushToken: "secret" },
       }).success,
+      false,
+    );
+  });
+
+  test("validates minimal call alert payloads without participant details", () => {
+    const incoming = {
+      type: CallPushEventType.INCOMING,
+      callId: "507f1f77bcf86cd799439011",
+      organizationId: "507f1f77bcf86cd799439012",
+      conversationId: "507f1f77bcf86cd799439013",
+      mediaMode: "VIDEO",
+      startedAt: "2026-09-13T00:00:00.000Z",
+    };
+    assert.deepEqual(callPushDataSchema.parse(incoming), incoming);
+    assert.deepEqual(
+      callPushDataSchema.parse({
+        type: CallPushEventType.STATE_CHANGED,
+        callId: incoming.callId,
+      }),
+      {
+        type: CallPushEventType.STATE_CHANGED,
+        callId: incoming.callId,
+      },
+    );
+    assert.equal(
+      callPushDataSchema.safeParse({ ...incoming, callerUserId: "private" })
+        .success,
       false,
     );
   });

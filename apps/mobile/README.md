@@ -34,6 +34,38 @@ slug, and `SENTRY_PROJECT=intouch-mobile`. Leave the DSN empty to keep Sentry
 disabled locally. A fresh development and preview build is required after
 adding the native SDK.
 
+## Voice, Video, and Screen Sharing
+
+Mobile V2.0 uses the existing API-owned LiveKit integration. The mobile app does
+not need a LiveKit secret or public URL: the API returns a short-lived token and
+server URL only after its normal organization, conversation, capacity, and
+single-session authorization checks pass.
+
+The API deployment must already provide:
+
+```dotenv
+VOICE_PROVIDER=livekit
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=replace-with-server-key
+LIVEKIT_API_SECRET=replace-with-server-secret
+```
+
+Voice channels support microphone, camera, deafen, output selection, participant
+speaking state, occupancy, owner mute/disconnect/share-stop moderation, and a
+compact navigation-persistent dock. Direct messages support audio and video
+calling with ringing, accept, decline, cancel, timeout, call duration, and the
+same media controls. Tap a shared screen to view it fullscreen.
+
+Android can publish screen video while microphone audio continues. Device audio
+is not captured. iOS can receive screen shares but cannot start one in this
+release. Backgrounding keeps active audio connected on Android through a
+persistent foreground-service notification; the camera stops immediately and
+stays off after returning to the app.
+
+The LiveKit, WebRTC, audio, background-service, notification, and TaskManager
+changes are native changes. Build and install new development and preview APKs
+before testing; `npm run dev:mobile` alone cannot add them to an older binary.
+
 ## Push Notifications
 
 Push notifications require an Android development or preview build; Expo Go is
@@ -62,6 +94,13 @@ foreground activity does not produce both a Socket.IO toast and a system banner.
 Category switches and active workspace/conversation mutes suppress push only;
 the durable inbox remains complete. Android launcher badge support varies by
 launcher and must not be treated as a registration failure.
+
+Direct-call interruption uses the separate Calls preference and the same active
+workspace/conversation mutes. Incoming alerts use the `intouch-calls-v1`
+high-priority Android channel and bundled InTouch tone. Call alerts are
+short-lived lifecycle interruptions rather than durable inbox records. State
+updates dismiss stale ringing notifications when Android background execution
+permits it; opening an old alert always revalidates the call with the API.
 
 ## Automated Preview Deployment
 
@@ -101,4 +140,5 @@ npm run mobile:doctor
 ```
 
 The complete V1.2 acceptance matrix is documented in
-[Mobile V1.2](../../.agents/mobile/Mobile%20V1.2.md).
+[Mobile V1.2](../../.agents/mobile/Mobile%20V1.2.md). Voice and call acceptance
+is documented in [Mobile V2.0](../../.agents/mobile/Mobile%20V2.0.md).

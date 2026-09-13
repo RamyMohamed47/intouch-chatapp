@@ -6,12 +6,16 @@ import { useState } from "react";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import "@/features/push/push-background-task";
+
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { AppearanceProvider } from "@/features/appearance/appearance-provider";
 import { AuthProvider } from "@/features/auth/auth-provider";
 import { WorkspaceProvider } from "@/features/organizations/workspace-provider";
 import { RealtimeProvider } from "@/features/realtime/realtime-provider";
 import { PushProvider } from "@/features/push/push-provider";
+import { VoiceOverlay } from "@/features/voice/voice-ui";
+import { VoiceProvider } from "@/features/voice/voice-provider";
 import { navigationIntegration, Sentry } from "@/core/monitoring/sentry";
 
 function RootLayout() {
@@ -37,12 +41,15 @@ function RootLayout() {
           <AuthProvider>
             <WorkspaceProvider>
               <ToastProvider>
-                <PushProvider>
-                  <RealtimeProvider>
-                    <StatusBar style="auto" />
-                    <Stack screenOptions={{ headerShown: false }} />
-                  </RealtimeProvider>
-                </PushProvider>
+                <RealtimeProvider>
+                  <VoiceProvider>
+                    <PushProvider>
+                      <StatusBar style="auto" />
+                      <Stack screenOptions={{ headerShown: false }} />
+                      <VoiceOverlay />
+                    </PushProvider>
+                  </VoiceProvider>
+                </RealtimeProvider>
               </ToastProvider>
             </WorkspaceProvider>
           </AuthProvider>

@@ -21,6 +21,7 @@ const base: NotificationPreferencesDto = {
     directMessages: true,
     mentionsAndReplies: true,
     reactions: true,
+    calls: true,
   },
   mutes: [],
 };

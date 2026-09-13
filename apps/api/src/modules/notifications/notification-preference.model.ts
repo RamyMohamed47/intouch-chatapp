@@ -15,6 +15,7 @@ const categorySchema = new Schema<NotificationCategoryPreferences>(
     directMessages: { type: Boolean, default: true, required: true },
     mentionsAndReplies: { type: Boolean, default: true, required: true },
     reactions: { type: Boolean, default: true, required: true },
+    calls: { type: Boolean, default: true, required: true },
   },
   { _id: false },
 );

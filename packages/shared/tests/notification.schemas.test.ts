@@ -87,6 +87,7 @@ describe("notification contracts", () => {
       directMessages: false,
       mentionsAndReplies: true,
       reactions: false,
+      calls: true,
     };
     assert.deepEqual(
       updateNotificationPreferencesSchema.parse({ categories }),

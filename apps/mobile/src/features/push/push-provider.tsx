@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { NotificationStatus } from "@intouch/shared/notifications";
+import { CallPushEventType, callPushDataSchema } from "@intouch/shared/push";
 import { router } from "expo-router";
 import {
   createContext,
@@ -20,12 +21,14 @@ import { useAuth } from "@/features/auth/auth-provider";
 import {
   foregroundInterruptionDeduper,
   getForegroundNotificationPreferences,
+  shouldShowForegroundCall,
   shouldShowForegroundPush,
 } from "@/features/notifications/foreground-notification-policy";
 import { notificationsApi } from "@/features/notifications/notifications-api";
 import { useWorkspace } from "@/features/organizations/workspace-provider";
 import { pushApi } from "@/features/push/push-api";
 import { pushDeviceStore } from "@/features/push/push-device-store";
+import { useVoice } from "@/features/voice/voice-provider";
 
 type PushState =
   "checking" | "disabled" | "enabled" | "blocked" | "unavailable";
@@ -44,23 +47,42 @@ Notifications.setNotificationHandler({
   handleNotification: (notification) => {
     const foreground = AppState.currentState === "active";
     const data = notification.request.content.data ?? {};
+    const callPush = callPushDataSchema.safeParse(data);
+    if (
+      callPush.success &&
+      callPush.data.type === CallPushEventType.STATE_CHANGED
+    ) {
+      return Promise.resolve({
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+      });
+    }
     const organizationId = data.organizationId;
     const conversationId = data.conversationId;
     const interrupt =
       foreground &&
       typeof organizationId === "string" &&
-      shouldShowForegroundPush(data, getForegroundNotificationPreferences()) &&
+      (shouldShowForegroundPush(data, getForegroundNotificationPreferences()) ||
+        shouldShowForegroundCall(
+          data,
+          getForegroundNotificationPreferences(),
+        )) &&
       foregroundInterruptionDeduper.claim(
         {
           organizationId,
           ...(typeof conversationId === "string" ? { conversationId } : {}),
+          ...(callPush.success
+            ? { dedupeKey: `call:${callPush.data.callId}` }
+            : {}),
         },
         "EXPO",
       );
 
     return Promise.resolve({
       shouldPlaySound: !foreground,
-      shouldSetBadge: true,
+      shouldSetBadge: !callPush.success,
       shouldShowBanner: !foreground || interrupt,
       shouldShowList: true,
     });
@@ -91,6 +113,16 @@ const openPushData = async (
   if (typeof organizationId === "string") {
     setActiveOrganizationId(organizationId);
   }
+  if (
+    data.type === CallPushEventType.INCOMING &&
+    typeof data.callId === "string"
+  ) {
+    router.push({
+      pathname: "/call/[callId]" as never,
+      params: { callId: data.callId },
+    });
+    return;
+  }
   if (typeof conversationId === "string") {
     router.push({
       pathname: "/conversation/[conversationId]",
@@ -115,6 +147,7 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
   const { status, user } = useAuth();
   const { setActiveOrganizationId } = useWorkspace();
   const queryClient = useQueryClient();
+  const { handleCallPush } = useVoice();
   const [state, setState] = useState<PushState>("checking");
   const registrationPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -147,6 +180,15 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
               vibrationPattern: [0, 180, 120, 180],
             },
           );
+          await Notifications.setNotificationChannelAsync("intouch-calls-v1", {
+            name: "Incoming calls",
+            description: "Incoming InTouch voice and video calls",
+            importance: Notifications.AndroidImportance.MAX,
+            lockscreenVisibility:
+              Notifications.AndroidNotificationVisibility.PUBLIC,
+            sound: "intouch-call.wav",
+            vibrationPattern: [0, 300, 180, 300, 180, 500],
+          });
         }
         const permissions = await Notifications.getPermissionsAsync();
         const granted =
@@ -246,7 +288,16 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
 
   useEffect(() => {
     if (status !== "authenticated") return;
-    const received = Notifications.addNotificationReceivedListener(() => {
+    const received = Notifications.addNotificationReceivedListener((event) => {
+      const parsed = callPushDataSchema.safeParse(
+        event.request.content.data ?? {},
+      );
+      if (parsed.success) {
+        void handleCallPush(
+          parsed.data.callId,
+          parsed.data.type === CallPushEventType.INCOMING,
+        );
+      }
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void reconcileBadge();
     });
@@ -283,7 +334,14 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
       token.remove();
       appState.remove();
     };
-  }, [queryClient, reconcileBadge, register, setActiveOrganizationId, status]);
+  }, [
+    queryClient,
+    reconcileBadge,
+    register,
+    setActiveOrganizationId,
+    status,
+    handleCallPush,
+  ]);
 
   return (
     <PushContext.Provider value={{ disable, enable: register, state }}>

@@ -141,6 +141,41 @@ describe("voice service reconciliation", () => {
     assert.equal(heartbeatSessionId, session.id);
   });
 
+  test("renews a connected provider session when mobile timers are suspended", async () => {
+    const session: VoiceSessionRecord = {
+      id: "00000000-0000-4000-8000-000000000007",
+      kind: "VOICE_CHANNEL",
+      organizationId: call.organizationId,
+      conversationId: call.conversationId,
+      callId: null,
+      userId: call.callerUserId,
+      participantIdentity: "00000000-0000-4000-8000-000000000008",
+      providerRoomId: "00000000-0000-4000-8000-000000000009",
+      connectedAt: startedAt,
+    };
+    let heartbeatSessionId: string | undefined;
+    const dependencies = {
+      calls: { findTimedOutPending: async () => [] },
+      jobs: { setHandler() {} },
+      logger: { error() {}, warn() {} },
+      media: {
+        listParticipantIdentities: async () => [session.participantIdentity],
+      },
+      sessions: {
+        listReserved: async () => [session],
+        heartbeat: async (_userId: string, sessionId: string) => {
+          heartbeatSessionId = sessionId;
+          return true;
+        },
+      },
+    } as unknown as VoiceServiceDependencies;
+    const service = createVoiceService(dependencies);
+
+    await service.handleJob({ kind: VoiceCallJobKind.RECONCILE });
+
+    assert.equal(heartbeatSessionId, session.id);
+  });
+
   test("ends ringing calls whose delayed timeout job was missed", async () => {
     let transitionInput:
       | {

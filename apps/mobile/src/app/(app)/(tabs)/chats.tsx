@@ -118,12 +118,7 @@ export default function ChatsScreen() {
       {channels.data?.map((conversation) => (
         <Pressable
           key={conversation.id}
-          onPress={() =>
-            conversation.type === ConversationType.CHANNEL &&
-            conversation.kind === ChannelKind.TEXT
-              ? router.push(`/conversation/${conversation.id}`)
-              : undefined
-          }
+          onPress={() => router.push(`/conversation/${conversation.id}`)}
         >
           <Card>
             <View style={styles.row}>
@@ -142,7 +137,7 @@ export default function ChatsScreen() {
                 <Muted>
                   {conversation.type === ConversationType.CHANNEL &&
                   conversation.kind === ChannelKind.VOICE
-                    ? `Voice is available on web - ${conversation.occupancy.participantUserIds.length}/10`
+                    ? `${conversation.occupancy.participantUserIds.length}/10 connected`
                     : (conversation.lastMessage?.content ??
                       (conversation.lastMessage?.attachments.length
                         ? "Files"

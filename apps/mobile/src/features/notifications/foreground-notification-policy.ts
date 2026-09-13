@@ -17,6 +17,7 @@ interface MessageBannerInput {
 
 interface InterruptionScope {
   conversationId?: string;
+  dedupeKey?: string;
   organizationId: string;
 }
 
@@ -98,6 +99,24 @@ export const shouldShowForegroundPush = (
   }
 };
 
+export const shouldShowForegroundCall = (
+  data: Record<string, unknown>,
+  preferences: NotificationPreferencesDto | null | undefined,
+  now = Date.now(),
+) => {
+  if (!preferences || data.type !== "CALL_INCOMING") return false;
+  if (
+    typeof data.organizationId !== "string" ||
+    typeof data.conversationId !== "string"
+  ) {
+    return false;
+  }
+  return (
+    preferences.categories.calls &&
+    !isScopeMuted(preferences, data.organizationId, data.conversationId, now)
+  );
+};
+
 class ForegroundInterruptionDeduper {
   private readonly recent = new Map<
     string,
@@ -116,9 +135,11 @@ class ForegroundInterruptionDeduper {
         this.recent.delete(key);
       }
     }
-    const key = scope.conversationId
-      ? `conversation:${scope.conversationId}`
-      : `organization:${scope.organizationId}`;
+    const key =
+      scope.dedupeKey ??
+      (scope.conversationId
+        ? `conversation:${scope.conversationId}`
+        : `organization:${scope.organizationId}`);
     const previous = this.recent.get(key);
     if (previous && previous.source !== source) return false;
     this.recent.set(key, { source, timestamp: now });

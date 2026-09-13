@@ -4355,7 +4355,7 @@ components:
     NotificationCategoryPreferences:
       type: object
       additionalProperties: false
-      required: [invitations, directMessages, mentionsAndReplies, reactions]
+      required: [invitations, directMessages, mentionsAndReplies, reactions, calls]
       properties:
         invitations:
           type: boolean
@@ -4364,6 +4364,8 @@ components:
         mentionsAndReplies:
           type: boolean
         reactions:
+          type: boolean
+        calls:
           type: boolean
 
     UpdateNotificationPreferencesInput:

@@ -2,6 +2,7 @@ import {
   ChannelKind,
   ConversationVisibility,
   type ChannelConversationDto,
+  type ChannelKindValue,
   type ConversationVisibilityType,
 } from "@intouch/shared/conversations";
 import { MembershipRole } from "@intouch/shared/memberships";
@@ -51,6 +52,9 @@ export default function WorkspaceDetailScreen() {
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedCategoryName, setSelectedCategoryName] = useState("");
   const [channelName, setChannelName] = useState("");
+  const [channelKind, setChannelKind] = useState<ChannelKindValue>(
+    ChannelKind.TEXT,
+  );
   const [channelVisibility, setChannelVisibility] =
     useState<ConversationVisibilityType>(ConversationVisibility.PUBLIC);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -123,7 +127,7 @@ export default function WorkspaceDetailScreen() {
       return conversationsApi.createChannel(organizationId, {
         categoryId: selectedCategoryId,
         name: channelName,
-        kind: ChannelKind.TEXT,
+        kind: channelKind,
         visibility: channelVisibility,
       });
     },
@@ -400,10 +404,22 @@ export default function WorkspaceDetailScreen() {
             </>
           ) : null}
           <Field
-            label="New text channel"
+            label="New channel"
             onChangeText={setChannelName}
             value={channelName}
           />
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            {Object.values(ChannelKind).map((kind) => (
+              <View key={kind} style={{ flex: 1 }}>
+                <Button
+                  onPress={() => setChannelKind(kind)}
+                  variant={channelKind === kind ? "primary" : "secondary"}
+                >
+                  {kind === ChannelKind.TEXT ? "Text" : "Voice"}
+                </Button>
+              </View>
+            ))}
+          </View>
           <View style={{ flexDirection: "row", gap: 10 }}>
             {Object.values(ConversationVisibility).map((visibility) => (
               <View key={visibility} style={{ flex: 1 }}>
@@ -424,7 +440,7 @@ export default function WorkspaceDetailScreen() {
             disabled={!channelName.trim() || !categories.data?.length}
             onPress={() => createChannel.mutate()}
           >
-            Add text channel
+            Add {channelKind.toLowerCase()} channel
           </Button>
         </Card>
       ) : null}
@@ -445,15 +461,16 @@ export default function WorkspaceDetailScreen() {
           </Text>
           <Muted>
             {channel.type === "CHANNEL" && channel.kind === "VOICE"
-              ? "Voice is available on web"
+              ? `${channel.occupancy.participantUserIds.length}/10 connected`
               : "Text channel"}
           </Muted>
-          {channel.type === "CHANNEL" && channel.kind === ChannelKind.TEXT ? (
+          {channel.type === "CHANNEL" ? (
             <Button
               onPress={() => router.push(`/conversation/${channel.id}`)}
               variant="secondary"
             >
-              Open channel
+              Open {channel.kind === ChannelKind.VOICE ? "voice" : "text"}{" "}
+              channel
             </Button>
           ) : null}
           {isOwner && channel.type === "CHANNEL" ? (

@@ -31,6 +31,7 @@ export default function ProtectedLayout() {
         name="conversation/[conversationId]"
         options={{ swipeEnabled: false }}
       />
+      <Drawer.Screen name="call/[callId]" options={{ swipeEnabled: false }} />
       <Drawer.Screen
         name="wallpaper/[conversationId]"
         options={{ swipeEnabled: false }}

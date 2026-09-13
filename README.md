@@ -91,6 +91,12 @@ Mobile push uses Expo Push Service with FCM V1. Production API deployments set
 through EAS credentials. Local development may keep
 `PUSH_PROVIDER=disabled` unless push delivery is under test.
 
+Mobile V2.0 uses the same API-issued LiveKit credentials as web and introduces
+no mobile LiveKit environment variable. It requires a new native development
+or preview build because the LiveKit, WebRTC, audio, screen-share, foreground
+service, and notification integrations cannot be delivered to an older binary
+through Metro or an OTA update.
+
 Google sign-in requires an InTouch development build, an Android OAuth client
 for `com.ramymohamed.intouch`, and the SHA-1 fingerprint of the development or
 EAS signing certificate. From `apps/mobile`, initialize the EAS project once,
@@ -107,7 +113,8 @@ because native Google authentication uses native modules. Detailed setup and
 manual V1 acceptance steps are in
 [Mobile V1](.agents/mobile/Mobile%20V1.md), with Echo, search, reply/mention,
 notification-control, and mobile-monitoring acceptance in
-[Mobile V1.2](.agents/mobile/Mobile%20V1.2.md).
+[Mobile V1.2](.agents/mobile/Mobile%20V1.2.md), and native media acceptance in
+[Mobile V2.0](.agents/mobile/Mobile%20V2.0.md).
 
 ## API Documentation
 
@@ -699,6 +706,14 @@ ringback. Both stop before participant audio begins and failures to load or
 autoplay a tone never interrupt the call. Run `npm run audio:generate` to
 recreate the deterministic WAV assets; no environment variable or external
 audio license is required.
+
+The Android mobile client supports voice-channel audio, optional cameras,
+direct audio/video calls, screen-video publishing, and background audio through
+a foreground service. Mobile call pushes use a short-lived MongoDB outbox and
+BullMQ queue, respect the Calls preference and active mutes at delivery time,
+and do not create durable notification inbox records. iOS remains compile-ready
+and can receive screen shares, but iOS runtime acceptance and native system call
+UI are deferred.
 
 Gemini AI is optional and disabled unless `AI_PROVIDER=gemini`. Add the API-only
 `GEMINI_API_KEY`, an explicit `GEMINI_MODEL`, and an accurate

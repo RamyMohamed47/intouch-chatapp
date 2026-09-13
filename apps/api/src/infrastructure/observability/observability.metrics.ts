@@ -49,6 +49,7 @@ class InTouchMetrics {
   readonly aiContext: Histogram;
   readonly aiTokens: Histogram;
   readonly pushOutcomes: Counter;
+  readonly callPushOutcomes: Counter;
 
   private readonly readinessChecks = new Map<string, ReadinessCheck>();
   private readonly queueDepthChecks = new Map<string, QueueDepthCheck>();
@@ -129,6 +130,9 @@ class InTouchMetrics {
     });
     this.pushOutcomes = meter.createCounter("intouch.push.outcomes", {
       description: "Mobile push delivery outcomes",
+    });
+    this.callPushOutcomes = meter.createCounter("intouch.call_push.outcomes", {
+      description: "Ephemeral mobile call alert outcomes",
     });
 
     meter
@@ -385,6 +389,13 @@ class InTouchMetrics {
     outcome: "sent" | "suppressed" | "rejected" | "retried" | "failed",
   ) {
     this.pushOutcomes.add(1, { outcome });
+  }
+
+  recordCallPushOutcome(
+    outcome:
+      "sent" | "suppressed" | "stale" | "retried" | "rejected" | "failed",
+  ) {
+    this.callPushOutcomes.add(1, { outcome });
   }
 
   close() {

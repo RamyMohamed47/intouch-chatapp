@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { dateTimeDtoSchema } from "../common/index.js";
+import { dateTimeDtoSchema, identifierDtoSchema } from "../common/index.js";
+import { callMediaModeSchema } from "../voice/index.js";
 
 export const PushPlatform = {
   ANDROID: "ANDROID",
@@ -41,7 +42,32 @@ export const pushDeviceResponseSchema = z
   .object({ pushDevice: pushDeviceDtoSchema })
   .strict();
 
+export const CallPushEventType = {
+  INCOMING: "CALL_INCOMING",
+  STATE_CHANGED: "CALL_STATE_CHANGED",
+} as const;
+
+export const callPushDataSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal(CallPushEventType.INCOMING),
+      callId: identifierDtoSchema,
+      organizationId: identifierDtoSchema,
+      conversationId: identifierDtoSchema,
+      mediaMode: callMediaModeSchema,
+      startedAt: dateTimeDtoSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal(CallPushEventType.STATE_CHANGED),
+      callId: identifierDtoSchema,
+    })
+    .strict(),
+]);
+
 export type PushPlatformValue = z.infer<typeof pushPlatformSchema>;
 export type RegisterPushDeviceInput = z.infer<typeof registerPushDeviceSchema>;
 export type PushDeviceDto = z.infer<typeof pushDeviceDtoSchema>;
 export type PushDeviceResponse = z.infer<typeof pushDeviceResponseSchema>;
+export type CallPushData = z.infer<typeof callPushDataSchema>;

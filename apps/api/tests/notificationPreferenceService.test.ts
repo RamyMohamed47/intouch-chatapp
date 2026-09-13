@@ -58,6 +58,7 @@ const createHarness = (member = true) => {
       );
     },
     allowsPush: async () => true,
+    allowsCallInterruption: async () => true,
   };
   const memberships: Pick<MembershipService, "findForUser"> = {
     findForUser: async () =>
@@ -106,6 +107,7 @@ describe("notification preference service", () => {
       directMessages: false,
       mentionsAndReplies: false,
       reactions: true,
+      calls: false,
     };
     assert.deepEqual(
       (await service.update(userId, categories)).categories,

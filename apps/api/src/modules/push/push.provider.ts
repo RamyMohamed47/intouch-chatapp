@@ -19,13 +19,22 @@ export const toExpoPushMessage = (
   message: PushProviderMessage,
 ): ExpoPushMessage => ({
   to: message.token,
-  title: message.title,
-  body: message.body,
+  ...(message.title ? { title: message.title } : {}),
+  ...(message.body ? { body: message.body } : {}),
   data: message.data,
   ...(message.badge === undefined ? {} : { badge: message.badge }),
   ...(message.threadId ? { threadId: message.threadId } : {}),
-  channelId: "intouch-activity-v2",
-  sound: "default",
+  channelId: message.channelId ?? "intouch-activity-v2",
+  sound: message.sound === undefined ? "default" : message.sound,
+  ...(message.ttlSeconds === undefined ? {} : { ttl: message.ttlSeconds }),
+  ...(message.collapseId ? { collapseId: message.collapseId } : {}),
+  ...(message.tag ? { tag: message.tag } : {}),
+  ...(message.contentAvailable === undefined
+    ? {}
+    : { contentAvailable: message.contentAvailable }),
+  ...(message.interruptionLevel
+    ? { interruptionLevel: message.interruptionLevel }
+    : {}),
   priority: "high",
 });
 
