@@ -51,7 +51,7 @@ Incoming calls use a short-lived `CallAlertOutbox` record and the
 conversation mutes immediately before dispatch, and expires with the 30-second
 ringing window.
 
-Android uses the `intouch-calls-v1` high-priority notification channel and the
+Android uses the `intouch-calls-v2` high-priority notification channel and the
 bundled InTouch call tone. A data-only state update asks the client to dismiss a
 stale ringing notification. Opening an alert always fetches current call state,
 so delayed or already-ended alerts cannot resurrect a call. No caller name,

@@ -180,13 +180,13 @@ export const PushProvider = ({ children }: PropsWithChildren) => {
               vibrationPattern: [0, 180, 120, 180],
             },
           );
-          await Notifications.setNotificationChannelAsync("intouch-calls-v1", {
+          await Notifications.setNotificationChannelAsync("intouch-calls-v2", {
             name: "Incoming calls",
             description: "Incoming InTouch voice and video calls",
             importance: Notifications.AndroidImportance.MAX,
             lockscreenVisibility:
               Notifications.AndroidNotificationVisibility.PUBLIC,
-            sound: "intouch-call.wav",
+            sound: "intouch_call.wav",
             vibrationPattern: [0, 300, 180, 300, 180, 500],
           });
         }

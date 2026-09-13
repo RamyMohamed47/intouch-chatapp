@@ -96,7 +96,7 @@ the durable inbox remains complete. Android launcher badge support varies by
 launcher and must not be treated as a registration failure.
 
 Direct-call interruption uses the separate Calls preference and the same active
-workspace/conversation mutes. Incoming alerts use the `intouch-calls-v1`
+workspace/conversation mutes. Incoming alerts use the `intouch-calls-v2`
 high-priority Android channel and bundled InTouch tone. Call alerts are
 short-lived lifecycle interruptions rather than durable inbox records. State
 updates dismiss stale ringing notifications when Android background execution

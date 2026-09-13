@@ -112,8 +112,8 @@ export const deliverCallAlert = async (
               call.mediaMode === CallMediaMode.VIDEO
                 ? "Incoming InTouch video call"
                 : "Incoming InTouch voice call",
-            channelId: "intouch-calls-v1",
-            sound: "intouch-call.wav",
+            channelId: "intouch-calls-v2",
+            sound: "intouch_call.wav",
             interruptionLevel: "time-sensitive" as const,
           }
         : {

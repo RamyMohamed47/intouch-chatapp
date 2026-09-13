@@ -80,7 +80,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         color: "#168cff",
         defaultChannel: "intouch-activity-v2",
         enableBackgroundRemoteNotifications: true,
-        sounds: ["./assets/audio/intouch-call.wav"],
+        sounds: ["./assets/audio/intouch_call.wav"],
       },
     ],
     "expo-sharing",

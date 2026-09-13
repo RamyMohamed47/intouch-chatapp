@@ -34,7 +34,7 @@ import {
 } from "@/features/notifications/foreground-notification-policy";
 import { useRealtime } from "@/features/realtime/realtime-provider";
 import { voiceApi } from "@/features/voice/voice-api";
-import incomingCallTone from "@/assets/audio/intouch-call.wav";
+import incomingCallTone from "@/assets/audio/intouch_call.wav";
 import outgoingRingbackTone from "@/assets/audio/intouch-ringback.wav";
 import { voiceForegroundService } from "@/features/voice/voice-foreground-service";
 import {
