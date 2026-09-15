@@ -20,6 +20,7 @@
   "author": "Ramy Mohamed",
   "type": "module",
   "overrides": {
+    "@livekit/react-native-webrtc": "144.1.2",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

@@ -1,5 +1,7 @@
 import ForegroundService from "@supersami/rn-foreground-service";
 
+import { voiceForegroundNotification } from "./voice-foreground-service-config";
+
 let registered = false;
 
 const register = () => {
@@ -17,16 +19,7 @@ export const voiceForegroundService = {
   start: async () => {
     register();
     if (ForegroundService.is_running()) return;
-    await ForegroundService.start({
-      id: 7812,
-      title: "InTouch call in progress",
-      message: "Tap to return to your voice session",
-      icon: "ic_launcher",
-      importance: "low",
-      visibility: "public",
-      vibration: false,
-      setOnlyAlertOnce: "true",
-    });
+    await ForegroundService.start(voiceForegroundNotification);
   },
   stop: async () => {
     if (registered && ForegroundService.is_running()) {

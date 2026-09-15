@@ -52,7 +52,14 @@ export default function CallScreen() {
     () =>
       directParticipantLabels(
         voice,
-        user ? { id: user.id, displayName: user.displayName } : null,
+        user
+          ? {
+              id: user.id,
+              displayName: user.displayName,
+              avatarAssetId: user.avatarAssetId,
+              ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+            }
+          : null,
         peer
           ? {
               userId: peer.id,

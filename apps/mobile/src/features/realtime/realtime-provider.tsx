@@ -1,7 +1,9 @@
 import type { OrganizationMemberDto } from "@intouch/shared/memberships";
-import type {
-  ConversationDto,
-  DirectMessageListResponse,
+import {
+  ChannelKind,
+  ConversationType,
+  type ConversationDto,
+  type DirectMessageListResponse,
 } from "@intouch/shared/conversations";
 import type { MessageListResponse } from "@intouch/shared/messages";
 import {
@@ -411,16 +413,25 @@ export const RealtimeProvider = ({ children }: PropsWithChildren) => {
     });
     next.on("voice-channel:occupancy-updated", (value: unknown) => {
       const parsed = voiceOccupancyUpdatedEventSchema.safeParse(value);
-      if (parsed.success && activeOrganizationId) {
-        void queryClient.invalidateQueries({
-          queryKey: ["conversations", parsed.data.conversationId],
-        });
+      if (!parsed.success) return;
+      queryClient.setQueryData<ConversationDto>(
+        ["conversations", parsed.data.conversationId],
+        (current) =>
+          current?.type === ConversationType.CHANNEL &&
+          current.kind === ChannelKind.VOICE
+            ? { ...current, occupancy: parsed.data }
+            : current,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["conversations", parsed.data.conversationId],
+      });
+      if (activeOrganizationId) {
         void queryClient.invalidateQueries({
           queryKey: ["organizations", activeOrganizationId, "conversations"],
         });
-        for (const listener of voiceListenersRef.current) {
-          listener({ kind: "OCCUPANCY_UPDATED", value: parsed.data });
-        }
+      }
+      for (const listener of voiceListenersRef.current) {
+        listener({ kind: "OCCUPANCY_UPDATED", value: parsed.data });
       }
     });
     next.on("call:incoming", (value: unknown) => {

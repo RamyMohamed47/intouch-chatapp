@@ -255,8 +255,22 @@ export default function ConversationScreen() {
         ...(member?.avatarUrl ? { avatarUrl: member.avatarUrl } : {}),
       });
     }
+    if (user && voice.room.localParticipant.identity) {
+      labels.set(voice.room.localParticipant.identity, {
+        userId: user.id,
+        displayName: user.displayName,
+        ...(user.avatarAssetId ? { avatarAssetId: user.avatarAssetId } : {}),
+        ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+      });
+    }
     return labels;
-  }, [members.data, user?.id, voiceChannel]);
+  }, [
+    members.data,
+    user,
+    voice.participantsVersion,
+    voice.room.localParticipant.identity,
+    voiceChannel,
+  ]);
   const startDirectCall = (
     mediaMode: (typeof CallMediaMode)[keyof typeof CallMediaMode],
   ) => {

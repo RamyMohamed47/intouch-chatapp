@@ -15,7 +15,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useAudioPlayer } from "expo-audio";
 import { router } from "expo-router";
-import { ConnectionState, Room, RoomEvent } from "livekit-client";
+import { ConnectionState, Room, RoomEvent, Track } from "livekit-client";
 import {
   createContext,
   useCallback,
@@ -25,7 +25,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, LogBox, Platform } from "react-native";
 
 import { useAuth } from "@/features/auth/auth-provider";
 import {
@@ -39,10 +39,18 @@ import outgoingRingbackTone from "@/assets/audio/intouch-ringback.wav";
 import { voiceForegroundService } from "@/features/voice/voice-foreground-service";
 import {
   canPublishScreenShare,
+  mobileVoiceRoomOptions,
   shouldStopCameraForAppState,
+  voiceSessionRestoreAction,
 } from "@/features/voice/voice-policy";
 
 registerGlobals();
+
+if (__DEV__) {
+  // React Native can report a WebSocket failure after an intentional close.
+  // Actual terminal room disconnects are surfaced through provider state below.
+  LogBox.ignoreLogs(["error reading from signal stream"]);
+}
 
 type VoiceConnectionState =
   "idle" | "connecting" | "connected" | "reconnecting";
@@ -100,17 +108,25 @@ const shouldInterruptIncomingCall = (call: CallDto) =>
     getForegroundNotificationPreferences(),
   );
 
+const stopAudioPlayer = (player: ReturnType<typeof useAudioPlayer>) => {
+  try {
+    player.pause();
+  } catch {
+    return;
+  }
+  try {
+    void player.seekTo(0).catch(() => undefined);
+  } catch {
+    // Expo releases hook-owned players automatically during unmount.
+  }
+};
+
 export const VoiceProvider = ({ children }: PropsWithChildren) => {
   const { status, user } = useAuth();
-  const realtime = useRealtime();
+  const { heartbeatVoice, setVoiceSessionActive, subscribeVoice } =
+    useRealtime();
   const queryClient = useQueryClient();
-  const [room] = useState(
-    () =>
-      new Room({
-        adaptiveStream: true,
-        dynacast: true,
-      }),
-  );
+  const [room] = useState(() => new Room(mobileVoiceRoomOptions));
   const [activeSession, setActiveSession] = useState<VoiceSessionDto | null>(
     null,
   );
@@ -128,7 +144,11 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
   const [screenShareEnabled, setScreenShareEnabled] = useState(false);
   const [participantsVersion, setParticipantsVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const admissionRef = useRef(false);
+  const cameraTransitionRef = useRef(false);
   const connectingRef = useRef(false);
+  const disconnectingRef = useRef<Promise<void> | null>(null);
+  const screenShareTransitionRef = useRef(false);
   const ringtone = useAudioPlayer(incomingCallTone);
   const ringback = useAudioPlayer(outgoingRingbackTone);
 
@@ -137,26 +157,37 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
   }, []);
 
   const stopTones = useCallback(() => {
-    ringtone.pause();
-    ringback.pause();
-    void ringtone.seekTo(0);
-    void ringback.seekTo(0);
+    stopAudioPlayer(ringtone);
+    stopAudioPlayer(ringback);
   }, [ringback, ringtone]);
 
   const disconnectRoom = useCallback(async () => {
-    stopTones();
-    await room.disconnect();
-    await AudioSession.stopAudioSession().catch(() => undefined);
-    await voiceForegroundService.stop().catch(() => undefined);
-    realtime.setVoiceSessionActive(false);
-    setConnectionState("idle");
-    setMuted(false);
-    setDeafened(false);
-    setCameraEnabled(false);
-    setScreenShareEnabled(false);
-    setAudioOutputs([]);
-    setSelectedAudioOutput(null);
-  }, [realtime, room, stopTones]);
+    if (disconnectingRef.current) return disconnectingRef.current;
+    const operation = (async () => {
+      stopTones();
+      if (room.state !== ConnectionState.Disconnected) {
+        await room.disconnect().catch(() => undefined);
+      }
+      await AudioSession.stopAudioSession().catch(() => undefined);
+      await voiceForegroundService.stop().catch(() => undefined);
+      setVoiceSessionActive(false);
+      setConnectionState("idle");
+      setMuted(false);
+      setDeafened(false);
+      setCameraEnabled(false);
+      setScreenShareEnabled(false);
+      setAudioOutputs([]);
+      setSelectedAudioOutput(null);
+    })();
+    disconnectingRef.current = operation;
+    try {
+      await operation;
+    } finally {
+      if (disconnectingRef.current === operation) {
+        disconnectingRef.current = null;
+      }
+    }
+  }, [room, setVoiceSessionActive, stopTones]);
 
   const connect = useCallback(
     async (
@@ -164,19 +195,23 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
       credentials: VoiceCredentialsDto,
       options: { camera: boolean },
     ) => {
-      if (connectingRef.current) return;
+      if (connectingRef.current) {
+        throw new Error("A voice connection is already in progress");
+      }
       connectingRef.current = true;
       setError(null);
       setActiveSession(session);
       setConnectionState("connecting");
-      realtime.setVoiceSessionActive(true);
+      setVoiceSessionActive(true);
       try {
         await voiceForegroundService.start();
         await AudioSession.startAudioSession();
         if (room.state !== ConnectionState.Disconnected) {
           await room.disconnect();
         }
-        await room.connect(credentials.serverUrl, credentials.token);
+        await room.connect(credentials.serverUrl, credentials.token, {
+          autoSubscribe: true,
+        });
         await room.localParticipant.setMicrophoneEnabled(true);
         setAudioOutputs(await AudioSession.getAudioOutputs().catch(() => []));
         setMuted(false);
@@ -191,6 +226,7 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
         setConnectionState("connected");
       } catch (caught) {
         await disconnectRoom();
+        await voiceApi.leaveSession().catch(() => undefined);
         setActiveSession(null);
         setError(
           caught instanceof Error
@@ -202,14 +238,20 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
         connectingRef.current = false;
       }
     },
-    [disconnectRoom, realtime, room],
+    [disconnectRoom, room, setVoiceSessionActive],
   );
 
   const joinChannel = useCallback(
     async (conversationId: string, replace = false) => {
-      const joined = await voiceApi.joinChannel(conversationId, replace);
-      setActiveCall(null);
-      await connect(joined.session, joined.credentials, { camera: false });
+      if (admissionRef.current) return;
+      admissionRef.current = true;
+      try {
+        const joined = await voiceApi.joinChannel(conversationId, replace);
+        setActiveCall(null);
+        await connect(joined.session, joined.credentials, { camera: false });
+      } finally {
+        admissionRef.current = false;
+      }
     },
     [connect],
   );
@@ -220,27 +262,35 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
       mediaMode: CallMediaModeValue,
       replace = false,
     ) => {
-      const started = await voiceApi.startCall(
-        conversationId,
-        mediaMode,
-        replace,
-      );
-      const { session } = await voiceApi.activeSession();
-      if (!session) throw new Error("Call session is unavailable");
-      setActiveCall(started.call);
-      await connect(session, started.credentials, {
-        camera: mediaMode === CallMediaMode.VIDEO,
-      });
-      router.push({
-        pathname: "/call/[callId]" as never,
-        params: { callId: started.call.id },
-      });
+      if (admissionRef.current) return;
+      admissionRef.current = true;
+      try {
+        const started = await voiceApi.startCall(
+          conversationId,
+          mediaMode,
+          replace,
+        );
+        const { session } = await voiceApi.activeSession();
+        if (!session) throw new Error("Call session is unavailable");
+        setActiveCall(started.call);
+        await connect(session, started.credentials, {
+          camera: mediaMode === CallMediaMode.VIDEO,
+        });
+        router.push({
+          pathname: "/call/[callId]" as never,
+          params: { callId: started.call.id },
+        });
+      } finally {
+        admissionRef.current = false;
+      }
     },
     [connect],
   );
 
   const acceptCall = useCallback(
     async (callId: string) => {
+      if (admissionRef.current) return;
+      admissionRef.current = true;
       setError(null);
       try {
         const accepted = await voiceApi.acceptCall(callId);
@@ -257,6 +307,8 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
         });
       } catch (caught) {
         reportError(caught, "The call could not be accepted");
+      } finally {
+        admissionRef.current = false;
       }
     },
     [connect, reportError],
@@ -285,25 +337,33 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
   }, [declineCall, incomingCall]);
 
   const leave = useCallback(async () => {
-    await voiceApi.leaveSession().catch(() => undefined);
     await disconnectRoom();
+    await voiceApi.leaveSession().catch(() => undefined);
     setActiveSession(null);
     setActiveCall(null);
   }, [disconnectRoom]);
 
   const endCall = useCallback(async () => {
+    await disconnectRoom();
     if (activeCall && !terminalCall(activeCall)) {
       await voiceApi.endCall(activeCall.id).catch(() => undefined);
+    } else {
+      await voiceApi.leaveSession().catch(() => undefined);
     }
-    await leave();
-  }, [activeCall, leave]);
+    setActiveSession(null);
+    setActiveCall(null);
+  }, [activeCall, disconnectRoom]);
 
   const cancelCall = useCallback(async () => {
+    await disconnectRoom();
     if (activeCall?.status === CallStatus.RINGING) {
       await voiceApi.cancelCall(activeCall.id).catch(() => undefined);
+    } else {
+      await voiceApi.leaveSession().catch(() => undefined);
     }
-    await leave();
-  }, [activeCall, leave]);
+    setActiveSession(null);
+    setActiveCall(null);
+  }, [activeCall, disconnectRoom]);
 
   const toggleMicrophone = useCallback(async () => {
     setError(null);
@@ -321,9 +381,11 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
   }, [muted, room.localParticipant]);
 
   const toggleCamera = useCallback(async () => {
+    if (cameraTransitionRef.current) return;
+    cameraTransitionRef.current = true;
     setError(null);
     try {
-      const enabled = !cameraEnabled;
+      const enabled = !room.localParticipant.isCameraEnabled;
       await room.localParticipant.setCameraEnabled(enabled);
       setCameraEnabled(enabled);
     } catch (caught) {
@@ -332,29 +394,48 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
           ? caught.message
           : "The camera could not be changed",
       );
+    } finally {
+      cameraTransitionRef.current = false;
     }
-  }, [cameraEnabled, room.localParticipant]);
+  }, [room.localParticipant]);
 
   const toggleScreenShare = useCallback(async () => {
     if (!canPublishScreenShare(Platform.OS)) {
       setError("Starting screen share is currently available on Android");
       return;
     }
+    if (screenShareTransitionRef.current) return;
+    screenShareTransitionRef.current = true;
     setError(null);
     try {
-      const enabled = !screenShareEnabled;
-      await room.localParticipant.setScreenShareEnabled(enabled, {
-        audio: false,
-      });
-      setScreenShareEnabled(enabled);
+      const enabled = !room.localParticipant.isScreenShareEnabled;
+      const publication = await room.localParticipant.setScreenShareEnabled(
+        enabled,
+        {
+          audio: false,
+          contentHint: "detail",
+        },
+      );
+      const activePublication =
+        publication ??
+        room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+      const isEnabled = Boolean(
+        activePublication?.videoTrack && !activePublication.isMuted,
+      );
+      setScreenShareEnabled(isEnabled);
+      if (enabled && !isEnabled) {
+        throw new Error("Screen sharing did not start on this device");
+      }
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
           : "Screen sharing could not be changed",
       );
+    } finally {
+      screenShareTransitionRef.current = false;
     }
-  }, [room.localParticipant, screenShareEnabled]);
+  }, [room.localParticipant]);
 
   const selectAudioOutput = useCallback(async (output: string) => {
     setError(null);
@@ -452,33 +533,80 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => {
     const refreshParticipants = () =>
       setParticipantsVersion((current) => current + 1);
-    const connected = () => setConnectionState("connected");
+    const refreshMedia = () => {
+      refreshParticipants();
+      const camera = room.localParticipant.getTrackPublication(
+        Track.Source.Camera,
+      );
+      const screenShare = room.localParticipant.getTrackPublication(
+        Track.Source.ScreenShare,
+      );
+      setCameraEnabled(Boolean(camera?.videoTrack && !camera.isMuted));
+      setScreenShareEnabled(
+        Boolean(screenShare?.videoTrack && !screenShare.isMuted),
+      );
+    };
+    const connected = () => {
+      refreshMedia();
+      setConnectionState("connected");
+    };
     const reconnecting = () => setConnectionState("reconnecting");
+    const disconnected = () => {
+      refreshParticipants();
+      setConnectionState("idle");
+      if (
+        !disconnectingRef.current &&
+        !connectingRef.current &&
+        activeSession
+      ) {
+        setVoiceSessionActive(false);
+        setError("The voice connection ended unexpectedly. Leave and rejoin.");
+      }
+    };
+    const mediaDevicesError = (caught: Error) =>
+      reportError(caught, "A camera, microphone, or screen could not be used");
+    const trackSubscriptionFailed = () =>
+      reportError(
+        new Error("A participant's media could not be received"),
+        "A participant's media could not be received",
+      );
     room.on(RoomEvent.Connected, connected);
     room.on(RoomEvent.Reconnected, connected);
     room.on(RoomEvent.Reconnecting, reconnecting);
+    room.on(RoomEvent.Disconnected, disconnected);
     room.on(RoomEvent.ParticipantConnected, refreshParticipants);
     room.on(RoomEvent.ParticipantDisconnected, refreshParticipants);
-    room.on(RoomEvent.TrackPublished, refreshParticipants);
-    room.on(RoomEvent.TrackUnpublished, refreshParticipants);
-    room.on(RoomEvent.TrackSubscribed, refreshParticipants);
-    room.on(RoomEvent.TrackMuted, refreshParticipants);
-    room.on(RoomEvent.TrackUnmuted, refreshParticipants);
+    room.on(RoomEvent.TrackPublished, refreshMedia);
+    room.on(RoomEvent.TrackUnpublished, refreshMedia);
+    room.on(RoomEvent.TrackSubscribed, refreshMedia);
+    room.on(RoomEvent.TrackUnsubscribed, refreshMedia);
+    room.on(RoomEvent.TrackMuted, refreshMedia);
+    room.on(RoomEvent.TrackUnmuted, refreshMedia);
+    room.on(RoomEvent.LocalTrackPublished, refreshMedia);
+    room.on(RoomEvent.LocalTrackUnpublished, refreshMedia);
     room.on(RoomEvent.ActiveSpeakersChanged, refreshParticipants);
+    room.on(RoomEvent.MediaDevicesError, mediaDevicesError);
+    room.on(RoomEvent.TrackSubscriptionFailed, trackSubscriptionFailed);
     return () => {
       room.off(RoomEvent.Connected, connected);
       room.off(RoomEvent.Reconnected, connected);
       room.off(RoomEvent.Reconnecting, reconnecting);
+      room.off(RoomEvent.Disconnected, disconnected);
       room.off(RoomEvent.ParticipantConnected, refreshParticipants);
       room.off(RoomEvent.ParticipantDisconnected, refreshParticipants);
-      room.off(RoomEvent.TrackPublished, refreshParticipants);
-      room.off(RoomEvent.TrackUnpublished, refreshParticipants);
-      room.off(RoomEvent.TrackSubscribed, refreshParticipants);
-      room.off(RoomEvent.TrackMuted, refreshParticipants);
-      room.off(RoomEvent.TrackUnmuted, refreshParticipants);
+      room.off(RoomEvent.TrackPublished, refreshMedia);
+      room.off(RoomEvent.TrackUnpublished, refreshMedia);
+      room.off(RoomEvent.TrackSubscribed, refreshMedia);
+      room.off(RoomEvent.TrackUnsubscribed, refreshMedia);
+      room.off(RoomEvent.TrackMuted, refreshMedia);
+      room.off(RoomEvent.TrackUnmuted, refreshMedia);
+      room.off(RoomEvent.LocalTrackPublished, refreshMedia);
+      room.off(RoomEvent.LocalTrackUnpublished, refreshMedia);
       room.off(RoomEvent.ActiveSpeakersChanged, refreshParticipants);
+      room.off(RoomEvent.MediaDevicesError, mediaDevicesError);
+      room.off(RoomEvent.TrackSubscriptionFailed, trackSubscriptionFailed);
     };
-  }, [room]);
+  }, [activeSession, reportError, room, setVoiceSessionActive]);
 
   useEffect(() => {
     ringtone.loop = true;
@@ -492,22 +620,21 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
     stopTones();
     if (incomingRinging) ringtone.play();
     else if (outgoingRinging) ringback.play();
-    return stopTones;
   }, [activeCall, incomingCall, ringback, ringtone, stopTones, user?.id]);
 
   useEffect(() => {
     if (!activeSession) return;
     const timer = setInterval(
-      () => void realtime.heartbeatVoice(activeSession.id),
+      () => void heartbeatVoice(activeSession.id),
       30_000,
     );
-    void realtime.heartbeatVoice(activeSession.id);
+    void heartbeatVoice(activeSession.id);
     return () => clearInterval(timer);
-  }, [activeSession, realtime]);
+  }, [activeSession, heartbeatVoice]);
 
   useEffect(
     () =>
-      realtime.subscribeVoice((event) => {
+      subscribeVoice((event) => {
         if (event.kind === "CALL_INCOMING") {
           if (shouldInterruptIncomingCall(event.value.call)) {
             setIncomingCall(event.value.call);
@@ -543,9 +670,9 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
       disconnectRoom,
       incomingCall?.id,
       reportError,
-      realtime,
       room.localParticipant,
       screenShareEnabled,
+      subscribeVoice,
     ],
   );
 
@@ -562,20 +689,32 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
       .activeSession()
       .then(async ({ session }) => {
         if (cancelled || !session) return;
+        let call: CallDto | null = null;
+        if (session.kind === VoiceSessionKind.CALL && session.callId) {
+          call = await voiceApi.getCall(session.callId);
+          const restoreAction = voiceSessionRestoreAction(call, user?.id ?? "");
+          if (restoreAction === "incoming") {
+            if (!cancelled && shouldInterruptIncomingCall(call)) {
+              setIncomingCall(call);
+            }
+            return;
+          }
+          if (restoreAction === "release") {
+            await voiceApi.leaveSession().catch(() => undefined);
+            return;
+          }
+        }
         const resumed = await voiceApi.resumeSession();
         if (cancelled) return;
         setActiveSession(session);
-        if (session.kind === VoiceSessionKind.CALL && session.callId) {
-          const call = await voiceApi.getCall(session.callId);
-          if (!cancelled) setActiveCall(call);
-        }
+        if (call) setActiveCall(call);
         await connect(session, resumed.credentials, { camera: false });
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [connect, disconnectRoom, status]);
+  }, [connect, disconnectRoom, status, user?.id]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {

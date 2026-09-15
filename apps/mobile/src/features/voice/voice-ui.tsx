@@ -1,4 +1,4 @@
-import { VideoTrack, type TrackReference } from "@livekit/react-native";
+import { VideoTrack, useTracks } from "@livekit/react-native";
 import { CallMediaMode, VoiceSessionKind } from "@intouch/shared/voice";
 import {
   Camera,
@@ -16,8 +16,8 @@ import {
   Volume2,
   X,
 } from "lucide-react-native";
-import { Track, type Participant } from "livekit-client";
-import { useEffect, useMemo, useState } from "react";
+import { Track } from "livekit-client";
+import { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -31,7 +31,10 @@ import { usePathname } from "expo-router";
 import { Button, Card, Muted } from "@/components/ui/controls";
 import { UserAvatar } from "@/components/user-avatar";
 import { useAppearance } from "@/features/appearance/appearance-provider";
-import { audioOutputLabel } from "@/features/voice/voice-policy";
+import {
+  audioOutputLabel,
+  mergeVoiceParticipantIdentities,
+} from "@/features/voice/voice-policy";
 import { useVoice } from "@/features/voice/voice-provider";
 
 interface ParticipantLabel {
@@ -46,15 +49,6 @@ interface VoiceStageProps {
   participantLabels: Map<string, ParticipantLabel>;
   title: string;
 }
-
-const trackReference = (
-  participant: Participant,
-  source: Track.Source.Camera | Track.Source.ScreenShare,
-): TrackReference | undefined => {
-  const publication = participant.getTrackPublication(source);
-  if (!publication?.videoTrack || publication.isMuted) return undefined;
-  return { participant, publication, source };
-};
 
 const control = (
   label: string,
@@ -87,28 +81,46 @@ export const VoiceStage = ({
   const [fullscreenShareIdentity, setFullscreenShareIdentity] = useState<
     string | null
   >(null);
-  const participants = useMemo(
-    () => [
+  const liveParticipants = new Map(
+    [
       voice.room.localParticipant,
       ...voice.room.remoteParticipants.values(),
-    ],
-    [voice.participantsVersion, voice.room],
+    ].map((participant) => [participant.identity, participant] as const),
   );
-  const screenTracks = participants.flatMap((participant) => {
-    const reference = trackReference(participant, Track.Source.ScreenShare);
-    return reference
-      ? [{ identity: participant.identity, participant, reference }]
-      : [];
-  });
+  const participantIdentities = mergeVoiceParticipantIdentities(
+    [...liveParticipants.keys()],
+    [...participantLabels.keys()],
+  );
+  const videoTracks = useTracks(
+    [Track.Source.Camera, Track.Source.ScreenShare],
+    { room: voice.room },
+  );
+  const screenTracks = videoTracks.flatMap((reference) =>
+    reference.source === Track.Source.ScreenShare &&
+    !reference.publication.isMuted
+      ? [
+          {
+            identity: reference.participant.identity,
+            participant: reference.participant,
+            reference,
+          },
+        ]
+      : [],
+  );
   const fullscreenShare = screenTracks.find(
     ({ identity }) => identity === fullscreenShareIdentity,
   );
-  const cameraTracks = participants.flatMap((participant) => {
-    const reference = trackReference(participant, Track.Source.Camera);
-    return reference
-      ? [{ identity: participant.identity, participant, reference }]
-      : [];
-  });
+  const cameraTracks = videoTracks.flatMap((reference) =>
+    reference.source === Track.Source.Camera && !reference.publication.isMuted
+      ? [
+          {
+            identity: reference.participant.identity,
+            participant: reference.participant,
+            reference,
+          },
+        ]
+      : [],
+  );
 
   useEffect(() => {
     if (fullscreenShareIdentity && !fullscreenShare) {
@@ -124,7 +136,7 @@ export const VoiceStage = ({
           <Muted>
             {voice.connectionState === "reconnecting"
               ? "Reconnecting media..."
-              : `${participants.length} connected`}
+              : `${participantIdentities.length} connected`}
           </Muted>
         </View>
         <View style={[styles.liveBadge, { backgroundColor: theme.accentSoft }]}>
@@ -174,16 +186,18 @@ export const VoiceStage = ({
       ))}
 
       <ScrollView contentContainerStyle={styles.participantGrid}>
-        {participants.map((participant) => {
+        {participantIdentities.map((identity) => {
+          const participant = liveParticipants.get(identity);
           const camera = cameraTracks.find(
-            ({ identity }) => identity === participant.identity,
+            ({ identity: cameraIdentity }) => cameraIdentity === identity,
           );
-          const label = participantLabels.get(participant.identity);
+          const label = participantLabels.get(identity);
+          const isLocal = identity === voice.room.localParticipant.identity;
           return (
-            <Card key={participant.identity} style={styles.participantCard}>
+            <Card key={identity} style={styles.participantCard}>
               {camera ? (
                 <VideoTrack
-                  mirror={participant === voice.room.localParticipant}
+                  mirror={isLocal}
                   objectFit="cover"
                   style={styles.video}
                   trackRef={camera.reference}
@@ -200,18 +214,13 @@ export const VoiceStage = ({
               )}
               <View style={styles.participantLabel}>
                 <Text style={{ color: theme.text, fontWeight: "800" }}>
-                  {label?.displayName ??
-                    (participant === voice.room.localParticipant
-                      ? "You"
-                      : "Teammate")}
+                  {label?.displayName ?? (isLocal ? "You" : "Teammate")}
                 </Text>
-                {participant.isSpeaking ? (
+                {participant?.isSpeaking ? (
                   <Volume2 color="#33d17a" size={18} />
                 ) : null}
               </View>
-              {canModerate &&
-              participant !== voice.room.localParticipant &&
-              label ? (
+              {canModerate && !isLocal && label ? (
                 <View style={styles.moderationActions}>
                   <Pressable
                     accessibilityLabel={`Mute ${label.displayName}`}
@@ -467,7 +476,12 @@ export const VoiceOverlay = () => {
 
 export const directParticipantLabels = (
   voice: ReturnType<typeof useVoice>,
-  currentUser: { id: string; displayName: string } | null,
+  currentUser: {
+    avatarAssetId?: string | null;
+    avatarUrl?: string | null;
+    id: string;
+    displayName: string;
+  } | null,
   peer: ParticipantLabel | null,
 ) => {
   const labels = new Map<string, ParticipantLabel>();
@@ -475,6 +489,10 @@ export const directParticipantLabels = (
     labels.set(voice.room.localParticipant.identity, {
       userId: currentUser.id,
       displayName: currentUser.displayName,
+      ...(currentUser.avatarAssetId
+        ? { avatarAssetId: currentUser.avatarAssetId }
+        : {}),
+      ...(currentUser.avatarUrl ? { avatarUrl: currentUser.avatarUrl } : {}),
     });
   }
   const remote = [...voice.room.remoteParticipants.keys()][0];

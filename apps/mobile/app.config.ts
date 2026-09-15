@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: "Intouch Chat App",
   slug: "intouch-mobile",
   owner: "ramymohamed47",
-  version: "1.0.0",
+  version: "1.0.1",
   runtimeVersion: {
     policy: "appVersion",
   },
