@@ -41,6 +41,7 @@ import {
   canPublishScreenShare,
   mobileVoiceRoomOptions,
   shouldStopCameraForAppState,
+  voiceHeartbeatDelayMs,
   voiceSessionRestoreAction,
 } from "@/features/voice/voice-policy";
 
@@ -119,6 +120,30 @@ const stopAudioPlayer = (player: ReturnType<typeof useAudioPlayer>) => {
   } catch {
     // Expo releases hook-owned players automatically during unmount.
   }
+};
+
+// Development-only. Counts only: identities, tokens, room names, and member
+// details must never reach a log.
+const logVoiceDiagnostics = (room: Room, stage: string) => {
+  if (!__DEV__) return;
+  const remotes = [...room.remoteParticipants.values()];
+  console.log("[voice]", stage, {
+    connectionState: room.state,
+    hasLocalIdentity: Boolean(room.localParticipant.identity),
+    remoteParticipants: remotes.length,
+    remotePublications: remotes.reduce(
+      (total, participant) => total + participant.trackPublications.size,
+      0,
+    ),
+    subscribedPublications: remotes.reduce(
+      (total, participant) =>
+        total +
+        [...participant.trackPublications.values()].filter(
+          (publication) => publication.isSubscribed,
+        ).length,
+      0,
+    ),
+  });
 };
 
 export const VoiceProvider = ({ children }: PropsWithChildren) => {
@@ -200,7 +225,6 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
       }
       connectingRef.current = true;
       setError(null);
-      setActiveSession(session);
       setConnectionState("connecting");
       setVoiceSessionActive(true);
       try {
@@ -223,7 +247,12 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
             setCameraEnabled(false);
           }
         }
+        // The API only marks a session connected once its identity is visible
+        // in the provider room, so the session (and the heartbeat it starts)
+        // must not be published before the join lands.
+        setActiveSession(session);
         setConnectionState("connected");
+        logVoiceDiagnostics(room, "connected");
       } catch (caught) {
         await disconnectRoom();
         await voiceApi.leaveSession().catch(() => undefined);
@@ -550,6 +579,10 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
       refreshMedia();
       setConnectionState("connected");
     };
+    const participantConnected = () => {
+      refreshParticipants();
+      logVoiceDiagnostics(room, "participantConnected");
+    };
     const reconnecting = () => setConnectionState("reconnecting");
     const disconnected = () => {
       refreshParticipants();
@@ -574,7 +607,7 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
     room.on(RoomEvent.Reconnected, connected);
     room.on(RoomEvent.Reconnecting, reconnecting);
     room.on(RoomEvent.Disconnected, disconnected);
-    room.on(RoomEvent.ParticipantConnected, refreshParticipants);
+    room.on(RoomEvent.ParticipantConnected, participantConnected);
     room.on(RoomEvent.ParticipantDisconnected, refreshParticipants);
     room.on(RoomEvent.TrackPublished, refreshMedia);
     room.on(RoomEvent.TrackUnpublished, refreshMedia);
@@ -592,7 +625,7 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
       room.off(RoomEvent.Reconnected, connected);
       room.off(RoomEvent.Reconnecting, reconnecting);
       room.off(RoomEvent.Disconnected, disconnected);
-      room.off(RoomEvent.ParticipantConnected, refreshParticipants);
+      room.off(RoomEvent.ParticipantConnected, participantConnected);
       room.off(RoomEvent.ParticipantDisconnected, refreshParticipants);
       room.off(RoomEvent.TrackPublished, refreshMedia);
       room.off(RoomEvent.TrackUnpublished, refreshMedia);
@@ -622,14 +655,27 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
     else if (outgoingRinging) ringback.play();
   }, [activeCall, incomingCall, ringback, ringtone, stopTones, user?.id]);
 
+  // The first beat runs as soon as the join lands and reconciles the session
+  // against the provider room, which is what publishes channel occupancy.
   useEffect(() => {
     if (!activeSession) return;
-    const timer = setInterval(
-      () => void heartbeatVoice(activeSession.id),
-      30_000,
-    );
-    void heartbeatVoice(activeSession.id);
-    return () => clearInterval(timer);
+    let stopped = false;
+    let completedAttempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const beat = () => {
+      void heartbeatVoice(activeSession.id)
+        .catch(() => undefined)
+        .then(() => {
+          if (stopped) return;
+          completedAttempts += 1;
+          timer = setTimeout(beat, voiceHeartbeatDelayMs(completedAttempts));
+        });
+    };
+    beat();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [activeSession, heartbeatVoice]);
 
   useEffect(
@@ -706,7 +752,6 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
         }
         const resumed = await voiceApi.resumeSession();
         if (cancelled) return;
-        setActiveSession(session);
         if (call) setActiveCall(call);
         await connect(session, resumed.credentials, { camera: false });
       })

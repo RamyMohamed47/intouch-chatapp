@@ -11,6 +11,7 @@ import {
   mergeVoiceParticipantIdentities,
   mobileVoiceRoomOptions,
   shouldStopCameraForAppState,
+  voiceHeartbeatDelayMs,
   voiceSessionRestoreAction,
 } from "@/features/voice/voice-policy";
 
@@ -43,12 +44,18 @@ describe("mobile voice policy", () => {
     expect(canPublishScreenShare("ios")).toBe(false);
   });
 
-  test("uses the reliable native subscriber transport configuration", () => {
-    expect(mobileVoiceRoomOptions).toMatchObject({
+  test("leaves peer connection negotiation at the SDK default", () => {
+    expect(mobileVoiceRoomOptions).toEqual({
       adaptiveStream: { pixelDensity: "screen" },
       dynacast: true,
-      singlePeerConnection: false,
     });
+    expect(mobileVoiceRoomOptions).not.toHaveProperty("singlePeerConnection");
+  });
+
+  test("probes quickly after joining before settling into keep-alive", () => {
+    expect(voiceHeartbeatDelayMs(0)).toBe(3_000);
+    expect(voiceHeartbeatDelayMs(3)).toBe(3_000);
+    expect(voiceHeartbeatDelayMs(4)).toBe(30_000);
   });
 
   test("merges provider and authorized occupancy identities without duplicates", () => {

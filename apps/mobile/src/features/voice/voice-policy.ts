@@ -3,10 +3,12 @@ import { CallStatus, type CallDto } from "@intouch/shared/voice";
 export const mobileVoiceRoomOptions = {
   adaptiveStream: { pixelDensity: "screen" as const },
   dynacast: true,
-  // React Native's separate subscriber transport is more reliable than the
-  // browser-oriented single peer connection path for receiving remote media.
-  singlePeerConnection: false,
 };
+
+// Mirrors the web client: probe quickly until the API has reconciled the
+// session against the provider room, then settle into the keep-alive interval.
+export const voiceHeartbeatDelayMs = (completedAttempts: number) =>
+  completedAttempts < 4 ? 3_000 : 30_000;
 
 export type VoiceSessionRestoreAction = "incoming" | "release" | "resume";
 

@@ -723,7 +723,14 @@ export default function ConversationScreen() {
               title="Join the conversation"
               message={`${voiceChannel?.occupancy.participantUserIds.length ?? 0}/10 members connected.`}
             />
-            <Button onPress={join}>Join voice channel</Button>
+            <Button
+              disabled={voice.connectionState === "connecting"}
+              onPress={join}
+            >
+              {voice.connectionState === "connecting"
+                ? "Connecting..."
+                : "Join voice channel"}
+            </Button>
           </View>
         )}
       </Screen>
