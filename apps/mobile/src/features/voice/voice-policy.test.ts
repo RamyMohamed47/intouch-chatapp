@@ -11,6 +11,7 @@ import {
   mergeVoiceParticipantIdentities,
   mobileVoiceRoomOptions,
   shouldStopCameraForAppState,
+  voiceHeartbeatDelayMs,
   voiceSessionRestoreAction,
 } from "@/features/voice/voice-policy";
 
@@ -49,6 +50,12 @@ describe("mobile voice policy", () => {
       dynacast: true,
       singlePeerConnection: false,
     });
+  });
+
+  test("probes quickly after joining before settling into keep-alive", () => {
+    expect(voiceHeartbeatDelayMs(0)).toBe(3_000);
+    expect(voiceHeartbeatDelayMs(3)).toBe(3_000);
+    expect(voiceHeartbeatDelayMs(4)).toBe(30_000);
   });
 
   test("merges provider and authorized occupancy identities without duplicates", () => {

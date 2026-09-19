@@ -8,6 +8,9 @@ export const mobileVoiceRoomOptions = {
   singlePeerConnection: false,
 };
 
+export const voiceHeartbeatDelayMs = (completedAttempts: number) =>
+  completedAttempts < 4 ? 3_000 : 30_000;
+
 export type VoiceSessionRestoreAction = "incoming" | "release" | "resume";
 
 export const voiceSessionRestoreAction = (

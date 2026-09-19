@@ -1,4 +1,4 @@
-import { VideoTrack, useTracks } from "@livekit/react-native";
+import { VideoTrack, useParticipants, useTracks } from "@livekit/react-native";
 import { CallMediaMode, VoiceSessionKind } from "@intouch/shared/voice";
 import {
   Camera,
@@ -81,11 +81,11 @@ export const VoiceStage = ({
   const [fullscreenShareIdentity, setFullscreenShareIdentity] = useState<
     string | null
   >(null);
+  const participants = useParticipants({ room: voice.room });
   const liveParticipants = new Map(
-    [
-      voice.room.localParticipant,
-      ...voice.room.remoteParticipants.values(),
-    ].map((participant) => [participant.identity, participant] as const),
+    participants.map(
+      (participant) => [participant.identity, participant] as const,
+    ),
   );
   const participantIdentities = mergeVoiceParticipantIdentities(
     [...liveParticipants.keys()],

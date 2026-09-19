@@ -41,6 +41,7 @@ import {
   canPublishScreenShare,
   mobileVoiceRoomOptions,
   shouldStopCameraForAppState,
+  voiceHeartbeatDelayMs,
   voiceSessionRestoreAction,
 } from "@/features/voice/voice-policy";
 
@@ -200,7 +201,6 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
       }
       connectingRef.current = true;
       setError(null);
-      setActiveSession(session);
       setConnectionState("connecting");
       setVoiceSessionActive(true);
       try {
@@ -223,6 +223,7 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
             setCameraEnabled(false);
           }
         }
+        setActiveSession(session);
         setConnectionState("connected");
       } catch (caught) {
         await disconnectRoom();
@@ -624,12 +625,21 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
 
   useEffect(() => {
     if (!activeSession) return;
-    const timer = setInterval(
-      () => void heartbeatVoice(activeSession.id),
-      30_000,
-    );
-    void heartbeatVoice(activeSession.id);
-    return () => clearInterval(timer);
+    let stopped = false;
+    let completedAttempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const beat = () => {
+      void heartbeatVoice(activeSession.id).then(() => {
+        if (stopped) return;
+        completedAttempts += 1;
+        timer = setTimeout(beat, voiceHeartbeatDelayMs(completedAttempts));
+      });
+    };
+    beat();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [activeSession, heartbeatVoice]);
 
   useEffect(
@@ -706,7 +716,6 @@ export const VoiceProvider = ({ children }: PropsWithChildren) => {
         }
         const resumed = await voiceApi.resumeSession();
         if (cancelled) return;
-        setActiveSession(session);
         if (call) setActiveCall(call);
         await connect(session, resumed.credentials, { camera: false });
       })
