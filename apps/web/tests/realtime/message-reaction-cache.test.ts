@@ -19,6 +19,7 @@ describe("message reaction cache", () => {
       currentUserReaction: null,
       mentions: [],
       replyTo: null,
+      voiceNote: null,
     };
     const second = { ...first, id: "64f000000000000000000002" };
     const data = {

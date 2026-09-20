@@ -21,6 +21,8 @@ import type { MessageReactionService } from "../message-reactions/index.js";
 import type { NotificationService } from "../notifications/index.js";
 import type { OrganizationUnitOfWork } from "../organizations/organization.unit-of-work.js";
 import type { UploadService } from "../uploads/index.js";
+import { UploadPurpose } from "@intouch/shared/uploads";
+import { getObservabilityMetrics } from "../../infrastructure/observability/index.js";
 import type { UserRepository } from "../user/user.repository.js";
 import { UploadConflictError } from "../uploads/upload.errors.js";
 import {
@@ -79,7 +81,11 @@ const createMessageService = ({
   uploads = {
     decorate: <T extends { id: string }>(records: readonly T[]) =>
       Promise.resolve(
-        records.map((record) => ({ ...record, attachments: [] })),
+        records.map((record) => ({
+          ...record,
+          attachments: [],
+          voiceNote: null,
+        })),
       ),
   },
   unitOfWork,
@@ -158,21 +164,26 @@ const createMessageService = ({
     userId: string,
     conversation: Awaited<ReturnType<typeof conversations.getAccessible>>,
     records: readonly T[],
-  ) =>
-    reactions.decorate(
+  ) => {
+    const withUploads = await uploads.decorate(
+      records.map((record) => ({
+        ...record,
+        mentions: record.mentions ?? [],
+      })),
+    );
+    return reactions.decorate(
       userId,
       conversation,
       await decorateReplies(
         await calls.decorateMessages(
-          await uploads.decorate(
-            records.map((record) => ({
-              ...record,
-              mentions: record.mentions ?? [],
-            })),
-          ),
+          withUploads.map((record) => ({
+            ...record,
+            voiceNote: record.voiceNote ?? null,
+          })),
         ),
       ),
     );
+  };
 
   const validateMentions = async (
     context: import("../organizations/organization.unit-of-work.js").OrganizationWorkContext,
@@ -339,12 +350,15 @@ const createMessageService = ({
         ) {
           throw new ConversationNotFoundError();
         }
-        const uploadIds = input.uploadIds ?? [];
+        const isVoiceNote = "voiceNoteUploadId" in input;
+        const uploadIds = isVoiceNote
+          ? [input.voiceNoteUploadId]
+          : (input.uploadIds ?? []);
         const mentionUserIds = await validateMentions(
           context,
           conversation,
-          input.content,
-          input.mentions ?? [],
+          isVoiceNote ? undefined : input.content,
+          isVoiceNote ? [] : (input.mentions ?? []),
         );
         const replyTarget = input.replyToMessageId
           ? await context.messages.findById(input.replyToMessageId)
@@ -358,13 +372,16 @@ const createMessageService = ({
         const created = await context.messages.create({
           conversationId,
           senderId: userId,
-          content: input.content ?? null,
-          messageType:
-            uploadIds.length > 0 ? MessageType.ATTACHMENT : MessageType.TEXT,
+          content: isVoiceNote ? null : (input.content ?? null),
+          messageType: isVoiceNote
+            ? MessageType.VOICE_NOTE
+            : uploadIds.length > 0
+              ? MessageType.ATTACHMENT
+              : MessageType.TEXT,
           ...(input.replyToMessageId
             ? { replyToMessageId: input.replyToMessageId }
             : {}),
-          mentions: input.mentions ?? [],
+          mentions: isVoiceNote ? [] : (input.mentions ?? []),
           notifiedMentionUserIds: mentionUserIds,
         });
         const claimed = await context.assets.claimForMessage({
@@ -373,12 +390,23 @@ const createMessageService = ({
           conversationId,
           messageId: created.id,
           now: new Date(),
+          purpose: isVoiceNote
+            ? UploadPurpose.VOICE_NOTE
+            : UploadPurpose.MESSAGE_ATTACHMENT,
         });
         if (
           claimed.length !== uploadIds.length ||
           claimed.some((asset) => !uploadIds.includes(asset.id))
         ) {
           throw new UploadConflictError();
+        }
+        if (
+          isVoiceNote &&
+          (claimed[0]?.kind !== "AUDIO" ||
+            claimed[0].voiceNoteDurationMs === undefined ||
+            claimed[0].voiceNoteWaveform?.length !== 64)
+        ) {
+          throw new UploadConflictError("Voice note has not been verified");
         }
         if (
           !(await context.conversations.touchActivity(
@@ -436,12 +464,30 @@ const createMessageService = ({
           conversation,
           message: created,
           notifications: createdNotifications,
+          ...(isVoiceNote && claimed[0]
+            ? {
+                voiceNoteMetric: {
+                  bytes: claimed[0].verifiedSize ?? claimed[0].declaredSize,
+                  durationMs: claimed[0].voiceNoteDurationMs ?? 0,
+                  format:
+                    claimed[0].verifiedContentType === "audio/mp4"
+                      ? ("m4a" as const)
+                      : ("webm" as const),
+                },
+              }
+            : {}),
         };
       });
       const [message] = await decorate(userId, result.conversation, [
         result.message,
       ]);
       if (!message) throw new MessageNotFoundError();
+      if (result.voiceNoteMetric) {
+        getObservabilityMetrics().recordVoiceNote({
+          ...result.voiceNoteMetric,
+          outcome: "created",
+        });
+      }
       broadcaster.messageCreated(message);
       await activity.messageCreated(result.conversation, userId);
       for (const notification of result.notifications) {
@@ -478,9 +524,14 @@ const createMessageService = ({
           context,
         );
         assertMessageConversation(conversation);
-        if (existing.messageType === MessageType.CALL) {
+        if (
+          existing.messageType === MessageType.CALL ||
+          existing.messageType === MessageType.VOICE_NOTE
+        ) {
           throw new MessageValidationError(
-            "Call timeline entries are immutable",
+            existing.messageType === MessageType.CALL
+              ? "Call timeline entries are immutable"
+              : "Voice notes cannot be edited",
           );
         }
         conversationPolicy.assertMessageEditable(existing, userId);

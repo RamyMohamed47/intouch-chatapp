@@ -10,9 +10,18 @@ export const MessageType = {
   TEXT: "TEXT",
   ATTACHMENT: "ATTACHMENT",
   CALL: "CALL",
+  VOICE_NOTE: "VOICE_NOTE",
 } as const;
 
 export const messageTypeSchema = z.enum(MessageType);
+
+export const voiceNoteDtoSchema = z
+  .object({
+    assetId: identifierDtoSchema,
+    durationMs: z.number().int().min(1_000).max(300_000),
+    waveform: z.array(z.number().int().min(0).max(100)).length(64),
+  })
+  .strict();
 
 export const messageReplyPreviewDtoSchema = z
   .object({
@@ -36,6 +45,7 @@ export const messageCoreDtoSchema = z.object({
   updatedAt: dateTimeDtoSchema,
   attachments: z.array(attachmentDtoSchema).default([]),
   call: callSummaryDtoSchema.nullable().optional(),
+  voiceNote: voiceNoteDtoSchema.nullable().default(null),
   mentions: z.array(messageMentionSchema).default([]),
   replyTo: messageReplyPreviewDtoSchema.nullable().default(null),
 });
@@ -117,6 +127,7 @@ export const messageReadReceiptSummaryResponseSchema = z.object({
 });
 
 export type MessageTypeValue = z.infer<typeof messageTypeSchema>;
+export type VoiceNoteDto = z.infer<typeof voiceNoteDtoSchema>;
 export type MessageMention = z.infer<typeof messageMentionSchema>;
 export type MessageReplyPreviewDto = z.infer<
   typeof messageReplyPreviewDtoSchema

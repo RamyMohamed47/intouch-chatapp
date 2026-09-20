@@ -139,9 +139,13 @@ export default function ChatsScreen() {
                   conversation.kind === ChannelKind.VOICE
                     ? `${conversation.occupancy.participantUserIds.length}/10 connected`
                     : (conversation.lastMessage?.content ??
-                      (conversation.lastMessage?.attachments.length
-                        ? "Files"
-                        : "No messages yet"))}
+                      (conversation.lastMessage?.messageType === "VOICE_NOTE"
+                        ? "Voice note"
+                        : conversation.lastMessage?.messageType === "CALL"
+                          ? "Voice call"
+                          : conversation.lastMessage?.attachments.length
+                            ? "Files"
+                            : "No messages yet"))}
                 </Muted>
               </View>
               {"unreadCount" in conversation &&
@@ -204,11 +208,13 @@ export default function ChatsScreen() {
                 </Text>
                 <Muted>
                   {conversation.lastMessage?.content ??
-                    (conversation.lastMessage?.messageType === "CALL"
-                      ? "Voice call"
-                      : conversation.lastMessage?.attachments.length
-                        ? "Files"
-                        : "Start the conversation")}
+                    (conversation.lastMessage?.messageType === "VOICE_NOTE"
+                      ? "Voice note"
+                      : conversation.lastMessage?.messageType === "CALL"
+                        ? "Voice call"
+                        : conversation.lastMessage?.attachments.length
+                          ? "Files"
+                          : "Start the conversation")}
                 </Muted>
               </View>
               {conversation.unreadCount > 0 ? (

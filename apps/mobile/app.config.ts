@@ -30,7 +30,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       UIBackgroundModes: ["audio"],
       NSMicrophoneUsageDescription:
-        "InTouch uses your microphone for voice and video calls.",
+        "InTouch uses your microphone for voice notes, voice calls, and video calls.",
       NSCameraUsageDescription:
         "InTouch uses your camera when you enable video calls.",
     },

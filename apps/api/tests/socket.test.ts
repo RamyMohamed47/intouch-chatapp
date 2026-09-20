@@ -208,6 +208,7 @@ describe("authenticated conversation sockets", () => {
       ...message,
       mentions: [],
       replyTo: null,
+      voiceNote: null,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     });

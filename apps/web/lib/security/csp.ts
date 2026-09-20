@@ -47,6 +47,11 @@ export const buildContentSecurityPolicy = ({
     "https://lh3.googleusercontent.com",
     ...(normalizedStorageOrigin ? [normalizedStorageOrigin] : []),
   ];
+  const mediaSources = [
+    "'self'",
+    "blob:",
+    ...(normalizedStorageOrigin ? [normalizedStorageOrigin] : []),
+  ];
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDevelopment ? " 'unsafe-eval'" : ""}`,
@@ -57,7 +62,7 @@ export const buildContentSecurityPolicy = ({
     `img-src ${imageSources.join(" ")}`,
     "font-src 'self' data:",
     `connect-src ${connectSources.join(" ")}`,
-    "media-src 'self' blob:",
+    `media-src ${mediaSources.join(" ")}`,
     "manifest-src 'self'",
     "worker-src 'self' blob:",
     "object-src 'none'",

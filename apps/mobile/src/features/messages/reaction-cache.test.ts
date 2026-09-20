@@ -24,6 +24,7 @@ const messages: InfiniteData<MessageListResponse> = {
           currentUserReaction: null,
           mentions: [],
           replyTo: null,
+          voiceNote: null,
         },
       ],
     },

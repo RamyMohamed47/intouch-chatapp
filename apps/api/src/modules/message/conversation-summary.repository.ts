@@ -11,6 +11,8 @@ import type { Message, MessageRecord } from "./message.types.js";
 import { createMongooseStoredAssetRepository } from "../uploads/index.js";
 import type { StoredAssetRecord } from "../uploads/index.js";
 import type { AttachmentDto } from "@intouch/shared/uploads";
+import { UploadPurpose } from "@intouch/shared/uploads";
+import type { VoiceNoteDto } from "@intouch/shared/messages";
 
 interface MessageDocument extends Message {
   _id: Types.ObjectId;
@@ -64,6 +66,7 @@ const toMessageRecord = (message: MessageDocument): MessageRecord => ({
   updatedAt: message.updatedAt,
   attachments: [],
   call: null,
+  voiceNote: null,
 });
 
 const toReadStateRecord = (
@@ -86,6 +89,17 @@ const toAttachment = (asset: StoredAssetRecord): AttachmentDto | null =>
         size: asset.verifiedSize,
         kind: asset.kind,
         createdAt: asset.createdAt.toISOString(),
+      }
+    : null;
+
+const toVoiceNote = (asset: StoredAssetRecord): VoiceNoteDto | null =>
+  asset.purpose === UploadPurpose.VOICE_NOTE &&
+  asset.voiceNoteDurationMs !== undefined &&
+  asset.voiceNoteWaveform?.length === 64
+    ? {
+        assetId: asset.id,
+        durationMs: asset.voiceNoteDurationMs,
+        waveform: [...asset.voiceNoteWaveform],
       }
     : null;
 
@@ -145,8 +159,14 @@ const createMongooseConversationSummaryRepository = (
       session,
     ).listReadyByMessageIds(latestRecords.map(({ message }) => message.id));
     const assetsByMessage = new Map<string, AttachmentDto[]>();
+    const voiceNotesByMessage = new Map<string, VoiceNoteDto>();
     for (const asset of latestAssets) {
       if (!asset.messageId) continue;
+      const voiceNote = toVoiceNote(asset);
+      if (voiceNote) {
+        voiceNotesByMessage.set(asset.messageId, voiceNote);
+        continue;
+      }
       const attachment = toAttachment(asset);
       if (!attachment) continue;
       const current = assetsByMessage.get(asset.messageId) ?? [];
@@ -159,6 +179,7 @@ const createMongooseConversationSummaryRepository = (
         {
           ...message,
           attachments: assetsByMessage.get(message.id) ?? [],
+          voiceNote: voiceNotesByMessage.get(message.id) ?? null,
         },
       ]),
     );

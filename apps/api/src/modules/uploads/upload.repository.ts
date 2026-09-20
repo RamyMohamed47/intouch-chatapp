@@ -31,6 +31,15 @@ const toRecord = (asset: StoredAssetDocument): StoredAssetRecord => ({
   fileName: asset.fileName,
   declaredContentType: asset.declaredContentType,
   declaredSize: asset.declaredSize,
+  ...(asset.voiceNoteDeclaredDurationMs !== undefined
+    ? { voiceNoteDeclaredDurationMs: asset.voiceNoteDeclaredDurationMs }
+    : {}),
+  ...(asset.voiceNoteWaveform
+    ? { voiceNoteWaveform: [...asset.voiceNoteWaveform] }
+    : {}),
+  ...(asset.voiceNoteDurationMs !== undefined
+    ? { voiceNoteDurationMs: asset.voiceNoteDurationMs }
+    : {}),
   ...(asset.verifiedContentType
     ? { verifiedContentType: asset.verifiedContentType }
     : {}),
@@ -77,6 +86,7 @@ export interface StoredAssetRepository {
       kind: AttachmentKindValue;
       contentType: string;
       size: number;
+      voiceNoteDurationMs?: number;
     },
   ): Promise<StoredAssetRecord | null>;
   releasePromotion(assetId: string, ownerUserId: string): Promise<void>;
@@ -88,6 +98,7 @@ export interface StoredAssetRepository {
     conversationId: string;
     messageId: string;
     now: Date;
+    purpose: Extract<UploadPurposeValue, "MESSAGE_ATTACHMENT" | "VOICE_NOTE">;
   }): Promise<StoredAssetRecord[]>;
   claimAvatar(
     assetId: string,
@@ -144,6 +155,8 @@ export const createMongooseStoredAssetRepository = (
         fileName: input.fileName,
         declaredContentType: input.contentType,
         declaredSize: input.size,
+        voiceNoteDeclaredDurationMs: input.voiceNoteDeclaredDurationMs,
+        voiceNoteWaveform: input.voiceNoteWaveform,
         expiresAt: input.expiresAt,
       })),
       session ? { session } : {},
@@ -256,6 +269,7 @@ export const createMongooseStoredAssetRepository = (
           kind: input.kind,
           verifiedContentType: input.contentType,
           verifiedSize: input.size,
+          voiceNoteDurationMs: input.voiceNoteDurationMs,
         },
         $unset: { promotionLeaseUntil: 1 },
       },
@@ -322,7 +336,7 @@ export const createMongooseStoredAssetRepository = (
         _id: { $in: input.assetIds },
         ownerUserId: input.ownerUserId,
         conversationId: input.conversationId,
-        purpose: "MESSAGE_ATTACHMENT" satisfies UploadPurposeValue,
+        purpose: input.purpose,
         status: StoredAssetStatus.PROMOTED,
         expiresAt: { $gt: input.now },
       },

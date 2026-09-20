@@ -208,6 +208,9 @@ erDiagram
         string verifiedContentType
         int verifiedSize
         enum kind
+        int voiceNoteDeclaredDurationMs
+        int voiceNoteVerifiedDurationMs
+        int[] voiceNoteWaveform
         string etag
         datetime expiresAt
         datetime promotionLeaseUntil
@@ -508,6 +511,10 @@ cleanup by opaque asset ID in production; MongoDB leases and attempt counters
 remain authoritative and allow polling fallback. Object keys and
 presigned URLs never enter public DTOs. Owner/status, organization/status,
 message, and cleanup indexes support limits, hydration, and lifecycle work.
+Voice-note assets additionally retain the client-declared duration, the
+server-verified canonical duration, and exactly 64 bounded waveform peaks.
+Their audio objects remain private and are excluded from the generic message
+attachment collection when hydrated into `Message.voiceNote`.
 `UploadDailyUsage` atomically reserves issued bytes per `(userId, UTC day)` and
 expires through a TTL index. Pending and promoted message assets count against
 organization storage until claimed or purged.

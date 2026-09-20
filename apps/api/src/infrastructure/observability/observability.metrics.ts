@@ -50,6 +50,9 @@ class InTouchMetrics {
   readonly aiTokens: Histogram;
   readonly pushOutcomes: Counter;
   readonly callPushOutcomes: Counter;
+  readonly voiceNotes: Counter;
+  readonly voiceNoteDuration: Histogram;
+  readonly voiceNoteBytes: Histogram;
 
   private readonly readinessChecks = new Map<string, ReadinessCheck>();
   private readonly queueDepthChecks = new Map<string, QueueDepthCheck>();
@@ -133,6 +136,17 @@ class InTouchMetrics {
     });
     this.callPushOutcomes = meter.createCounter("intouch.call_push.outcomes", {
       description: "Ephemeral mobile call alert outcomes",
+    });
+    this.voiceNotes = meter.createCounter("intouch.voice_notes.outcomes", {
+      description: "Voice note creation and upload outcomes",
+    });
+    this.voiceNoteDuration = meter.createHistogram(
+      "intouch.voice_notes.duration",
+      { description: "Verified voice note duration", unit: "s" },
+    );
+    this.voiceNoteBytes = meter.createHistogram("intouch.voice_notes.size", {
+      description: "Verified voice note size",
+      unit: "By",
     });
 
     meter
@@ -396,6 +410,28 @@ class InTouchMetrics {
       "sent" | "suppressed" | "stale" | "retried" | "rejected" | "failed",
   ) {
     this.callPushOutcomes.add(1, { outcome });
+  }
+
+  recordVoiceNote(input: {
+    bytes?: number;
+    durationMs?: number;
+    format: "m4a" | "webm";
+    outcome: "created" | "upload_failed" | "upload_verified";
+    reason?: "invalid" | "storage";
+  }) {
+    this.voiceNotes.add(1, {
+      format: input.format,
+      outcome: input.outcome,
+      ...(input.reason ? { reason: input.reason } : {}),
+    });
+    if (input.outcome === "created" && input.durationMs !== undefined) {
+      this.voiceNoteDuration.record(input.durationMs / 1_000, {
+        format: input.format,
+      });
+    }
+    if (input.outcome === "created" && input.bytes !== undefined) {
+      this.voiceNoteBytes.record(input.bytes, { format: input.format });
+    }
   }
 
   close() {

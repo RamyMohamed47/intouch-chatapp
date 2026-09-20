@@ -65,6 +65,9 @@ describe("frontend content security policy", () => {
     expect(directive(policy, "img-src")).toBe(
       "img-src 'self' data: blob: https://lh3.googleusercontent.com https://account-id.r2.cloudflarestorage.com",
     );
+    expect(directive(policy, "media-src")).toBe(
+      "media-src 'self' blob: https://account-id.r2.cloudflarestorage.com",
+    );
     expect(policy).not.toContain("*.r2.cloudflarestorage.com");
   });
 

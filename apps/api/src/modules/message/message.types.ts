@@ -5,6 +5,7 @@ import type {
   MessageMention,
   MessageReplyPreviewDto,
   UpdateMessageInput,
+  VoiceNoteDto,
 } from "@intouch/shared/messages";
 import { MessageType, type MessageTypeValue } from "@intouch/shared/messages";
 import type { AttachmentDto } from "@intouch/shared/uploads";
@@ -50,6 +51,7 @@ export interface MessageRecord {
   attachments: AttachmentDto[];
   call?: CallSummaryDto | null;
   replyTo?: MessageReplyPreviewDto | null;
+  voiceNote?: VoiceNoteDto | null;
 }
 
 export interface CreateMessageRecordInput {

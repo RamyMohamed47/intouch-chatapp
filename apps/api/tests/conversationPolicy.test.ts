@@ -81,6 +81,14 @@ describe("conversation policy", () => {
       policy.assertAccessible(privateConversation, member, participant),
       privateConversation,
     );
+    assert.equal(
+      policy.assertPrivateAccessible(privateConversation, member, participant),
+      privateConversation,
+    );
+    assert.throws(
+      () => policy.assertPrivateAccessible(conversation, member, null),
+      ConversationConflictError,
+    );
   });
 
   test("requires owners to manage channels and private participants", () => {

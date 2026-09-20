@@ -73,32 +73,38 @@ export const messageContentSchema = z
     message: "Content must contain non-whitespace text",
   });
 
-export const createMessageSchema = z
-  .object({
-    content: messageContentSchema.optional(),
-    uploadIds: z.array(mongoIdSchema).max(5).optional(),
-    replyToMessageId: mongoIdSchema.optional(),
-    mentions: z.array(messageMentionSchema).max(25).optional(),
-  })
-  .strict()
-  .refine(
-    ({ content, uploadIds }) =>
-      content !== undefined || (uploadIds?.length ?? 0) > 0,
-    { message: "A message requires content or an attachment" },
-  )
-  .refine(
-    ({ uploadIds }) =>
-      uploadIds === undefined || new Set(uploadIds).size === uploadIds.length,
-    {
-      message: "Upload IDs must be unique",
-    },
-  )
-  .superRefine((value, context) =>
-    validateMentions(
-      { content: value.content, mentions: value.mentions ?? [] },
-      context,
+export const createMessageSchema = z.union([
+  z
+    .object({
+      content: messageContentSchema.optional(),
+      uploadIds: z.array(mongoIdSchema).max(5).optional(),
+      replyToMessageId: mongoIdSchema.optional(),
+      mentions: z.array(messageMentionSchema).max(25).optional(),
+    })
+    .strict()
+    .refine(
+      ({ content, uploadIds }) =>
+        content !== undefined || (uploadIds?.length ?? 0) > 0,
+      { message: "A message requires content or an attachment" },
+    )
+    .refine(
+      ({ uploadIds }) =>
+        uploadIds === undefined || new Set(uploadIds).size === uploadIds.length,
+      { message: "Upload IDs must be unique" },
+    )
+    .superRefine((value, context) =>
+      validateMentions(
+        { content: value.content, mentions: value.mentions ?? [] },
+        context,
+      ),
     ),
-  );
+  z
+    .object({
+      voiceNoteUploadId: mongoIdSchema,
+      replyToMessageId: mongoIdSchema.optional(),
+    })
+    .strict(),
+]);
 
 export const updateMessageSchema = z
   .object({

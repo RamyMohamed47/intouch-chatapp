@@ -151,6 +151,20 @@ Single Database + organizationId
   sharing in this release. Native CallKit and Android Telecom integration are
   deferred.
 
+## Voice Notes
+
+- Direct messages and text channels support dedicated `VOICE_NOTE` timeline
+  messages on web and mobile. Voice-only channels do not have message history.
+- Recordings are foreground-only, disabled during LiveKit sessions, bounded to
+  one second through five minutes and 5 MB, and uploaded through the private R2
+  asset lifecycle.
+- The API verifies AAC/M4A or Opus/WebM container, codec, size, and canonical
+  duration. DTOs expose only an opaque asset ID, duration, and 64 normalized
+  waveform peaks.
+- Voice notes support replies, reactions, receipts, unread state,
+  notifications, and deletion. Captions, mentions, editing, transcription,
+  forwarding, and persistent drafts are excluded.
+
 ## Echo AI Assistant
 
 - Echo uses Gemini through a provider interface. The API owns provider

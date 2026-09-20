@@ -35,6 +35,9 @@ export interface StoredAsset {
   fileName: string;
   declaredContentType: string;
   declaredSize: number;
+  voiceNoteDeclaredDurationMs?: number;
+  voiceNoteWaveform?: number[];
+  voiceNoteDurationMs?: number;
   verifiedContentType?: string;
   verifiedSize?: number;
   kind?: AttachmentKindValue;
@@ -65,6 +68,8 @@ export interface CreateStoredAssetInput extends UploadFileDescriptor {
   stagingKey: string;
   objectKey: string;
   expiresAt: Date;
+  voiceNoteDeclaredDurationMs?: number;
+  voiceNoteWaveform?: number[];
 }
 
 export interface InspectedObject {

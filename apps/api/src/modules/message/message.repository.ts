@@ -68,6 +68,7 @@ const toMessageRecord = (message: MessageDocument): MessageRecord => ({
   attachments: [],
   call: null,
   replyTo: null,
+  voiceNote: null,
 });
 
 const createMongooseMessageRepository = (

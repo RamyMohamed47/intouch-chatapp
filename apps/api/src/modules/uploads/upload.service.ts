@@ -5,6 +5,8 @@ import {
   type CompletedUploadDto,
   type CreateUploadInput,
 } from "@intouch/shared/uploads";
+import type { VoiceNoteDto } from "@intouch/shared/messages";
+import { getObservabilityMetrics } from "../../infrastructure/observability/index.js";
 
 import type { ConversationService } from "../conversations/index.js";
 import {
@@ -50,6 +52,21 @@ const toCompletedUpload = (asset: StoredAssetRecord): CompletedUploadDto => ({
   uploadId: asset.id,
 });
 
+const toVoiceNote = (asset: StoredAssetRecord): VoiceNoteDto => {
+  if (
+    asset.kind !== "AUDIO" ||
+    asset.voiceNoteDurationMs === undefined ||
+    asset.voiceNoteWaveform?.length !== 64
+  ) {
+    throw new UploadConflictError("Voice note has not been verified");
+  }
+  return {
+    assetId: asset.id,
+    durationMs: asset.voiceNoteDurationMs,
+    waveform: [...asset.voiceNoteWaveform],
+  };
+};
+
 const nextUtcDay = (now: Date) =>
   new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
@@ -77,9 +94,12 @@ export const createUploadService = ({
   async create(userId: string, input: CreateUploadInput) {
     const requestedAt = now();
     const conversation =
-      input.purpose === UploadPurpose.MESSAGE_ATTACHMENT
+      input.purpose === UploadPurpose.MESSAGE_ATTACHMENT ||
+      input.purpose === UploadPurpose.VOICE_NOTE
         ? await conversations.getAccessible(userId, input.conversationId)
         : null;
+    const voiceNote =
+      input.purpose === UploadPurpose.VOICE_NOTE ? input.files[0] : undefined;
     const files = input.files.map((file) => {
       const fileName = sanitizeFileName(file.fileName);
       validateDeclaredFile(
@@ -158,6 +178,12 @@ export const createUploadService = ({
             fileName: file.fileName,
             contentType: file.contentType,
             size: file.size,
+            ...(voiceNote
+              ? {
+                  voiceNoteDeclaredDurationMs: voiceNote.durationMs,
+                  voiceNoteWaveform: [...voiceNote.waveform],
+                }
+              : {}),
             expiresAt,
           };
         }),
@@ -220,6 +246,11 @@ export const createUploadService = ({
         fileName: claimed.fileName,
         declaredContentType: claimed.declaredContentType,
         declaredSize: claimed.declaredSize,
+        ...(claimed.voiceNoteDeclaredDurationMs !== undefined
+          ? {
+              voiceNoteDeclaredDurationMs: claimed.voiceNoteDeclaredDurationMs,
+            }
+          : {}),
         object,
       });
       await storage.promote({
@@ -237,8 +268,22 @@ export const createUploadService = ({
         ...verified,
       });
       if (!promoted) throw new UploadConflictError();
+      if (promoted.purpose === UploadPurpose.VOICE_NOTE) {
+        getObservabilityMetrics().recordVoiceNote({
+          format: promoted.verifiedContentType === "audio/mp4" ? "m4a" : "webm",
+          outcome: "upload_verified",
+        });
+      }
       return toCompletedUpload(promoted);
     } catch (error) {
+      if (claimed.purpose === UploadPurpose.VOICE_NOTE) {
+        getObservabilityMetrics().recordVoiceNote({
+          format: claimed.declaredContentType === "audio/mp4" ? "m4a" : "webm",
+          outcome: "upload_failed",
+          reason:
+            error instanceof UploadValidationError ? "invalid" : "storage",
+        });
+      }
       if (error instanceof UploadValidationError) {
         await assets.markDeletePending(uploadId, userId);
       } else if (!(error instanceof UploadConflictError)) {
@@ -260,7 +305,10 @@ export const createUploadService = ({
   async access(userId: string, assetId: string) {
     const asset = await assets.findReadyById(assetId);
     if (!asset) throw new UploadNotFoundError();
-    if (asset.purpose === UploadPurpose.MESSAGE_ATTACHMENT) {
+    if (
+      asset.purpose === UploadPurpose.MESSAGE_ATTACHMENT ||
+      asset.purpose === UploadPurpose.VOICE_NOTE
+    ) {
       if (!asset.conversationId) throw new UploadNotFoundError();
       await conversations.getAccessible(userId, asset.conversationId);
     }
@@ -308,13 +356,27 @@ export const createUploadService = ({
     });
   },
 
-  async decorate<T extends { id: string }>(records: readonly T[]) {
+  async decorate<T extends { id: string }>(
+    records: readonly T[],
+  ): Promise<
+    Array<
+      T & {
+        attachments: AttachmentDto[];
+        voiceNote?: VoiceNoteDto | null;
+      }
+    >
+  > {
     const attachments = await assets.listReadyByMessageIds(
       records.map(({ id }) => id),
     );
     const byMessage = new Map<string, AttachmentDto[]>();
+    const voiceNotesByMessage = new Map<string, VoiceNoteDto>();
     for (const asset of attachments) {
       if (!asset.messageId) continue;
+      if (asset.purpose === UploadPurpose.VOICE_NOTE) {
+        voiceNotesByMessage.set(asset.messageId, toVoiceNote(asset));
+        continue;
+      }
       const current = byMessage.get(asset.messageId) ?? [];
       current.push(toAttachment(asset));
       byMessage.set(asset.messageId, current);
@@ -322,6 +384,7 @@ export const createUploadService = ({
     return records.map((record) => ({
       ...record,
       attachments: byMessage.get(record.id) ?? [],
+      voiceNote: voiceNotesByMessage.get(record.id) ?? null,
     }));
   },
 });

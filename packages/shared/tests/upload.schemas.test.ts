@@ -110,6 +110,44 @@ describe("shared upload contracts", () => {
     );
   });
 
+  test("accepts only bounded voice-note metadata", () => {
+    const voiceNote = {
+      purpose: UploadPurpose.VOICE_NOTE,
+      conversationId,
+      files: [
+        {
+          fileName: "voice-note.m4a",
+          contentType: "audio/mp4",
+          size: 64_000,
+          durationMs: 12_500,
+          waveform: Array.from({ length: 64 }, (_, index) => index),
+        },
+      ],
+    };
+    assert.equal(createUploadSchema.safeParse(voiceNote).success, true);
+    assert.equal(
+      createUploadSchema.safeParse({
+        ...voiceNote,
+        files: [{ ...voiceNote.files[0], waveform: [1, 2, 3] }],
+      }).success,
+      false,
+    );
+    assert.equal(
+      createUploadSchema.safeParse({
+        ...voiceNote,
+        files: [{ ...voiceNote.files[0], durationMs: 999 }],
+      }).success,
+      false,
+    );
+    assert.equal(
+      createUploadSchema.safeParse({
+        ...voiceNote,
+        files: [{ ...voiceNote.files[0], size: 5 * 1024 * 1024 + 1 }],
+      }).success,
+      false,
+    );
+  });
+
   test("parses safe attachment metadata without storage internals", () => {
     const attachment = {
       id: uploadId,

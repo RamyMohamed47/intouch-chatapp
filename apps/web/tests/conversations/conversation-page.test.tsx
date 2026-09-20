@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => {
     currentUserReaction: null,
     mentions: [],
     replyTo: null,
+    voiceNote: null,
   };
   const state: {
     conversationType: "CHANNEL" | "DIRECT";
@@ -381,6 +382,15 @@ describe("ConversationPage interactions", () => {
     expect(
       screen.queryByRole("button", { name: "Invite member" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not request private participants for a public channel", () => {
+    renderConversation();
+
+    expect(mocks.useParticipants).toHaveBeenCalledWith(
+      "64d000000000000000000001",
+      false,
+    );
   });
 
   it("shows the direct-message peer presence in the header", () => {

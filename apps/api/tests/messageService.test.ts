@@ -174,6 +174,7 @@ describe("messageService", () => {
           ...message,
           mentions: [],
           replyTo: null,
+          voiceNote: null,
           reactions: [],
           currentUserReaction: null,
         },
@@ -202,6 +203,7 @@ describe("messageService", () => {
             ...message,
             mentions: [],
             replyTo: null,
+            voiceNote: null,
             reactions: [],
             currentUserReaction: null,
           },
@@ -246,6 +248,7 @@ describe("messageService", () => {
       ...message,
       mentions: [],
       replyTo: null,
+      voiceNote: null,
       reactions: [],
       currentUserReaction: null,
     });
@@ -325,7 +328,11 @@ describe("messageService", () => {
       undefined,
       {
         decorate: async (records) =>
-          records.map((record) => ({ ...record, attachments: [attachment] })),
+          records.map((record) => ({
+            ...record,
+            attachments: [attachment],
+            voiceNote: null,
+          })),
       },
       { claimForMessage: async () => [claimed] },
     );
@@ -363,6 +370,77 @@ describe("messageService", () => {
     );
     assert.deepEqual(broadcaster.created, []);
     assert.equal(activityCalls, 0);
+  });
+
+  test("creates a voice note from exactly one verified audio upload", async () => {
+    const assetId = "507f1f77bcf86cd799439016";
+    const waveform = Array.from({ length: 64 }, (_, index) => index);
+    const voiceNote = { assetId, durationMs: 12_500, waveform };
+    const claimed: StoredAssetRecord = {
+      id: assetId,
+      ownerUserId: userId,
+      organizationId: conversation.organizationId,
+      conversationId,
+      messageId: message.id,
+      purpose: "VOICE_NOTE",
+      status: StoredAssetStatus.READY,
+      objectKey: "organizations/org/conversations/conversation/voice-note",
+      fileName: "voice-note.m4a",
+      declaredContentType: "audio/mp4",
+      declaredSize: 64_000,
+      verifiedContentType: "audio/mp4",
+      verifiedSize: 63_500,
+      kind: "AUDIO",
+      voiceNoteDeclaredDurationMs: 12_500,
+      voiceNoteDurationMs: 12_480,
+      voiceNoteWaveform: waveform,
+      cleanupAttempts: 0,
+      cleanupAvailableAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    let createInput: Parameters<MessageRepository["create"]>[0] | undefined;
+    let claimPurpose: string | undefined;
+    const voiceMessage = {
+      ...message,
+      content: null,
+      messageType: MessageType.VOICE_NOTE,
+      attachments: [],
+    };
+    const service = createService(
+      createRepository({
+        create: async (input) => {
+          createInput = input;
+          return voiceMessage;
+        },
+      }),
+      createBroadcaster(),
+      undefined,
+      {
+        decorate: async (records) =>
+          records.map((record) => ({
+            ...record,
+            attachments: [],
+            voiceNote,
+          })),
+      },
+      {
+        claimForMessage: async (input) => {
+          claimPurpose = input.purpose;
+          return [claimed];
+        },
+      },
+    );
+
+    const result = await service.create(userId, conversationId, {
+      voiceNoteUploadId: assetId,
+    });
+
+    assert.equal(createInput?.content, null);
+    assert.equal(createInput?.messageType, MessageType.VOICE_NOTE);
+    assert.equal(claimPurpose, "VOICE_NOTE");
+    assert.deepEqual(result.voiceNote, voiceNote);
+    assert.deepEqual(result.attachments, []);
   });
 
   test("validates mentions and gives reply notifications precedence", async () => {

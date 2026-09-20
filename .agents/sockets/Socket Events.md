@@ -82,11 +82,14 @@ state work. It carries no media or signaling data; LiveKit transports audio.
 ## Server Events
 
 - `message:created` carries the non-personalized message core DTO, including
-  safe attachment metadata when present.
+  safe attachment metadata when present. Dedicated voice notes carry only an
+  opaque audio asset ID, verified duration, and 64 bounded waveform peaks;
+  audio bytes and signed URLs never cross Socket.IO.
 - `message:updated` carries the non-personalized updated message core DTO;
   attachment metadata remains immutable while the caption may change.
 - `message:deleted` carries the non-personalized redacted message tombstone and
-  an empty attachment list after private objects are queued for deletion.
+  an empty attachment list and null voice-note metadata after private objects
+  are queued for deletion.
 - `membership:joined` carries `{ organizationId, userId }` after an invitation acceptance or public join commits. Organization subscribers invalidate that organization's safe member roster; the event is an invalidation signal and does not duplicate user profile data.
 - `conversation:access-revoked` carries `{ conversationId }` before the socket is removed from that room.
 - `presence:updated` carries `{ userId, status, lastSeenAt }` to subscribed organization rooms. Online updates always use `lastSeenAt: null`; confirmed offline updates carry the persisted final-disconnect timestamp.

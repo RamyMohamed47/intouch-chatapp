@@ -3,6 +3,7 @@ import { z } from "zod";
 import { dateTimeDtoSchema, identifierDtoSchema } from "../common/index.js";
 
 export const AttachmentKind = {
+  AUDIO: "AUDIO",
   IMAGE: "IMAGE",
   FILE: "FILE",
 } as const;

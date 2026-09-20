@@ -73,6 +73,7 @@ const message = {
   createdAt: now,
   updatedAt: now,
   attachments: [],
+  voiceNote: null,
   mentions: [],
   replyTo: null,
   reactions: [],

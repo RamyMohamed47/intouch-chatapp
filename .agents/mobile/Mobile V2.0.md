@@ -5,6 +5,12 @@ client. InTouch remains authoritative for identity, authorization, call state,
 voice-channel occupancy, moderation, and call history. LiveKit carries media
 and WebRTC signaling only.
 
+Cross-platform voice notes are a separate message capability rather than a
+LiveKit session. Mobile records foreground-only AAC/M4A files through Expo
+Audio, uploads them through the private-asset lifecycle, and renders dedicated
+waveform playback controls. Recording is disabled while a LiveKit session is
+active, and starting a LiveKit session pauses voice-note playback.
+
 ## Capabilities
 
 - Public and private voice channels support up to ten participants.

@@ -235,6 +235,61 @@ describe("upload service", () => {
     );
   });
 
+  test("authorizes and retains voice-note presentation metadata", async () => {
+    let accessChecks = 0;
+    let capturedDuration: number | undefined;
+    let capturedWaveform: number[] | undefined;
+    const waveform = Array.from({ length: 64 }, (_, index) => index);
+    const assets = createAssetRepository({
+      createMany: async (inputs) => {
+        const input = inputs[0];
+        assert.ok(input);
+        assert.ok(typeof input.voiceNoteDeclaredDurationMs === "number");
+        assert.ok(input.voiceNoteWaveform);
+        const durationMs = input.voiceNoteDeclaredDurationMs;
+        const storedWaveform = input.voiceNoteWaveform;
+        capturedDuration = durationMs;
+        capturedWaveform = storedWaveform;
+        return [
+          {
+            ...baseAsset,
+            purpose: UploadPurpose.VOICE_NOTE,
+            fileName: input.fileName,
+            declaredContentType: input.contentType,
+            declaredSize: input.size,
+            voiceNoteDeclaredDurationMs: durationMs,
+            voiceNoteWaveform: storedWaveform,
+          },
+        ];
+      },
+    });
+    const service = createService({
+      assets,
+      onConversationAccess: () => {
+        accessChecks += 1;
+      },
+    });
+
+    const result = await service.create(userId, {
+      purpose: UploadPurpose.VOICE_NOTE,
+      conversationId,
+      files: [
+        {
+          fileName: "voice-note.m4a",
+          contentType: "audio/mp4",
+          size: 1_024,
+          durationMs: 12_345,
+          waveform,
+        },
+      ],
+    });
+
+    assert.equal(accessChecks, 1);
+    assert.equal(capturedDuration, 12_345);
+    assert.deepEqual(capturedWaveform, waveform);
+    assert.equal(result.uploadTickets.length, 1);
+  });
+
   test("enforces daily and organization quotas before issuing URLs", async () => {
     const assets = createAssetRepository({
       sumActiveBytesByOrganization: async () => 90,

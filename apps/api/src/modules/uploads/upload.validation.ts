@@ -1,7 +1,11 @@
 import path from "node:path";
 import { fileTypeFromBuffer } from "file-type";
+import { parseBuffer } from "music-metadata";
 import {
   AttachmentKind,
+  MAX_VOICE_NOTE_BYTES,
+  MAX_VOICE_NOTE_DURATION_MS,
+  MIN_VOICE_NOTE_DURATION_MS,
   UploadPurpose,
   type AttachmentKindValue,
   type UploadPurposeValue,
@@ -16,6 +20,8 @@ const allowedTypes = new Map<string, readonly string[]>([
   [".png", ["image/png"]],
   [".webp", ["image/webp"]],
   [".gif", ["image/gif"]],
+  [".m4a", ["audio/mp4"]],
+  [".webm", ["audio/webm"]],
   [".pdf", ["application/pdf"]],
   [".txt", ["text/plain"]],
   [".csv", ["text/csv", "text/plain"]],
@@ -42,6 +48,7 @@ const imageTypes = new Set([
   "image/gif",
 ]);
 const avatarTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const audioTypes = new Set(["audio/mp4", "audio/webm"]);
 const officeTypes = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -88,6 +95,16 @@ export const validateDeclaredFile = (
       throw new UploadValidationError("Image must not exceed 5 MB", 413);
     }
   }
+  if (purpose === UploadPurpose.VOICE_NOTE) {
+    if (!audioTypes.has(contentType)) {
+      throw new UploadValidationError(
+        "Voice note must be AAC/M4A or Opus/WebM audio",
+      );
+    }
+    if (size > MAX_VOICE_NOTE_BYTES) {
+      throw new UploadValidationError("Voice note must not exceed 5 MB", 413);
+    }
+  }
 };
 
 const hasZipSignature = (bytes: Uint8Array) =>
@@ -107,16 +124,31 @@ const isTextPrefix = (bytes: Uint8Array) => {
   }
 };
 
+export const matchesDetectedContentType = (
+  declaredContentType: string,
+  detectedContentType: string,
+) => {
+  if (declaredContentType === "audio/mp4") {
+    return ["audio/mp4", "video/mp4"].includes(detectedContentType);
+  }
+  if (declaredContentType === "audio/webm") {
+    return ["audio/webm", "video/webm"].includes(detectedContentType);
+  }
+  return detectedContentType === declaredContentType;
+};
+
 export const inspectUploadedFile = async (input: {
   purpose: UploadPurposeValue;
   fileName: string;
   declaredContentType: string;
   declaredSize: number;
+  voiceNoteDeclaredDurationMs?: number;
   object: InspectedObject;
 }): Promise<{
   contentType: string;
   size: number;
   kind: AttachmentKindValue;
+  voiceNoteDurationMs?: number;
 }> => {
   if (
     input.object.contentType !== input.declaredContentType ||
@@ -148,18 +180,69 @@ export const inspectUploadedFile = async (input: {
         "Office document contents do not match its type",
       );
     }
-  } else if (!detected || detected.mime !== contentType) {
+  } else if (
+    !detected ||
+    !matchesDetectedContentType(contentType, detected.mime)
+  ) {
     throw new UploadValidationError(
       "File contents do not match its declared type",
     );
   }
 
+  let voiceNoteDurationMs: number | undefined;
+  if (input.purpose === UploadPurpose.VOICE_NOTE) {
+    try {
+      const metadata = await parseBuffer(
+        input.object.prefix,
+        { mimeType: contentType, size: input.object.size },
+        { duration: true, skipCovers: true },
+      );
+      const codec = metadata.format.codec?.toLowerCase() ?? "";
+      const expectedCodec =
+        contentType === "audio/mp4"
+          ? codec.includes("aac")
+          : codec.includes("opus");
+      if (
+        metadata.format.hasAudio === false ||
+        metadata.format.hasVideo === true ||
+        !expectedCodec ||
+        !metadata.format.duration
+      ) {
+        throw new Error("Invalid audio metadata");
+      }
+      voiceNoteDurationMs = Math.round(metadata.format.duration * 1_000);
+      if (
+        voiceNoteDurationMs < MIN_VOICE_NOTE_DURATION_MS ||
+        voiceNoteDurationMs > MAX_VOICE_NOTE_DURATION_MS
+      ) {
+        throw new UploadValidationError(
+          "Voice note duration must be between 1 second and 5 minutes",
+        );
+      }
+      if (
+        input.voiceNoteDeclaredDurationMs === undefined ||
+        Math.abs(voiceNoteDurationMs - input.voiceNoteDeclaredDurationMs) >
+          2_000
+      ) {
+        throw new UploadValidationError(
+          "Voice note duration does not match the recording",
+        );
+      }
+    } catch (error) {
+      if (error instanceof UploadValidationError) throw error;
+      throw new UploadValidationError("Voice note contents are invalid");
+    }
+  }
+
   return {
     contentType,
     size: input.object.size,
-    kind: imageTypes.has(contentType)
-      ? AttachmentKind.IMAGE
-      : AttachmentKind.FILE,
+    kind: audioTypes.has(contentType)
+      ? AttachmentKind.AUDIO
+      : imageTypes.has(contentType)
+        ? AttachmentKind.IMAGE
+        : AttachmentKind.FILE,
+    ...(voiceNoteDurationMs !== undefined ? { voiceNoteDurationMs } : {}),
   };
 };
 
@@ -172,5 +255,5 @@ export const contentDispositionFor = (
     /[!'()*]/g,
     (value) => `%${value.charCodeAt(0).toString(16).toUpperCase()}`,
   );
-  return `${kind === AttachmentKind.IMAGE ? "inline" : "attachment"}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+  return `${kind === AttachmentKind.FILE ? "attachment" : "inline"}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 };

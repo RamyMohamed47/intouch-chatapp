@@ -39,9 +39,11 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   Alert,
   AppState,
   FlatList,
+  LayoutAnimation,
   Modal,
   Platform,
   Pressable,
@@ -85,6 +87,8 @@ import {
 import { uploadsApi } from "@/features/uploads/uploads-api";
 import { VoiceStage } from "@/features/voice/voice-ui";
 import { useVoice } from "@/features/voice/voice-provider";
+import { VoiceNotePlayer } from "@/features/voice-notes/voice-note-player";
+import { VoiceNoteRecorder } from "@/features/voice-notes/voice-note-recorder";
 
 export default function ConversationScreen() {
   const { conversationId = "", messageId } = useLocalSearchParams<{
@@ -110,12 +114,18 @@ export default function ConversationScreen() {
   const pendingReceiptMessageIdRef = useRef<string | null>(null);
   const failedReceiptMessageIdRef = useRef<string | null>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
+  const reduceMotionRef = useRef(false);
+  const voiceNoteBusyRef = useRef(false);
+  const voiceNoteScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [content, setContent] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingAllowsEmpty, setEditingAllowsEmpty] = useState(false);
   const [mentions, setMentions] = useState<MessageMention[]>([]);
   const [replyTo, setReplyTo] = useState<MessageDto | null>(null);
   const [files, setFiles] = useState<LocalUploadFile[]>([]);
+  const [voiceNoteBusy, setVoiceNoteBusy] = useState(false);
   const [completedUploadIds, setCompletedUploadIds] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadingFileIndex, setUploadingFileIndex] = useState<number | null>(
@@ -141,6 +151,50 @@ export default function ConversationScreen() {
     AppState.currentState === "active",
   );
   const [showComposerAi, setShowComposerAi] = useState(false);
+
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      reduceMotionRef.current = enabled;
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      (enabled) => {
+        reduceMotionRef.current = enabled;
+      },
+    );
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (voiceNoteScrollTimerRef.current) {
+        clearTimeout(voiceNoteScrollTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleVoiceNoteBusyChange = useCallback((busy: boolean) => {
+    if (voiceNoteBusyRef.current === busy) return;
+    voiceNoteBusyRef.current = busy;
+    if (!reduceMotionRef.current) {
+      LayoutAnimation.configureNext({
+        create: {
+          duration: 160,
+          property: LayoutAnimation.Properties.opacity,
+          type: LayoutAnimation.Types.easeInEaseOut,
+        },
+        delete: {
+          duration: 120,
+          property: LayoutAnimation.Properties.opacity,
+          type: LayoutAnimation.Types.easeInEaseOut,
+        },
+        duration: 180,
+        update: { type: LayoutAnimation.Types.easeInEaseOut },
+      });
+    }
+    setVoiceNoteBusy(busy);
+  }, []);
   const conversation = useQuery({
     queryKey: ["conversations", conversationId],
     queryFn: () => conversationsApi.get(conversationId),
@@ -520,6 +574,20 @@ export default function ConversationScreen() {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     },
   });
+
+  const handleVoiceNoteSent = async () => {
+    setReplyTo(null);
+    await queryClient.invalidateQueries({
+      queryKey: ["messages", conversationId],
+    });
+    const scrollToLatest = () =>
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    requestAnimationFrame(scrollToLatest);
+    if (voiceNoteScrollTimerRef.current) {
+      clearTimeout(voiceNoteScrollTimerRef.current);
+    }
+    voiceNoteScrollTimerRef.current = setTimeout(scrollToLatest, 220);
+  };
 
   const clearAttachments = async () => {
     uploadAbortControllerRef.current?.abort();
@@ -928,7 +996,9 @@ export default function ConversationScreen() {
                               : (item.replyTo.content ??
                                 (item.replyTo.messageType === "CALL"
                                   ? "Voice call"
-                                  : "Attachment"))}
+                                  : item.replyTo.messageType === "VOICE_NOTE"
+                                    ? "Voice note"
+                                    : "Attachment"))}
                           </Muted>
                         </Pressable>
                       ) : null}
@@ -938,6 +1008,9 @@ export default function ConversationScreen() {
                           key={attachment.id}
                         />
                       ))}
+                      {item.voiceNote ? (
+                        <VoiceNotePlayer voiceNote={item.voiceNote} />
+                      ) : null}
                       {item.content ? (
                         <MessageText
                           content={item.content}
@@ -1041,6 +1114,7 @@ export default function ConversationScreen() {
         ) : null}
       </View>
       <MessageActionSheet
+        canEdit={selectedMessage?.messageType !== "VOICE_NOTE"}
         currentReaction={selectedMessage?.currentUserReaction ?? null}
         isOwnMessage={selectedMessage?.senderId === user?.id}
         onClose={() => setSelectedMessageId(null)}
@@ -1181,7 +1255,11 @@ export default function ConversationScreen() {
             </Text>
             <Muted>
               {replyTo.content ??
-                (replyTo.attachments.length ? "Attachment" : "Message")}
+                (replyTo.messageType === "VOICE_NOTE"
+                  ? "Voice note"
+                  : replyTo.attachments.length
+                    ? "Attachment"
+                    : "Message")}
             </Muted>
           </View>
           <Pressable
@@ -1278,45 +1356,64 @@ export default function ConversationScreen() {
           { borderTopColor: theme.border, backgroundColor: theme.panel },
         ]}
       >
-        <Pressable
-          disabled={Boolean(editingMessageId)}
-          accessibilityLabel="Choose photos"
-          onPress={() => void pickImages()}
-        >
-          <ImagePlus color={theme.muted} size={23} />
-        </Pressable>
-        <Pressable
-          disabled={Boolean(editingMessageId)}
-          accessibilityLabel="Choose files"
-          onPress={() => void pickDocuments()}
-        >
-          <Paperclip color={theme.muted} size={23} />
-        </Pressable>
-        <TextInput
-          accessibilityLabel="Message"
-          maxLength={4000}
-          multiline
-          onBlur={() => stopTyping(conversationId)}
-          onChangeText={changeContent}
-          placeholder={`Message ${title}`}
-          placeholderTextColor={theme.muted}
-          style={[
-            styles.input,
-            { color: theme.text, backgroundColor: theme.panelStrong },
-          ]}
-          value={content}
-        />
-        <Pressable
-          accessibilityLabel="Send message"
-          disabled={
-            send.isPending ||
-            (!content.trim() && !files.length && !editingAllowsEmpty)
+        {!voiceNoteBusy && (
+          <Pressable
+            disabled={Boolean(editingMessageId)}
+            accessibilityLabel="Choose photos"
+            onPress={() => void pickImages()}
+          >
+            <ImagePlus color={theme.muted} size={23} />
+          </Pressable>
+        )}
+        {!voiceNoteBusy && (
+          <Pressable
+            disabled={Boolean(editingMessageId)}
+            accessibilityLabel="Choose files"
+            onPress={() => void pickDocuments()}
+          >
+            <Paperclip color={theme.muted} size={23} />
+          </Pressable>
+        )}
+        {!voiceNoteBusy && (
+          <TextInput
+            accessibilityLabel="Message"
+            maxLength={4000}
+            multiline
+            onBlur={() => stopTyping(conversationId)}
+            onChangeText={changeContent}
+            placeholder={`Message ${title}`}
+            placeholderTextColor={theme.muted}
+            style={[
+              styles.input,
+              { color: theme.text, backgroundColor: theme.panelStrong },
+            ]}
+            value={content}
+          />
+        )}
+        <VoiceNoteRecorder
+          conversationId={conversationId}
+          disabled={send.isPending || Boolean(voice.activeSession)}
+          onBusyChange={handleVoiceNoteBusyChange}
+          onError={(message) => Alert.alert("Voice note", message)}
+          onSent={() => void handleVoiceNoteSent()}
+          {...(replyTo ? { replyToMessageId: replyTo.id } : {})}
+          visible={
+            !content.trim() && files.length === 0 && editingMessageId === null
           }
-          onPress={() => send.mutate()}
-          style={[styles.send, { backgroundColor: theme.accent }]}
-        >
-          <Send color="#ffffff" size={20} />
-        </Pressable>
+        />
+        {!voiceNoteBusy && (
+          <Pressable
+            accessibilityLabel="Send message"
+            disabled={
+              send.isPending ||
+              (!content.trim() && !files.length && !editingAllowsEmpty)
+            }
+            onPress={() => send.mutate()}
+            style={[styles.send, { backgroundColor: theme.accent }]}
+          >
+            <Send color="#ffffff" size={20} />
+          </Pressable>
+        )}
       </View>
       {organizationId ? (
         <ComposerAiSheet

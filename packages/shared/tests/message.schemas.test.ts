@@ -39,6 +39,31 @@ describe("shared message schemas", () => {
     );
   });
 
+  test("enforces voice-note message exclusivity", () => {
+    const voiceNoteUploadId = "507f1f77bcf86cd799439011";
+    const replyToMessageId = "507f1f77bcf86cd799439012";
+    assert.deepEqual(
+      createMessageSchema.parse({ voiceNoteUploadId, replyToMessageId }),
+      { voiceNoteUploadId, replyToMessageId },
+    );
+    assert.equal(
+      createMessageSchema.safeParse({ voiceNoteUploadId, content: "caption" })
+        .success,
+      false,
+    );
+    assert.equal(
+      createMessageSchema.safeParse({
+        voiceNoteUploadId,
+        uploadIds: [replyToMessageId],
+      }).success,
+      false,
+    );
+    assert.equal(
+      createMessageSchema.safeParse({ voiceNoteUploadId, extra: true }).success,
+      false,
+    );
+  });
+
   test("validates replies and ordered UTF-16 mention ranges", () => {
     const replyToMessageId = "507f1f77bcf86cd799439011";
     const userId = "507f1f77bcf86cd799439012";

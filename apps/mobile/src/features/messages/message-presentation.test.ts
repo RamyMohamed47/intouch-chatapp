@@ -20,6 +20,7 @@ const message = (call: MessageDto["call"]): MessageDto => ({
   currentUserReaction: null,
   mentions: [],
   replyTo: null,
+  voiceNote: null,
   call,
 });
 

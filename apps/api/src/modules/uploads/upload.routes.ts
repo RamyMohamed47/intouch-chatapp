@@ -2,6 +2,7 @@ import express, { type RequestHandler } from "express";
 import {
   MAX_UPLOAD_FILE_BYTES,
   MAX_SQUARE_IMAGE_UPLOAD_BYTES,
+  MAX_VOICE_NOTE_BYTES,
   UploadPurpose,
   assetParamsSchema,
   createUploadSchema,
@@ -27,7 +28,9 @@ const rejectOversizedUploads: RequestHandler = (req, _res, next) => {
     purpose === UploadPurpose.AVATAR ||
     purpose === UploadPurpose.ORGANIZATION_LOGO
       ? MAX_SQUARE_IMAGE_UPLOAD_BYTES
-      : MAX_UPLOAD_FILE_BYTES;
+      : purpose === UploadPurpose.VOICE_NOTE
+        ? MAX_VOICE_NOTE_BYTES
+        : MAX_UPLOAD_FILE_BYTES;
   const oversized =
     Array.isArray(files) &&
     files.some(
@@ -39,9 +42,11 @@ const rejectOversizedUploads: RequestHandler = (req, _res, next) => {
   next(
     oversized
       ? new UploadValidationError(
-          maximumBytes === MAX_SQUARE_IMAGE_UPLOAD_BYTES
-            ? "Image must not exceed 5 MB"
-            : "File must not exceed 25 MB",
+          purpose === UploadPurpose.VOICE_NOTE
+            ? "Voice note must not exceed 5 MB"
+            : maximumBytes === MAX_SQUARE_IMAGE_UPLOAD_BYTES
+              ? "Image must not exceed 5 MB"
+              : "File must not exceed 25 MB",
           413,
         )
       : undefined,

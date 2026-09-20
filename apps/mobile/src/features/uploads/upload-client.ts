@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { createUploadSchema } from "@intouch/shared/uploads";
 
 import { uploadsApi } from "@/features/uploads/uploads-api";
 
@@ -10,6 +11,11 @@ export interface LocalUploadFile {
   uri: string;
 }
 
+export interface LocalVoiceNoteFile extends LocalUploadFile {
+  durationMs: number;
+  waveform: number[];
+}
+
 export const uploadFiles = async (
   input:
     | { purpose: "AVATAR" | "ORGANIZATION_LOGO"; files: [LocalUploadFile] }
@@ -17,27 +23,59 @@ export const uploadFiles = async (
         purpose: "MESSAGE_ATTACHMENT";
         conversationId: string;
         files: LocalUploadFile[];
+      }
+    | {
+        purpose: "VOICE_NOTE";
+        conversationId: string;
+        files: [LocalVoiceNoteFile];
       },
   onProgress?: (index: number, progress: number) => void,
   signal?: AbortSignal,
 ) => {
-  const descriptors = input.files.map(({ contentType, fileName, size }) => ({
-    contentType,
-    fileName,
-    size,
+  const descriptors = input.files.map((file) => ({
+    contentType: file.contentType,
+    fileName: file.fileName,
+    size: file.size,
+    ...("durationMs" in file
+      ? { durationMs: file.durationMs, waveform: file.waveform }
+      : {}),
   }));
-  const result = await uploadsApi.create(
-    input.purpose === "MESSAGE_ATTACHMENT"
+  const request =
+    input.purpose === "VOICE_NOTE"
       ? {
           purpose: input.purpose,
           conversationId: input.conversationId,
-          files: descriptors,
+          files: [
+            {
+              contentType: input.files[0].contentType,
+              durationMs: input.files[0].durationMs,
+              fileName: input.files[0].fileName,
+              size: input.files[0].size,
+              waveform: input.files[0].waveform,
+            },
+          ] as [
+            {
+              contentType: string;
+              durationMs: number;
+              fileName: string;
+              size: number;
+              waveform: number[];
+            },
+          ],
         }
-      : {
-          purpose: input.purpose,
-          files: [descriptors[0] ?? { contentType: "", fileName: "", size: 0 }],
-        },
-  );
+      : input.purpose === "MESSAGE_ATTACHMENT"
+        ? {
+            purpose: input.purpose,
+            conversationId: input.conversationId,
+            files: descriptors,
+          }
+        : {
+            purpose: input.purpose,
+            files: [
+              descriptors[0] ?? { contentType: "", fileName: "", size: 0 },
+            ] as [{ contentType: string; fileName: string; size: number }],
+          };
+  const result = await uploadsApi.create(createUploadSchema.parse(request));
 
   const completed: string[] = [];
   try {

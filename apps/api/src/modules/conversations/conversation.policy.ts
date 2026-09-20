@@ -44,24 +44,47 @@ const createConversationPolicy = () => {
     return conversation;
   };
 
+  const assertAccessible = (
+    conversation: ConversationRecord | null,
+    membership: MembershipRecord | null,
+    participant: ConversationParticipantRecord | null,
+  ) => {
+    if (
+      !conversation ||
+      !membership ||
+      (conversation.type === ConversationType.DIRECT
+        ? !participant
+        : conversation.visibility === ConversationVisibility.PRIVATE &&
+          !participant)
+    ) {
+      throw new ConversationNotFoundError();
+    }
+
+    return conversation;
+  };
+
   return {
-    assertAccessible(
+    assertAccessible,
+
+    assertPrivateAccessible(
       conversation: ConversationRecord | null,
       membership: MembershipRecord | null,
       participant: ConversationParticipantRecord | null,
     ) {
+      const accessible = assertAccessible(
+        conversation,
+        membership,
+        participant,
+      );
       if (
-        !conversation ||
-        !membership ||
-        (conversation.type === ConversationType.DIRECT
-          ? !participant
-          : conversation.visibility === ConversationVisibility.PRIVATE &&
-            !participant)
+        !isChannelConversation(accessible) ||
+        accessible.visibility !== ConversationVisibility.PRIVATE
       ) {
-        throw new ConversationNotFoundError();
+        throw new ConversationConflictError(
+          "Participants exist only for private channels",
+        );
       }
-
-      return conversation;
+      return accessible;
     },
 
     assertOwner,

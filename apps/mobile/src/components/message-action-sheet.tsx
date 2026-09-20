@@ -12,6 +12,7 @@ const QUICK_REACTIONS = [
 ] as const;
 
 export const MessageActionSheet = ({
+  canEdit = true,
   currentReaction,
   isOwnMessage,
   onClose,
@@ -22,6 +23,7 @@ export const MessageActionSheet = ({
   pending,
   visible,
 }: {
+  canEdit?: boolean;
   currentReaction: string | null;
   isOwnMessage: boolean;
   onClose: () => void;
@@ -104,19 +106,21 @@ export const MessageActionSheet = ({
 
           {isOwnMessage ? (
             <View style={[styles.actions, { borderTopColor: theme.border }]}>
-              <Pressable
-                accessibilityRole="button"
-                disabled={pending}
-                onPress={onEdit}
-                style={({ pressed }) => [
-                  styles.action,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text style={[styles.actionText, { color: theme.text }]}>
-                  Edit caption
-                </Text>
-              </Pressable>
+              {canEdit ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={pending}
+                  onPress={onEdit}
+                  style={({ pressed }) => [
+                    styles.action,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={[styles.actionText, { color: theme.text }]}>
+                    Edit caption
+                  </Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 accessibilityRole="button"
                 disabled={pending}

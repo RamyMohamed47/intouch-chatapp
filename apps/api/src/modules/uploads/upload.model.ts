@@ -25,6 +25,12 @@ const storedAssetSchema = new Schema<StoredAsset>(
     fileName: { type: String, required: true, maxlength: 255 },
     declaredContentType: { type: String, required: true },
     declaredSize: { type: Number, required: true, min: 1 },
+    voiceNoteDeclaredDurationMs: { type: Number, min: 1_000, max: 300_000 },
+    voiceNoteWaveform: {
+      type: [{ type: Number, min: 0, max: 100 }],
+      default: undefined,
+    },
+    voiceNoteDurationMs: { type: Number, min: 1_000, max: 300_000 },
     verifiedContentType: String,
     verifiedSize: Number,
     kind: String,

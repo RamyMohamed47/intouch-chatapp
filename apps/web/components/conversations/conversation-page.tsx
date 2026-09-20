@@ -63,6 +63,8 @@ import { ChatWallpaperSurface } from "@/components/conversations/chat-wallpaper"
 import { ChatWallpaperDialog } from "@/components/conversations/chat-wallpaper-dialog";
 import { ComposerEmojiPicker } from "@/components/conversations/composer-emoji-picker";
 import { MessageAttachments } from "@/components/conversations/message-attachments";
+import { VoiceNotePlayer } from "@/components/conversations/voice-note-player";
+import { VoiceNoteRecorder } from "@/components/conversations/voice-note-recorder";
 import {
   MessageReactionPicker,
   MessageReactionSummaries,
@@ -273,7 +275,8 @@ export function ConversationPage({
   const members = useMembers(organizationId);
   const participants = useParticipants(
     conversationId,
-    expectedType === "CHANNEL",
+    conversation.data?.type === "CHANNEL" &&
+      conversation.data.visibility === "PRIVATE",
   );
   const [content, setContent] = useState("");
   const [mentions, setMentions] = useState<MessageMention[]>([]);
@@ -284,6 +287,7 @@ export function ConversationPage({
   const [editingMentions, setEditingMentions] = useState<MessageMention[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<MessageDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [voiceNoteBusy, setVoiceNoteBusy] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null);
@@ -554,6 +558,7 @@ export function ConversationPage({
       uploadIds?: string[];
       replyToMessageId?: string;
       mentions?: MessageMention[];
+      voiceNoteUploadId?: string;
     }) => messagesApi.create(conversationId, input),
     onSuccess: (message) => {
       queryClient.setQueryData<InfiniteData<MessageListResponse>>(
@@ -573,6 +578,15 @@ export function ConversationPage({
       void refreshSummaries();
     },
   });
+  const handleVoiceNoteSent = (message: MessageDto) => {
+    queryClient.setQueryData<InfiniteData<MessageListResponse>>(
+      queryKeys.conversations.messages(conversationId),
+      (current) => upsertCachedMessage(current, message),
+    );
+    setReplyTarget(null);
+    forceBottomScrollRef.current = true;
+    void refreshSummaries();
+  };
   const editMessage = useMutation({
     mutationFn: ({
       messageId,
@@ -1110,7 +1124,8 @@ export function ConversationPage({
                               )}
                             {own &&
                               !message.deletedAt &&
-                              message.messageType !== "CALL" && (
+                              message.messageType !== "CALL" &&
+                              message.messageType !== "VOICE_NOTE" && (
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1162,7 +1177,10 @@ export function ConversationPage({
                                 : (message.replyTo.content ??
                                   (message.replyTo.messageType === "CALL"
                                     ? "Voice call"
-                                    : "Attachment"))}
+                                    : message.replyTo.messageType ===
+                                        "VOICE_NOTE"
+                                      ? "Voice note"
+                                      : "Attachment"))}
                             </span>
                           </button>
                         ) : null}
@@ -1194,6 +1212,8 @@ export function ConversationPage({
                               </span>
                             </span>
                           </div>
+                        ) : message.voiceNote ? (
+                          <VoiceNotePlayer voiceNote={message.voiceNote} />
                         ) : editingId === message.id ? (
                           <form
                             className="mt-2 flex gap-2"
@@ -1352,9 +1372,11 @@ export function ConversationPage({
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
                     {replyTarget.content ??
-                      (replyTarget.attachments.length
-                        ? "Attachment"
-                        : "Message")}
+                      (replyTarget.messageType === "VOICE_NOTE"
+                        ? "Voice note"
+                        : replyTarget.attachments.length
+                          ? "Attachment"
+                          : "Message")}
                   </p>
                 </div>
                 <Button
@@ -1446,59 +1468,65 @@ export function ConversationPage({
               </div>
             )}
             <div className="flex items-end gap-2 rounded-2xl border border-border bg-background/50 p-2 focus-within:border-primary/40">
-              <span className="mb-2 grid size-8 place-items-center text-muted-foreground">
-                {conversation.data.type === "CHANNEL" ? (
-                  conversation.data.visibility === "PRIVATE" ? (
-                    <Lock />
+              {!voiceNoteBusy && (
+                <span className="mb-2 grid size-8 place-items-center text-muted-foreground">
+                  {conversation.data.type === "CHANNEL" ? (
+                    conversation.data.visibility === "PRIVATE" ? (
+                      <Lock />
+                    ) : (
+                      <Hash />
+                    )
                   ) : (
-                    <Hash />
-                  )
-                ) : (
-                  <Users />
-                )}
-              </span>
-              <Textarea
-                ref={composerRef}
-                id={`message-composer-${conversationId}`}
-                name="content"
-                aria-label={`Message ${title}`}
-                value={content}
-                onChange={(event) => changeComposerContent(event.target.value)}
-                onPaste={(event) => {
-                  const images = [...event.clipboardData.files].filter((file) =>
-                    file.type.startsWith("image/"),
-                  );
-                  if (images.length > 0) {
-                    event.preventDefault();
-                    uploads.addFiles(images);
+                    <Users />
+                  )}
+                </span>
+              )}
+              {!voiceNoteBusy && (
+                <Textarea
+                  ref={composerRef}
+                  id={`message-composer-${conversationId}`}
+                  name="content"
+                  aria-label={`Message ${title}`}
+                  value={content}
+                  onChange={(event) =>
+                    changeComposerContent(event.target.value)
                   }
-                }}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                onKeyDown={(event) => {
-                  if (
-                    !shouldSendMessageFromKey({
-                      key: event.key,
-                      shiftKey: event.shiftKey,
-                      isComposing: event.nativeEvent.isComposing,
-                    })
-                  ) {
-                    return;
-                  }
+                  onPaste={(event) => {
+                    const images = [...event.clipboardData.files].filter(
+                      (file) => file.type.startsWith("image/"),
+                    );
+                    if (images.length > 0) {
+                      event.preventDefault();
+                      uploads.addFiles(images);
+                    }
+                  }}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  onKeyDown={(event) => {
+                    if (
+                      !shouldSendMessageFromKey({
+                        key: event.key,
+                        shiftKey: event.shiftKey,
+                        isComposing: event.nativeEvent.isComposing,
+                      })
+                    ) {
+                      return;
+                    }
 
-                  event.preventDefault();
-                  if (
-                    !sendMessage.isPending &&
-                    !uploads.isUploading &&
-                    (content.trim() || uploads.completedUploadIds.length > 0)
-                  ) {
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                placeholder={`Message ${title}`}
-                className="min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-                maxLength={4000}
-              />
+                    event.preventDefault();
+                    if (
+                      !sendMessage.isPending &&
+                      !uploads.isUploading &&
+                      (content.trim() || uploads.completedUploadIds.length > 0)
+                    ) {
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  placeholder={`Message ${title}`}
+                  className="min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+                  maxLength={4000}
+                />
+              )}
               <input
                 ref={attachmentInputRef}
                 id={`message-attachments-${conversationId}`}
@@ -1513,45 +1541,70 @@ export function ConversationPage({
                   event.currentTarget.value = "";
                 }}
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Attach files"
-                disabled={sendMessage.isPending || uploads.items.length >= 5}
-                onClick={() => attachmentInputRef.current?.click()}
-              >
-                <Paperclip aria-hidden />
-              </Button>
-              <ComposerEmojiPicker
-                disabled={sendMessage.isPending}
-                onSelect={insertEmoji}
-              />
-              <ComposerAiMenu
-                organizationId={organizationId}
-                draft={content}
-                disabled={sendMessage.isPending || uploads.isUploading}
-                onReplace={(next) => {
-                  setContent(next);
-                  setMentions([]);
-                  setError(null);
-                  window.requestAnimationFrame(() =>
-                    composerRef.current?.focus(),
-                  );
-                }}
-              />
-              <Button
-                type="submit"
-                size="icon"
-                aria-label="Send message"
+              {!voiceNoteBusy && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Attach files"
+                  disabled={sendMessage.isPending || uploads.items.length >= 5}
+                  onClick={() => attachmentInputRef.current?.click()}
+                >
+                  <Paperclip aria-hidden />
+                </Button>
+              )}
+              {!voiceNoteBusy && (
+                <ComposerEmojiPicker
+                  disabled={sendMessage.isPending}
+                  onSelect={insertEmoji}
+                />
+              )}
+              {!voiceNoteBusy && (
+                <ComposerAiMenu
+                  organizationId={organizationId}
+                  draft={content}
+                  disabled={sendMessage.isPending || uploads.isUploading}
+                  onReplace={(next) => {
+                    setContent(next);
+                    setMentions([]);
+                    setError(null);
+                    window.requestAnimationFrame(() =>
+                      composerRef.current?.focus(),
+                    );
+                  }}
+                />
+              )}
+              <VoiceNoteRecorder
+                conversationId={conversationId}
                 disabled={
                   sendMessage.isPending ||
                   uploads.isUploading ||
-                  (!content.trim() && uploads.completedUploadIds.length === 0)
+                  Boolean(voice.activeSession)
                 }
-              >
-                <Send />
-              </Button>
+                onBusyChange={setVoiceNoteBusy}
+                onError={setError}
+                onSent={handleVoiceNoteSent}
+                replyToMessageId={replyTarget?.id}
+                visible={
+                  !content.trim() &&
+                  uploads.items.length === 0 &&
+                  editingId === null
+                }
+              />
+              {!voiceNoteBusy && (
+                <Button
+                  type="submit"
+                  size="icon"
+                  aria-label="Send message"
+                  disabled={
+                    sendMessage.isPending ||
+                    uploads.isUploading ||
+                    (!content.trim() && uploads.completedUploadIds.length === 0)
+                  }
+                >
+                  <Send />
+                </Button>
+              )}
             </div>
             {(error ||
               (conversation.data.type === "DIRECT" ? voice.error : null)) && (

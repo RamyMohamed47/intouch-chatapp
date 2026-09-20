@@ -25,6 +25,7 @@ const message: MessageRecord = {
 };
 const messageView = {
   ...message,
+  voiceNote: null,
   mentions: [],
   replyTo: null,
   reactions: [],

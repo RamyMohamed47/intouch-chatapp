@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { fileTypeFromBuffer } from "file-type";
 
-import { UploadPurpose } from "@intouch/shared/uploads";
+import { MAX_VOICE_NOTE_BYTES, UploadPurpose } from "@intouch/shared/uploads";
 
 import { UploadValidationError } from "../src/modules/uploads/upload.errors.js";
 import {
   contentDispositionFor,
   inspectUploadedFile,
+  matchesDetectedContentType,
   sanitizeFileName,
   validateDeclaredFile,
 } from "../src/modules/uploads/upload.validation.js";
@@ -85,6 +87,55 @@ describe("upload validation", () => {
       }),
       UploadValidationError,
     );
+  });
+
+  test("enforces dedicated voice-note declaration types and size", () => {
+    assert.doesNotThrow(() =>
+      validateDeclaredFile(
+        UploadPurpose.VOICE_NOTE,
+        "voice-note.m4a",
+        "audio/mp4",
+        MAX_VOICE_NOTE_BYTES,
+      ),
+    );
+    assert.throws(
+      () =>
+        validateDeclaredFile(
+          UploadPurpose.VOICE_NOTE,
+          "voice-note.m4a",
+          "audio/mp4",
+          MAX_VOICE_NOTE_BYTES + 1,
+        ),
+      UploadValidationError,
+    );
+    assert.throws(
+      () =>
+        validateDeclaredFile(
+          UploadPurpose.VOICE_NOTE,
+          "voice-note.png",
+          "image/png",
+          100,
+        ),
+      UploadValidationError,
+    );
+  });
+
+  test("accepts generic MP4 and WebM container detection for audio", async () => {
+    const webmHeader = Uint8Array.from([
+      0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81,
+      0x01, 0x42, 0xf2, 0x81, 0x04, 0x42, 0xf3, 0x81, 0x08, 0x42, 0x82, 0x84,
+      0x77, 0x65, 0x62, 0x6d, 0x42, 0x87, 0x81, 0x04, 0x42, 0x85, 0x81, 0x02,
+    ]);
+    const detectedWebm = await fileTypeFromBuffer(webmHeader);
+
+    assert.equal(detectedWebm?.mime, "video/webm");
+    assert.equal(
+      matchesDetectedContentType("audio/webm", detectedWebm?.mime ?? ""),
+      true,
+    );
+    assert.equal(matchesDetectedContentType("audio/mp4", "video/mp4"), true);
+    assert.equal(matchesDetectedContentType("audio/webm", "video/mp4"), false);
+    assert.equal(matchesDetectedContentType("image/png", "video/webm"), false);
   });
 
   test("requires complete UTF-8 text and exact OOXML detection", async () => {

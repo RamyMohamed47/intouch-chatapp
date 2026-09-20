@@ -594,7 +594,11 @@ const createConversationService = ({
         conversation.organizationId,
       );
       const actorParticipant = await participants.find(conversationId, userId);
-      policy.assertPrivateOwner(conversation, membership, actorParticipant);
+      policy.assertPrivateAccessible(
+        conversation,
+        membership,
+        actorParticipant,
+      );
       const records = await participants.listByConversation(conversationId);
       const publicUsers = await users.findPublicByIds(
         records.map(({ userId: participantId }) => participantId),

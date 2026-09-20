@@ -31,6 +31,8 @@ const formatTime = (value: string) =>
 
 const messagePreview = (message: MessageCoreDto) => {
   if (message.deletedAt) return "Message deleted";
+  if (message.messageType === "VOICE_NOTE") return "Voice note";
+  if (message.messageType === "CALL") return "Voice call";
   if (message.content) return message.content;
   if (
     message.attachments.length === 1 &&
