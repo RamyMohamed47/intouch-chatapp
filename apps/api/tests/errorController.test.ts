@@ -5,6 +5,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import AppError from "../src/errors/AppError.js";
 import handleError, {
+  getRequestRejectionLogContext,
   shouldCaptureError,
 } from "../src/middleware/errorHandler.js";
 
@@ -42,6 +43,70 @@ const createResponse = (): MockResponse => ({
 const noopNext: NextFunction = () => {};
 
 describe("handleError", () => {
+  test("builds diagnosable rejection logs without concrete URL parameters", () => {
+    const err = new AppError(
+      "Leave your current voice session before joining another",
+      409,
+      "VOICE_SESSION_ACTIVE",
+    );
+    const req = {
+      baseUrl: "/api/v1/conversations",
+      method: "POST",
+      path: "/abc123/voice/join",
+      route: { path: "/:conversationId/voice/join" },
+    } as Request;
+
+    assert.deepEqual(getRequestRejectionLogContext(err, req), {
+      code: "VOICE_SESSION_ACTIVE",
+      method: "POST",
+      reason: "Leave your current voice session before joining another",
+      route: "/api/v1/conversations/:conversationId/voice/join",
+      statusCode: 409,
+    });
+  });
+
+  test("does not include an unmatched request URL in rejection logs", () => {
+    const err = new AppError(
+      "Cannot find /api/v1/private-value?token=secret on this server",
+      404,
+      "NOT_FOUND",
+    );
+    const req = {
+      baseUrl: "",
+      method: "GET",
+      path: "/api/v1/private-value",
+    } as Request;
+
+    assert.deepEqual(getRequestRejectionLogContext(err, req), {
+      code: "NOT_FOUND",
+      method: "GET",
+      reason: "Route not found",
+      route: "unmatched",
+      statusCode: 404,
+    });
+  });
+
+  test("preserves the reason for middleware rejections before route matching", () => {
+    const err = new AppError(
+      "Bearer access token is required",
+      401,
+      "UNAUTHORIZED",
+    );
+    const req = {
+      baseUrl: "/api/v1/conversations",
+      method: "GET",
+      path: "/abc123",
+    } as Request;
+
+    assert.deepEqual(getRequestRejectionLogContext(err, req), {
+      code: "UNAUTHORIZED",
+      method: "GET",
+      reason: "Bearer access token is required",
+      route: "unmatched",
+      statusCode: 401,
+    });
+  });
+
   test("captures unexpected failures but not expected client errors", () => {
     assert.equal(shouldCaptureError(new Error("unexpected")), true);
     assert.equal(

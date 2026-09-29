@@ -177,6 +177,7 @@ function Probe() {
     <div>
       <span>{voice.activeSession?.id ?? "no-session"}</span>
       <span>{voice.error ?? "no-voice-error"}</span>
+      <span>{voice.connectionState}</span>
       <span>{voice.isTransitioning ? "voice-pending" : "voice-idle"}</span>
       <span>
         {voice.isPlaybackBlocked ? "playback-blocked" : "playback-ready"}
@@ -228,7 +229,7 @@ function Probe() {
 }
 
 const renderProvider = (
-  room: FakeRoom,
+  roomOrFactory: FakeRoom | (() => FakeRoom),
   seedQueryClient?: (queryClient: QueryClient) => void,
 ) => {
   const queryClient = new QueryClient({
@@ -238,7 +239,11 @@ const renderProvider = (
   return render(
     <QueryClientProvider client={queryClient}>
       <VoiceProvider
-        roomFactory={() => room as unknown as Room}
+        roomFactory={() =>
+          (typeof roomOrFactory === "function"
+            ? roomOrFactory()
+            : roomOrFactory) as unknown as Room
+        }
         callTonePlayerFactory={() => mocks.callTonePlayer}
       >
         <Probe />
@@ -409,6 +414,69 @@ describe("VoiceProvider", () => {
     resolveJoin?.({ session, credentials });
     expect(await screen.findByText(session.id)).toBeInTheDocument();
     expect(screen.getByText("voice-idle")).toBeInTheDocument();
+  });
+
+  it("serializes automatic session restoration with a manual join", async () => {
+    const room = new FakeRoom();
+    let resolveResume:
+      | ((result: {
+          session: VoiceSessionDto;
+          credentials: typeof credentials;
+        }) => void)
+      | undefined;
+    mocks.activeSession.mockResolvedValue(session);
+    mocks.resume.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResume = resolve;
+      }),
+    );
+    renderProvider(room);
+
+    await waitFor(() => expect(mocks.resume).toHaveBeenCalledOnce());
+    expect(screen.getByText("voice-pending")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Join test channel" }),
+    );
+
+    expect(mocks.joinChannel).not.toHaveBeenCalled();
+    act(() => resolveResume?.({ session, credentials }));
+    expect(await screen.findByText(session.id)).toBeInTheDocument();
+    expect(room.connect).toHaveBeenCalledOnce();
+  });
+
+  it("ignores lifecycle events emitted by a replaced room", async () => {
+    const firstRoom = new FakeRoom();
+    const secondRoom = new FakeRoom();
+    const rooms = [firstRoom, secondRoom];
+    let nextRoom = 0;
+    mocks.joinChannel.mockResolvedValue({ session, credentials });
+    renderProvider(() => rooms[nextRoom++] ?? secondRoom);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Join test channel" }),
+    );
+    expect(await screen.findByText(session.id)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Leave test channel" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("no-session")).toBeInTheDocument(),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Join test channel" }),
+    );
+    await waitFor(() => expect(secondRoom.connect).toHaveBeenCalledOnce());
+    expect(screen.getByText(ConnectionState.Connected)).toBeInTheDocument();
+
+    act(() =>
+      firstRoom.emit(
+        RoomEvent.ConnectionStateChanged,
+        ConnectionState.Disconnected,
+      ),
+    );
+
+    expect(screen.getByText(ConnectionState.Connected)).toBeInTheDocument();
+    expect(secondRoom.disconnect).not.toHaveBeenCalled();
   });
 
   it("renders an expected join failure without rejecting the event handler", async () => {

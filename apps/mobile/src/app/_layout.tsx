@@ -8,6 +8,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import "@/features/push/push-background-task";
 
+import { shouldRetryQuery } from "@/core/api/query-retry";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { AppearanceProvider } from "@/features/appearance/appearance-provider";
 import { AuthProvider } from "@/features/auth/auth-provider";
@@ -24,7 +25,7 @@ function RootLayout() {
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { retry: 2, staleTime: 20_000 },
+          queries: { retry: shouldRetryQuery, staleTime: 20_000 },
           mutations: { retry: false },
         },
       }),

@@ -65,6 +65,7 @@ import { ChatWallpaper } from "@/features/appearance/chat-wallpaper";
 import { wallpaperApi } from "@/features/appearance/wallpaper-api";
 import { useAuth } from "@/features/auth/auth-provider";
 import {
+  shouldLoadConversationMessages,
   shouldLoadConversationParticipants,
   shouldPositionAtLatestMessage,
 } from "@/features/conversations/conversation-screen-policy";
@@ -199,6 +200,9 @@ export default function ConversationScreen() {
     queryKey: ["conversations", conversationId],
     queryFn: () => conversationsApi.get(conversationId),
   });
+  const canLoadMessages = conversation.data
+    ? shouldLoadConversationMessages(conversation.data)
+    : false;
   const organizationId = conversation.data?.organizationId;
   const members = useQuery({
     queryKey: ["organizations", organizationId, "members"],
@@ -221,12 +225,12 @@ export default function ConversationScreen() {
     queryFn: ({ pageParam }) => messagesApi.list(conversationId, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: ({ nextCursor }) => nextCursor ?? undefined,
-    enabled: !anchorMessageId,
+    enabled: canLoadMessages && !anchorMessageId,
   });
   const messageContext = useQuery({
     queryKey: ["messages", conversationId, "context", anchorMessageId],
     queryFn: () => messagesApi.context(conversationId, anchorMessageId),
-    enabled: Boolean(anchorMessageId),
+    enabled: canLoadMessages && Boolean(anchorMessageId),
   });
   const allMessages = useMemo(() => {
     const source = anchorMessageId

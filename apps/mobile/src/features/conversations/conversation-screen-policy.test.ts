@@ -1,14 +1,34 @@
 import {
+  ChannelKind,
   ConversationType,
   ConversationVisibility,
 } from "@intouch/shared/conversations";
 
 import {
+  shouldLoadConversationMessages,
   shouldLoadConversationParticipants,
   shouldPositionAtLatestMessage,
 } from "@/features/conversations/conversation-screen-policy";
 
 describe("conversation screen policy", () => {
+  it("loads messages only for direct conversations and text channels", () => {
+    expect(
+      shouldLoadConversationMessages({ type: ConversationType.DIRECT }),
+    ).toBe(true);
+    expect(
+      shouldLoadConversationMessages({
+        kind: ChannelKind.TEXT,
+        type: ConversationType.CHANNEL,
+      }),
+    ).toBe(true);
+    expect(
+      shouldLoadConversationMessages({
+        kind: ChannelKind.VOICE,
+        type: ConversationType.CHANNEL,
+      }),
+    ).toBe(false);
+  });
+
   it("loads participant records only for private channels", () => {
     expect(
       shouldLoadConversationParticipants({ type: ConversationType.DIRECT }),

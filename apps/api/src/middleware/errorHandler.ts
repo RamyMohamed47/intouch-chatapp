@@ -1,4 +1,4 @@
-import type { ErrorRequestHandler, Response } from "express";
+import type { ErrorRequestHandler, Request, Response } from "express";
 import { errorResponseSchema } from "@intouch/shared/common";
 
 import { getLogger } from "../config/logger.js";
@@ -71,6 +71,24 @@ const sendError = (err: OperationalError, res: Response) => {
 export const shouldCaptureError = (error: OperationalError) =>
   error.isOperational !== true || (error.statusCode ?? 500) >= 500;
 
+export const getRequestRejectionLogContext = (
+  error: OperationalError,
+  req: Request,
+) => {
+  const route = getNormalizedRoute(req);
+
+  return {
+    code: error.code,
+    method: req.method,
+    reason:
+      route === "unmatched" && error.statusCode === 404
+        ? "Route not found"
+        : error.message,
+    route,
+    statusCode: error.statusCode,
+  };
+};
+
 const handleError: ErrorRequestHandler = (err, req, res, next) => {
   if (res.headersSent) {
     next(err);
@@ -86,10 +104,13 @@ const handleError: ErrorRequestHandler = (err, req, res, next) => {
     if (shouldCaptureError(error)) {
       logger.error({ err: error }, "Request failed");
     } else if ((error.statusCode ?? 500) === 429) {
-      logger.warn({ code: error.code }, "Request rate limited");
+      logger.warn(
+        getRequestRejectionLogContext(error, req),
+        "Request rate limited",
+      );
     } else {
       logger.info(
-        { code: error.code, statusCode: error.statusCode },
+        getRequestRejectionLogContext(error, req),
         "Request rejected",
       );
     }

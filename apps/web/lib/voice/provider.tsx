@@ -173,7 +173,7 @@ export function VoiceProvider({
   const callTonePlayerRef = useRef<CallTonePlayer | null>(null);
   const currentCallToneRef = useRef<CallToneKindValue | null>(null);
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
-  const attachedAudioTracksRef = useRef(new Set<Track>());
+  const attachedAudioTracksRef = useRef(new Map<Room, Set<Track>>());
   const transitionInFlightRef = useRef(false);
   const cameraTransitionInFlightRef = useRef(false);
   const screenShareTransitionInFlightRef = useRef(false);
@@ -437,43 +437,44 @@ export function VoiceProvider({
     [syncScreenShareTracks],
   );
 
-  const disconnectRoom = useCallback(async () => {
-    const room = roomRef.current;
-    roomRef.current = null;
-    attachedAudioTracksRef.current.forEach((track) => {
+  const disconnectRoom = useCallback(async (expectedRoom?: Room) => {
+    const room = expectedRoom ?? roomRef.current;
+    const ownsCurrentRoom =
+      expectedRoom === undefined || roomRef.current === expectedRoom;
+    if (ownsCurrentRoom) roomRef.current = null;
+
+    const attachedTracks = room
+      ? attachedAudioTracksRef.current.get(room)
+      : undefined;
+    attachedTracks?.forEach((track) => {
       track.detach().forEach((element) => element.remove());
     });
-    attachedAudioTracksRef.current.clear();
-    audioContainerRef.current?.replaceChildren();
-    setConnectionState(ConnectionState.Disconnected);
-    setConnectionQuality(ConnectionQuality.Unknown);
-    setParticipantIdentities([]);
-    setActiveSpeakerIdentities([]);
-    setCameraTracks([]);
-    setScreenShareTracks([]);
-    screenShareOrderRef.current.clear();
-    nextScreenShareOrderRef.current = 0;
-    setIsCameraEnabled(false);
-    setIsCameraTransitioning(false);
-    cameraTransitionInFlightRef.current = false;
-    setIsScreenShareEnabled(false);
-    setIsScreenShareTransitioning(false);
-    screenShareTransitionInFlightRef.current = false;
-    setIsMuted(false);
-    setIsDeafened(false);
-    isDeafenedRef.current = false;
-    setIsPlaybackBlocked(false);
-    if (room) {
-      try {
-        if (room.localParticipant.isScreenShareEnabled) {
-          await room.localParticipant.setScreenShareEnabled(false);
-        }
-      } catch {
-        // Disconnecting the room still stops every local media track.
-      } finally {
-        await room.disconnect();
-      }
+    if (room) attachedAudioTracksRef.current.delete(room);
+
+    if (ownsCurrentRoom) {
+      audioContainerRef.current?.replaceChildren();
+      setConnectionState(ConnectionState.Disconnected);
+      setConnectionQuality(ConnectionQuality.Unknown);
+      setParticipantIdentities([]);
+      setActiveSpeakerIdentities([]);
+      setCameraTracks([]);
+      setScreenShareTracks([]);
+      screenShareOrderRef.current.clear();
+      nextScreenShareOrderRef.current = 0;
+      setIsCameraEnabled(false);
+      setIsCameraTransitioning(false);
+      cameraTransitionInFlightRef.current = false;
+      setIsScreenShareEnabled(false);
+      setIsScreenShareTransitioning(false);
+      screenShareTransitionInFlightRef.current = false;
+      setIsMuted(false);
+      setIsDeafened(false);
+      isDeafenedRef.current = false;
+      setIsPlaybackBlocked(false);
     }
+
+    // LiveKit stops local media tracks as part of disconnecting the room.
+    if (room) await room.disconnect();
   }, []);
 
   const connect = useCallback(
@@ -482,31 +483,42 @@ export function VoiceProvider({
       setError(null);
       const room = roomFactory();
       roomRef.current = room;
-      room.on(RoomEvent.ConnectionStateChanged, setConnectionState);
+      attachedAudioTracksRef.current.set(room, new Set());
+      const isCurrentRoom = () => roomRef.current === room;
+      room.on(RoomEvent.ConnectionStateChanged, (state) => {
+        if (isCurrentRoom()) setConnectionState(state);
+      });
       room.on(RoomEvent.ParticipantConnected, () => {
+        if (!isCurrentRoom()) return;
         syncParticipants(room);
         syncCameraTracks(room);
         syncScreenShareTracks(room);
       });
       room.on(RoomEvent.ParticipantDisconnected, () => {
+        if (!isCurrentRoom()) return;
         syncParticipants(room);
         syncCameraTracks(room);
         syncScreenShareTracks(room);
       });
-      room.on(RoomEvent.ActiveSpeakersChanged, (speakers) =>
-        setActiveSpeakerIdentities(speakers.map(({ identity }) => identity)),
-      );
+      room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+        if (isCurrentRoom()) {
+          setActiveSpeakerIdentities(speakers.map(({ identity }) => identity));
+        }
+      });
       room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
-        if (participant.isLocal) setConnectionQuality(quality);
+        if (isCurrentRoom() && participant.isLocal) {
+          setConnectionQuality(quality);
+        }
       });
       room.on(RoomEvent.TrackSubscribed, (track, publication) => {
+        if (!isCurrentRoom()) return;
         if (track.kind === Track.Kind.Audio) {
           if (isDeafenedRef.current) publication.setEnabled(false);
           const element = track.attach();
           element.autoplay = true;
           element.setAttribute("aria-hidden", "true");
           audioContainerRef.current?.appendChild(element);
-          attachedAudioTracksRef.current.add(track);
+          attachedAudioTracksRef.current.get(room)?.add(track);
           if (track.source === Track.Source.ScreenShareAudio) {
             syncScreenShareTracks(room);
           }
@@ -519,10 +531,13 @@ export function VoiceProvider({
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
         if (track.kind === Track.Kind.Audio) {
           track.detach().forEach((element) => element.remove());
-          attachedAudioTracksRef.current.delete(track);
+          attachedAudioTracksRef.current.get(room)?.delete(track);
+          if (!isCurrentRoom()) return;
           if (track.source === Track.Source.ScreenShareAudio) {
             syncScreenShareTracks(room);
           }
+        } else if (!isCurrentRoom()) {
+          return;
         } else if (track.source === Track.Source.Camera) {
           syncCameraTracks(room);
         } else if (track.source === Track.Source.ScreenShare) {
@@ -530,6 +545,7 @@ export function VoiceProvider({
         }
       });
       room.on(RoomEvent.TrackMuted, (publication, participant) => {
+        if (!isCurrentRoom()) return;
         syncCameraTracks(room);
         syncScreenShareTracks(room);
         if (
@@ -544,39 +560,56 @@ export function VoiceProvider({
         }
       });
       room.on(RoomEvent.TrackUnmuted, () => {
+        if (!isCurrentRoom()) return;
         syncCameraTracks(room);
         syncScreenShareTracks(room);
       });
       room.on(RoomEvent.LocalTrackPublished, () => {
+        if (!isCurrentRoom()) return;
         syncCameraTracks(room);
         syncScreenShareTracks(room);
       });
       room.on(RoomEvent.LocalTrackUnpublished, () => {
+        if (!isCurrentRoom()) return;
         syncCameraTracks(room);
         syncScreenShareTracks(room);
       });
       room.on(RoomEvent.AudioPlaybackStatusChanged, (canPlay) => {
-        setIsPlaybackBlocked(!canPlay);
+        if (isCurrentRoom()) setIsPlaybackBlocked(!canPlay);
       });
       try {
         await room.connect(
           result.credentials.serverUrl,
           result.credentials.token,
         );
+        if (!isCurrentRoom()) {
+          await disconnectRoom(room);
+          return false;
+        }
         await room.localParticipant.setMicrophoneEnabled(true);
+        if (!isCurrentRoom()) {
+          await disconnectRoom(room);
+          return false;
+        }
         if (enableCamera) {
           try {
             await room.localParticipant.setCameraEnabled(true, {
               resolution: VideoPresets.h720.resolution,
             });
           } catch (cameraError) {
-            setError(
-              cameraErrorMessage(
-                cameraError,
-                "Camera is unavailable. The call is continuing with audio.",
-              ),
-            );
+            if (isCurrentRoom()) {
+              setError(
+                cameraErrorMessage(
+                  cameraError,
+                  "Camera is unavailable. The call is continuing with audio.",
+                ),
+              );
+            }
           }
+        }
+        if (!isCurrentRoom()) {
+          await disconnectRoom(room);
+          return false;
         }
         setIsPlaybackBlocked(!room.canPlaybackAudio);
         syncParticipants(room);
@@ -585,8 +618,11 @@ export function VoiceProvider({
         setActiveSession(result.session);
         setActiveCall(call ?? null);
         queryClient.setQueryData(queryKeys.voice.activeSession, result.session);
+        return true;
       } catch (connectionError) {
-        await disconnectRoom();
+        const ownsCurrentRoom = isCurrentRoom();
+        await disconnectRoom(room);
+        if (!ownsCurrentRoom) return false;
         setError(
           connectionError instanceof Error
             ? connectionError.message
@@ -837,19 +873,34 @@ export function VoiceProvider({
 
   useEffect(() => {
     const session = activeSessionQuery.data;
-    if (!session || activeSession || status !== "authenticated") return;
-    void voiceApi
-      .resume()
-      .then(async (result) => {
+    if (
+      !session ||
+      activeSession ||
+      isTransitioning ||
+      status !== "authenticated"
+    ) {
+      return;
+    }
+    void runTransition(async () => {
+      try {
+        const result = await voiceApi.resume();
         const call = result.session.callId
           ? await voiceApi.getCall(result.session.callId)
           : undefined;
         await connect(result, call, false);
-      })
-      .catch(() =>
-        queryClient.setQueryData(queryKeys.voice.activeSession, null),
-      );
-  }, [activeSession, activeSessionQuery.data, connect, queryClient, status]);
+      } catch {
+        queryClient.setQueryData(queryKeys.voice.activeSession, null);
+      }
+    }, "Could not restore the voice session");
+  }, [
+    activeSession,
+    activeSessionQuery.data,
+    connect,
+    isTransitioning,
+    queryClient,
+    runTransition,
+    status,
+  ]);
 
   useEffect(() => {
     if (!activeSession) return;
