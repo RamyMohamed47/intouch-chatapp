@@ -17,16 +17,42 @@ development build rather than Expo Go.
 
 ## Startup Experience
 
-Every cold launch hands the native splash to a short React Native connection
-pulse while session restoration, deep-link routing, and push handling continue
-underneath it. The overlay waits briefly for the saved theme, exits immediately
-for a ringing call or background transition, and has a watchdog so startup can
-never remain blocked. Devices with reduced motion enabled receive a static
-150-millisecond fade.
+Every cold launch plays a silent 1.6-second "Hands Connect" intro while session
+restoration, deep-link routing, and push handling continue underneath it. The
+original PNG crossfades into separately drawn vector hands; they approach, a
+spark bridges their fingertips, and a soft ripple reveals the InTouch lettering.
+The original logo stays centered at 220 points independently of the lettering.
+
+Reanimated runs the choreography on the UI thread using the installed SVG
+renderer. Animation completion callbacks advance the intro; timers only bound
+theme restoration (two seconds from mount) and recovery (three seconds). The
+overlay exits immediately for a ringing call or a background/inactive transition
+and cannot replay on navigation, logout, workspace changes, or foregrounding.
+Reduced motion uses the original static PNG with a 150-millisecond fade. If the
+image fails, decorative motion is skipped; late handoff/animation callbacks are
+ignored after dismissal. Authentication is never a readiness requirement.
+
+Generate a standalone motion study and six SVG storyboard frames from the same
+hand paths and timeline, from the repository root:
+
+```powershell
+node scripts/preview-mobile-splash.mjs
+```
+
+Open `.cache/hands-connect-preview/index.html` to replay or scrub the sequence.
+This browser preview verifies artwork and timing, not native performance.
 
 The animation itself is compatible with EAS Update. Validate the complete
 native-to-React handoff in a preview APK because development builds do not fully
 reproduce the release splash screen.
+
+For acceptance, cold-launch in Ink, Cloud, Aurora, and Ember in portrait and
+landscape, with reduced motion both on and off. Check for a blank frame or logo
+jump at native handoff, aligned fingertips, readable lettering, and smooth
+motion on a slower Android device. Repeat with slow session restoration, a
+notification destination, an incoming call, and backgrounding during the intro;
+verify returning to the app does not replay it. Native frame rate and preview APK
+acceptance must be checked on a device separately from automated tests.
 
 ## Preview Builds
 
