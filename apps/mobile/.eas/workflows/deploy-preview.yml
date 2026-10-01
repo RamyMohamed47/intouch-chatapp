@@ -38,6 +38,10 @@ jobs:
     if: ${{ needs.get_android_build.outputs.build_id }}
     type: update
     environment: preview
+    hooks:
+      before_update:
+        - name: Build shared contracts
+          run: npm --prefix ../.. run build:shared
     params:
       channel: preview
       platform: android
