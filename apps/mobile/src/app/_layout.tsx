@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useNavigationContainerRef } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { useEffect } from "react";
@@ -15,9 +16,12 @@ import { AuthProvider } from "@/features/auth/auth-provider";
 import { WorkspaceProvider } from "@/features/organizations/workspace-provider";
 import { RealtimeProvider } from "@/features/realtime/realtime-provider";
 import { PushProvider } from "@/features/push/push-provider";
+import { StartupSplash } from "@/features/startup/startup-splash";
 import { VoiceOverlay } from "@/features/voice/voice-ui";
 import { VoiceProvider } from "@/features/voice/voice-provider";
 import { navigationIntegration, Sentry } from "@/core/monitoring/sentry";
+
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function RootLayout() {
   const navigationRef = useNavigationContainerRef();
@@ -48,6 +52,7 @@ function RootLayout() {
                       <StatusBar style="auto" />
                       <Stack screenOptions={{ headerShown: false }} />
                       <VoiceOverlay />
+                      <StartupSplash />
                     </PushProvider>
                   </VoiceProvider>
                 </RealtimeProvider>

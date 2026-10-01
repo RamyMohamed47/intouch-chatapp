@@ -9,4 +9,11 @@ jest.mock("@sentry/react-native", () => ({
   wrap: <T>(component: T): T => component,
 }));
 
+jest.mock("@react-native-async-storage/async-storage", () => {
+  const asyncStorageMock: unknown = jest.requireActual(
+    "@react-native-async-storage/async-storage/jest/async-storage-mock",
+  );
+  return asyncStorageMock;
+});
+
 export {};

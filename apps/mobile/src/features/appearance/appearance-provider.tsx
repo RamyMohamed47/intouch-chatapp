@@ -17,6 +17,7 @@ import {
 const THEME_KEY = "intouch.theme.v1";
 
 interface AppearanceValue {
+  ready: boolean;
   name: ThemeNameValue;
   setTheme: (name: ThemeNameValue) => void;
   theme: ThemeTokens;
@@ -26,11 +27,25 @@ const AppearanceContext = createContext<AppearanceValue | null>(null);
 
 export const AppearanceProvider = ({ children }: PropsWithChildren) => {
   const [name, setName] = useState<ThemeNameValue>(ThemeName.INK);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    void AsyncStorage.getItem(THEME_KEY).then((stored) => {
-      if (stored && stored in themes) setName(stored as ThemeNameValue);
-    });
+    let active = true;
+
+    void AsyncStorage.getItem(THEME_KEY)
+      .then((stored) => {
+        if (active && stored && stored in themes) {
+          setName(stored as ThemeNameValue);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const setTheme = (next: ThemeNameValue) => {
@@ -39,7 +54,9 @@ export const AppearanceProvider = ({ children }: PropsWithChildren) => {
   };
 
   return (
-    <AppearanceContext.Provider value={{ name, setTheme, theme: themes[name] }}>
+    <AppearanceContext.Provider
+      value={{ name, ready, setTheme, theme: themes[name] }}
+    >
       {children}
     </AppearanceContext.Provider>
   );

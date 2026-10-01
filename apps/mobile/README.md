@@ -15,6 +15,19 @@ npm run dev:mobile
 The application uses native Google authentication, so run it in an InTouch
 development build rather than Expo Go.
 
+## Startup Experience
+
+Every cold launch hands the native splash to a short React Native connection
+pulse while session restoration, deep-link routing, and push handling continue
+underneath it. The overlay waits briefly for the saved theme, exits immediately
+for a ringing call or background transition, and has a watchdog so startup can
+never remain blocked. Devices with reduced motion enabled receive a static
+150-millisecond fade.
+
+The animation itself is compatible with EAS Update. Validate the complete
+native-to-React handoff in a preview APK because development builds do not fully
+reproduce the release splash screen.
+
 ## Preview Builds
 
 Create an installable Android APK from this directory:

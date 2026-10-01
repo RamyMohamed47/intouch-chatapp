@@ -98,6 +98,11 @@ links target the `intouch://` scheme and retain the HTTPS web link as fallback.
 
 ## Runtime Behavior
 
+- Cold launches hand off from the native splash to a 1.05-second branded
+  connection-pulse overlay while authentication and notification routing start
+  underneath it. Reduced-motion devices receive a static 150 ms fade. Theme
+  restoration is bounded to two seconds and a three-second watchdog prevents a
+  failed image or animation from blocking startup.
 - TanStack Query is authoritative for organizations, conversations, messages,
   presence, reactions, and receipts.
 - Socket.IO carries the access token in the handshake and reconnects only while
@@ -116,8 +121,10 @@ links target the `intouch://` scheme and retain the HTTPS web link as fallback.
 Use two authenticated Android devices or development builds against the same
 API.
 
-1. Launch with and without a stored session; verify protected routes never
-   flash before restoration finishes.
+1. Launch with and without a stored session; verify the native and animated
+   splashes hand off without a blank frame and protected routes never flash
+   before restoration finishes. Repeat with reduced motion, each theme,
+   portrait/landscape, a notification deep link, and an incoming call.
 2. Test password registration, verification, login, reset, logout, and Google
    sign-in. Confirm refresh rotation survives an app restart.
 3. Create and switch workspaces, accept and decline invitations, and verify
