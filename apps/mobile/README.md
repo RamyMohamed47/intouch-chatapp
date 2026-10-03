@@ -17,10 +17,12 @@ development build rather than Expo Go.
 
 ## Startup Experience
 
-Every cold launch plays a silent 1.6-second "Hands Connect" intro while session
+Every cold launch plays a silent two-second "Hands Connect" intro while session
 restoration, deep-link routing, and push handling continue underneath it. The
 original PNG crossfades into separately drawn vector hands; they approach, a
-spark bridges their fingertips, and a soft ripple reveals the InTouch lettering.
+spark bridges their fingertips, and native InTouch lettering fades upward below
+the hands during their approach. The lettering has its own measured layout space
+and stays visible before the final fade, without relying on an SVG clipping mask.
 The original logo stays centered at 220 points independently of the lettering.
 
 Reanimated runs the choreography on the UI thread using the installed SVG

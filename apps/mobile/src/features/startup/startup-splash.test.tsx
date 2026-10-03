@@ -5,9 +5,19 @@ import {
   type RenderResult,
 } from "@testing-library/react-native";
 import { AppState, Text, View, type AppStateStatus } from "react-native";
-import { cancelAnimation, withTiming } from "react-native-reanimated";
+import {
+  cancelAnimation,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { StartupSplashOverlay } from "@/features/startup/startup-splash";
+import { HandsConnectArtwork } from "@/features/startup/hands-connect-artwork";
+import {
+  MARK_HEIGHT,
+  WORDMARK_GAP,
+  WORDMARK_HEIGHT,
+} from "@/features/startup/splash-artwork";
 
 const mockAnimations: Array<{
   target: number;
@@ -87,6 +97,19 @@ const expectStartupTimersCleared = () => {
 };
 
 describe("StartupSplashOverlay", () => {
+  it("lays out native lettering below the hands without an SVG mask", async () => {
+    const Frame = () => (
+      <HandsConnectArtwork elapsed={useSharedValue(1000)} width={220} />
+    );
+    const view = await render(<Frame />);
+    const wordmark = view.getByTestId("startup-splash-wordmark");
+    expect(wordmark).toHaveStyle({
+      top: MARK_HEIGHT + WORDMARK_GAP,
+      height: WORDMARK_HEIGHT,
+      opacity: 1,
+    });
+    expect(view.getByText("InTouch")).toBeTruthy();
+  });
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
@@ -129,14 +152,14 @@ describe("StartupSplashOverlay", () => {
     expect(withTiming).not.toHaveBeenCalled();
     await act(() => resolveHide?.());
     expect(withTiming).toHaveBeenCalledWith(
-      1300,
-      expect.objectContaining({ duration: 1300 }),
+      1700,
+      expect.objectContaining({ duration: 1700 }),
       expect.any(Function),
     );
     // Elapsed JS time cannot finish the motion: the UI-thread completion drives it.
-    await act(() => jest.advanceTimersByTime(1600));
+    await act(() => jest.advanceTimersByTime(2000));
     expect(onDismiss).not.toHaveBeenCalled();
-    await complete(1300);
+    await complete(1700);
     expect(withTiming).toHaveBeenLastCalledWith(
       0,
       expect.objectContaining({ duration: 300 }),
@@ -151,8 +174,8 @@ describe("StartupSplashOverlay", () => {
   it("does not treat a cancelled motion callback as successful completion", async () => {
     const view = await render(<StartupSplashOverlay {...defaults} />);
     await handoff(view);
-    await complete(1300, false);
-    expect(mockAnimations.map(({ target }) => target)).toEqual([1300]);
+    await complete(1700, false);
+    expect(mockAnimations.map(({ target }) => target)).toEqual([1700]);
     await act(() => jest.advanceTimersByTime(3000));
     expect(view.queryByTestId("startup-splash")).toBeNull();
   });
@@ -162,7 +185,7 @@ describe("StartupSplashOverlay", () => {
       <StartupSplashOverlay {...defaults} appearanceReady={false} />,
     );
     await handoff(view);
-    await complete(1300);
+    await complete(1700);
     await act(() => jest.advanceTimersByTime(1999));
     expect(mockAnimations).toHaveLength(1);
     await act(() => jest.advanceTimersByTime(1));
@@ -176,7 +199,7 @@ describe("StartupSplashOverlay", () => {
       <StartupSplashOverlay {...defaults} appearanceReady={false} />,
     );
     await handoff(view);
-    await complete(1300);
+    await complete(1700);
     await view.rerender(<StartupSplashOverlay {...defaults} />);
     expect(mockAnimations).toHaveLength(2);
     await act(() => jest.advanceTimersByTime(2000));
@@ -213,7 +236,7 @@ describe("StartupSplashOverlay", () => {
         />,
       );
       await handoff(view);
-      await complete(1300);
+      await complete(1700);
       await complete(0);
       expect(view.queryByTestId("startup-splash")).toBeNull();
     },
@@ -274,7 +297,7 @@ describe("StartupSplashOverlay", () => {
     await view.rerender(
       <StartupSplashOverlay {...defaults} interrupted onDismiss={onDismiss} />,
     );
-    await complete(1300);
+    await complete(1700);
     await view.rerender(
       <StartupSplashOverlay {...defaults} onDismiss={onDismiss} />,
     );
@@ -321,7 +344,7 @@ describe("StartupSplashOverlay", () => {
     );
     await handoff(view);
     await view.unmount();
-    await complete(1300);
+    await complete(1700);
     await act(() => jest.advanceTimersByTime(3000));
     expect(cancelAnimation).toHaveBeenCalled();
     expectStartupTimersCleared();
@@ -346,7 +369,7 @@ describe("StartupSplashOverlay", () => {
     expect(
       view.getByText(destination, { includeHiddenElements: true }),
     ).toBeTruthy();
-    await complete(1300);
+    await complete(1700);
     await complete(0);
     expect(view.getByText(destination)).toBeTruthy();
   });
@@ -359,7 +382,7 @@ describe("StartupSplashOverlay", () => {
       </View>,
     );
     await handoff(view);
-    await complete(1300);
+    await complete(1700);
     await complete(0);
     expect(view.queryByTestId("startup-splash")).toBeNull();
     expect(view.getByText("Restoring your session")).toBeTruthy();

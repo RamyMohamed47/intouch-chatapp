@@ -98,10 +98,11 @@ links target the `intouch://` scheme and retain the HTTPS web link as fallback.
 
 ## Runtime Behavior
 
-- Cold launches hand off from the original native PNG to a 1.6-second "Hands
+- Cold launches hand off from the original native PNG to a two-second "Hands
   Connect" overlay: separate SVG hands approach, a spark bridges their fingertips,
-  and a ripple reveals the lettering before a 300 ms fade. Reanimated drives the
-  UI-thread timeline and completion callbacks while authentication and
+  and native lettering fades upward below the hands before a 300 ms fade. Its
+  measured layout reserves space for the name without an SVG mask. Reanimated
+  drives the UI-thread timeline and completion callbacks while authentication and
   notification routing start underneath it. Reduced-motion devices receive the
   original static PNG and a 150 ms fade. Theme restoration is bounded to two
   seconds and a three-second watchdog dismisses a stalled overlay. Ringing calls

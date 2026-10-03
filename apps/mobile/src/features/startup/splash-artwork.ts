@@ -3,7 +3,10 @@
 export const SPLASH_BACKGROUND = "#07101f";
 export const MARK_WIDTH = 220;
 export const MARK_HEIGHT = (MARK_WIDTH * 731) / 1240;
-export const MOTION_DURATION_MS = 1_300;
+export const MOTION_DURATION_MS = 1_700;
+export const FADE_DURATION_MS = 300;
+export const WORDMARK_HEIGHT = 54;
+export const WORDMARK_GAP = 14;
 
 export const AMBER_HAND = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 731">
 <defs>
@@ -42,11 +45,11 @@ export function sampleSplashMotion(time: number) {
   const phase = (start: number, duration: number) =>
     Math.max(0, Math.min(1, (time - start) / duration));
   const ease = (value: number) => 1 - (1 - value) ** 3;
-  const approach = ease(phase(180, 440));
-  const spark = phase(620, 380);
-  const reveal = ease(phase(900, 400));
-  const blueRing = ease(phase(680, 530));
-  const amberRing = ease(phase(760, 540));
+  const approach = ease(phase(180, 620));
+  const spark = phase(800, 450);
+  const reveal = ease(phase(360, 640));
+  const blueRing = ease(phase(870, 630));
+  const amberRing = ease(phase(970, 630));
   return {
     vectorOpacity: phase(0, 180),
     amberX: -48 * (1 - approach),
@@ -59,14 +62,13 @@ export function sampleSplashMotion(time: number) {
       (1 - spark) ** 2 * 646 + 2 * (1 - spark) * spark * 620 + spark ** 2 * 599,
     sparkY:
       (1 - spark) ** 2 * 337 + 2 * (1 - spark) * spark * 311 + spark ** 2 * 353,
-    sparkOpacity: phase(620, 70) * (1 - phase(950, 150)),
+    sparkOpacity: phase(800, 90) * (1 - phase(1_200, 180)),
     sparkWarmth: spark,
     blueRadius: 16 + blueRing * 175,
-    blueOpacity: phase(680, 80) * (1 - blueRing) * 0.7,
+    blueOpacity: phase(870, 80) * (1 - blueRing) * 0.7,
     amberRadius: 12 + amberRing * 140,
-    amberOpacity: phase(760, 80) * (1 - amberRing) * 0.55,
-    revealRadius: reveal * 170,
-    wordmarkOpacity: phase(900, 150),
+    amberOpacity: phase(970, 80) * (1 - amberRing) * 0.55,
+    wordmarkOpacity: phase(360, 400),
     wordmarkY: 8 * (1 - reveal),
   };
 }

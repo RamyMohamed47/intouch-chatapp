@@ -18,10 +18,13 @@ import intouchMark from "../../../../web/public/brand/intouch-mark.png";
 
 import { HandsConnectArtwork } from "./hands-connect-artwork";
 import {
+  FADE_DURATION_MS,
   MARK_HEIGHT,
   MARK_WIDTH,
   MOTION_DURATION_MS,
   SPLASH_BACKGROUND,
+  WORDMARK_GAP,
+  WORDMARK_HEIGHT,
 } from "./splash-artwork";
 
 import { useAppearance } from "@/features/appearance/appearance-provider";
@@ -66,6 +69,8 @@ export const StartupSplashOverlay = ({
     Math.max(1, width - 32),
     Math.max(1, height - 120),
   );
+  const logoHeight = (logoWidth * MARK_HEIGHT) / MARK_WIDTH;
+  const wordmarkSpace = WORDMARK_GAP + WORDMARK_HEIGHT;
 
   const hideNative = useCallback(() => {
     if (!hidePromise.current) {
@@ -167,7 +172,7 @@ export const StartupSplashOverlay = ({
     overlayOpacity.value = withTiming(
       0,
       {
-        duration: reducedMotion || imageFailed ? 150 : 300,
+        duration: reducedMotion || imageFailed ? 150 : FADE_DURATION_MS,
         easing: Easing.inOut(Easing.quad),
       },
       (finished) => {
@@ -209,10 +214,14 @@ export const StartupSplashOverlay = ({
         importantForAccessibility="no-hide-descendants"
         style={{
           width: logoWidth,
-          height: (logoWidth * MARK_HEIGHT) / MARK_WIDTH,
+          height: logoHeight + wordmarkSpace,
+          // Reserve lettering space without shifting the logo at native handoff.
+          transform: [{ translateY: wordmarkSpace / 2 }],
         }}
       >
-        <Animated.View style={[StyleSheet.absoluteFill, imageStyle]}>
+        <Animated.View
+          style={[styles.logo, { height: logoHeight }, imageStyle]}
+        >
           <Image
             accessible={false}
             contentFit="contain"
@@ -248,6 +257,7 @@ export const StartupSplash = () => {
 };
 
 const styles = StyleSheet.create({
+  logo: { position: "absolute", top: 0, left: 0, right: 0 },
   overlay: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",
