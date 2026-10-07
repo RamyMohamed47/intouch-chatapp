@@ -291,6 +291,26 @@ describe("invitation service", () => {
     );
   });
 
+  test("does not reveal registered emails to callers who cannot invite", async () => {
+    const outsiderUserId = "507f1f77bcf86cd799439099";
+    const attempt = (invitedUserExists: boolean) =>
+      createHarness({ invitedUserExists })
+        .service.create(outsiderUserId, organizationId, {
+          email: invitedUser.email,
+        })
+        .then(
+          () => "created",
+          (error: unknown) => (error as Error).name,
+        );
+
+    const known = await attempt(true);
+    const unknown = await attempt(false);
+
+    assert.equal(known, unknown);
+    assert.notEqual(known, "created");
+    assert.notEqual(known, InvitationTargetNotFoundError.name);
+  });
+
   test("replaces an expired invitation", async () => {
     const { records, service } = createHarness({
       existingInvitation: {

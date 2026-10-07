@@ -2,7 +2,7 @@ import type { ErrorRequestHandler, Request, Response } from "express";
 import { errorResponseSchema } from "@intouch/shared/common";
 
 import { getLogger } from "../config/logger.js";
-import type { ErrorCode } from "../errors/AppError.js";
+import AppError, { type ErrorCode } from "../errors/AppError.js";
 import ValidationError from "../errors/ValidationError.js";
 import { getNormalizedRoute } from "../infrastructure/observability/observability.middleware.js";
 import { captureUnexpectedError } from "../infrastructure/observability/observability.sentry.js";
@@ -29,6 +29,18 @@ const isValidationError = (err: unknown): err is ValidationErrorLike =>
   Object.values(err.errors).every(
     (error) => isObject(error) && typeof error.message === "string",
   );
+
+// body-parser failures are client mistakes, not unexpected server errors.
+const toBodyParserError = (err: unknown): AppError | undefined => {
+  if (!isObject(err)) return undefined;
+  if (err.type === "entity.parse.failed") {
+    return new ValidationError("Malformed request body");
+  }
+  if (err.type === "entity.too.large") {
+    return new AppError("Request body is too large", 413, "VALIDATION_ERROR");
+  }
+  return undefined;
+};
 
 const toOperationalError = (err: unknown): OperationalError => {
   if (err instanceof Error) {
@@ -97,7 +109,7 @@ const handleError: ErrorRequestHandler = (err, req, res, next) => {
 
   const error: OperationalError = isValidationError(err)
     ? new ValidationError(getValidationErrorMessage(err))
-    : toOperationalError(err);
+    : (toBodyParserError(err) ?? toOperationalError(err));
 
   if (process.env.NODE_ENV !== "test") {
     const logger = getLogger();

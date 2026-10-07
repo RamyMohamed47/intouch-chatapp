@@ -11,6 +11,7 @@ import { randomBytes } from "node:crypto";
 import {
   EmailVerificationStatus,
   UserIdentityConflictError,
+  type AuthAccount,
   type AuthUserRepository,
 } from "../user/index.js";
 import type { MailOutboxJobFactory } from "../mail/index.js";
@@ -25,11 +26,12 @@ import {
   InvalidRefreshTokenError,
 } from "./auth.errors.js";
 import type { AuthSessionRepository } from "./auth.repository.js";
-import type { AuthUnitOfWork } from "./auth.unit-of-work.js";
+import type { AuthUnitOfWork, AuthWorkContext } from "./auth.unit-of-work.js";
 import type { LoginProtectionService } from "./auth.login-protection.js";
 import type { AuthMailProtectionService } from "./auth.mail-protection.js";
 import type {
   AccessTokenManager,
+  AuthRequestContext,
   AuthResult,
   GoogleAuthResult,
   GoogleIdentity,
@@ -41,6 +43,7 @@ import type {
 } from "./auth.types.js";
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFRESH_REUSE_GRACE_MS = 30 * 1000;
 const MAX_USERNAME_ATTEMPTS = 5;
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 15 * 60 * 1000;
@@ -131,20 +134,39 @@ const createAuthService = ({
   };
 
   const linkGoogleIdentity = async (
-    userRepository: AuthUserRepository,
-    user: AuthResult["user"],
+    context: AuthWorkContext,
+    account: AuthAccount,
     identity: GoogleIdentity,
     usedAt: Date,
   ) => {
+    const { user } = account;
+    // A password nobody proved ownership of must not survive verification.
+    const removePasswordProvider =
+      account.emailVerificationStatus === EmailVerificationStatus.PENDING;
+
     try {
-      const linkedUser = await userRepository.linkGoogleProvider(
+      const linkedUser = await context.users.linkGoogleProvider(
         user.id,
         identity.providerAccountId,
         usedAt,
         identity.avatarUrl,
+        { removePasswordProvider },
       );
 
       if (linkedUser) {
+        if (removePasswordProvider) {
+          await context.sessions.deleteByUserId(user.id);
+          await context.actionTokens.deleteForUser(
+            user.id,
+            AuthActionPurpose.VERIFY_EMAIL,
+          );
+          await context.actionTokens.deleteForUser(
+            user.id,
+            AuthActionPurpose.RESET_PASSWORD,
+          );
+          await context.mailOutbox.cancel(`auth-verification:${user.id}`);
+          await context.mailOutbox.cancel(`auth-reset:${user.id}`);
+        }
         return linkedUser;
       }
     } catch (error) {
@@ -153,7 +175,7 @@ const createAuthService = ({
       }
     }
 
-    const providerUser = await userRepository.useGoogleProvider(
+    const providerUser = await context.users.useGoogleProvider(
       identity.providerAccountId,
       usedAt,
       identity.avatarUrl,
@@ -167,9 +189,10 @@ const createAuthService = ({
   };
 
   const resolveGoogleUser = async (
-    userRepository: AuthUserRepository,
+    context: AuthWorkContext,
     identity: GoogleIdentity,
   ) => {
+    const userRepository = context.users;
     const usedAt = now();
     const providerUser = await userRepository.useGoogleProvider(
       identity.providerAccountId,
@@ -181,10 +204,12 @@ const createAuthService = ({
       return providerUser;
     }
 
-    const emailUser = await userRepository.findPublicByEmail(identity.email);
+    const emailAccount = await userRepository.findAuthAccountByEmail(
+      identity.email,
+    );
 
-    if (emailUser) {
-      return linkGoogleIdentity(userRepository, emailUser, identity, usedAt);
+    if (emailAccount) {
+      return linkGoogleIdentity(context, emailAccount, identity, usedAt);
     }
 
     for (let attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt += 1) {
@@ -218,14 +243,14 @@ const createAuthService = ({
           return racedProviderUser;
         }
 
-        const racedEmailUser = await userRepository.findPublicByEmail(
+        const racedEmailAccount = await userRepository.findAuthAccountByEmail(
           identity.email,
         );
 
-        if (racedEmailUser) {
+        if (racedEmailAccount) {
           return linkGoogleIdentity(
-            userRepository,
-            racedEmailUser,
+            context,
+            racedEmailAccount,
             identity,
             usedAt,
           );
@@ -242,7 +267,7 @@ const createAuthService = ({
     await loginProtection.clearAttempts(identity.email);
 
     return unitOfWork.run(async (context) => {
-      const user = await resolveGoogleUser(context.users, identity);
+      const user = await resolveGoogleUser(context, identity);
       await context.users.markEmailVerified(user.id, now());
       return issueAuthentication(user, context.sessions);
     });
@@ -317,8 +342,11 @@ const createAuthService = ({
       }
     },
 
-    async login(input: LoginInput): Promise<AuthResult> {
-      await loginProtection.reserveAttempt(input.email);
+    async login(
+      input: LoginInput,
+      { clientIp }: AuthRequestContext = {},
+    ): Promise<AuthResult> {
+      await loginProtection.reserveAttempt(input.email, clientIp);
       const passwordUser = await users.findPasswordUserByEmail(input.email);
       const passwordMatches = passwordUser
         ? await passwords.compare(input.password, passwordUser.passwordHash)
@@ -331,11 +359,11 @@ const createAuthService = ({
       if (
         passwordUser.emailVerificationStatus === EmailVerificationStatus.PENDING
       ) {
-        await loginProtection.clearAttempts(input.email);
+        await loginProtection.clearAttempts(input.email, clientIp);
         throw new EmailVerificationRequiredError();
       }
 
-      await loginProtection.clearAttempts(input.email);
+      await loginProtection.clearAttempts(input.email, clientIp);
 
       return unitOfWork.run(async (context) => {
         await context.users.touchPasswordProvider(passwordUser.user.id, now());
@@ -430,7 +458,10 @@ const createAuthService = ({
       });
     },
 
-    async resetPassword(input: ResetPasswordInput): Promise<void> {
+    async resetPassword(
+      input: ResetPasswordInput,
+      { clientIp }: AuthRequestContext = {},
+    ): Promise<void> {
       const parsedToken = actionTokens.parse(input.token);
       if (!parsedToken) throw new InvalidOrExpiredAuthTokenError();
       const passwordHash = await passwords.hash(input.password);
@@ -460,7 +491,7 @@ const createAuthService = ({
         return updated.email;
       });
 
-      await loginProtection.clearAttempts(email);
+      await loginProtection.clearAttempts(email, clientIp);
     },
 
     async refresh(token: string): Promise<RefreshResult> {
@@ -476,6 +507,7 @@ const createAuthService = ({
         currentTokenHash: refreshTokens.hash(token),
         nextTokenHash: refreshTokens.hash(nextRefreshToken.token),
         now: now(),
+        reuseGraceMs: REFRESH_REUSE_GRACE_MS,
       });
 
       if (!userId) {

@@ -13,14 +13,17 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
+import { AppState } from "react-native";
 
 import { configureAuthTransport } from "@/core/api/client";
 import { mobileConfig } from "@/core/config";
 import { authApi } from "@/features/auth/auth-api";
+import { isSessionRejected } from "@/features/auth/session-policy";
 import { sessionStore } from "@/features/auth/session-store";
 import { pushDeviceStore } from "@/features/push/push-device-store";
 
-type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+type AuthStatus =
+  "loading" | "authenticated" | "unauthenticated" | "unreachable";
 
 interface AuthContextValue {
   accessToken: string | null;
@@ -28,6 +31,7 @@ interface AuthContextValue {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<string | null>;
+  retry: () => void;
   status: AuthStatus;
   updateUser: (user: PublicUserDto) => void;
   user: PublicUserDto | null;
@@ -78,8 +82,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         setAccessToken(result.accessToken);
         await sessionStore.setRefreshToken(result.refreshToken);
         return result.accessToken;
-      } catch {
-        await clearSession();
+      } catch (error) {
+        if (isSessionRejected(error)) await clearSession();
         return null;
       }
     })().finally(() => {
@@ -89,27 +93,51 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     return refreshPromiseRef.current;
   }, [clearSession]);
 
+  const restore = useCallback(async () => {
+    const token = await refresh();
+    if (!token) {
+      // A stored credential that could not be checked is kept for a retry.
+      setStatus(
+        (await sessionStore.getRefreshToken())
+          ? "unreachable"
+          : "unauthenticated",
+      );
+      return;
+    }
+
+    try {
+      setUser(await authApi.me());
+      setStatus("authenticated");
+    } catch (error) {
+      if (isSessionRejected(error)) {
+        await clearSession();
+      } else {
+        setStatus("unreachable");
+      }
+    }
+  }, [clearSession, refresh]);
+
+  const retry = useCallback(() => {
+    setStatus("loading");
+    void restore();
+  }, [restore]);
+
   useEffect(() => {
     configureAuthTransport({
       getAccessToken: () => accessTokenRef.current,
       refresh,
     });
 
-    void (async () => {
-      const token = await refresh();
-      if (!token) {
-        setStatus("unauthenticated");
-        return;
-      }
+    void restore();
+  }, [refresh, restore]);
 
-      try {
-        setUser(await authApi.me());
-        setStatus("authenticated");
-      } catch {
-        await clearSession();
-      }
-    })();
-  }, [clearSession, refresh]);
+  useEffect(() => {
+    if (status !== "unreachable") return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") retry();
+    });
+    return () => subscription.remove();
+  }, [retry, status]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -153,6 +181,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         loginWithGoogle,
         logout,
         refresh,
+        retry,
         status,
         updateUser: setUser,
         user,

@@ -6,6 +6,8 @@ export interface AuthSession {
   _id: string;
   userId: Types.ObjectId;
   tokenHash: string;
+  previousTokenHash?: string;
+  rotatedAt?: Date;
   expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -27,6 +29,8 @@ const authSessionSchema = new Schema<AuthSession>(
       type: String,
       required: true,
     },
+    previousTokenHash: String,
+    rotatedAt: Date,
     expiresAt: {
       type: Date,
       required: true,

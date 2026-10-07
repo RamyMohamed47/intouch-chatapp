@@ -152,6 +152,43 @@ describe("handleError", () => {
     });
   });
 
+  test("reports body-parser failures as client errors", () => {
+    const malformed = Object.assign(new SyntaxError("Unexpected token"), {
+      statusCode: 400,
+      type: "entity.parse.failed",
+    });
+    const tooLarge = Object.assign(new Error("request entity too large"), {
+      statusCode: 413,
+      type: "entity.too.large",
+    });
+    const malformedResponse = createResponse();
+    const tooLargeResponse = createResponse();
+
+    handleError(
+      malformed,
+      {} as Request,
+      malformedResponse as unknown as Response,
+      noopNext,
+    );
+    handleError(
+      tooLarge,
+      {} as Request,
+      tooLargeResponse as unknown as Response,
+      noopNext,
+    );
+
+    assert.equal(malformedResponse.statusCode, 400);
+    assert.deepEqual(malformedResponse.body, {
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: "Malformed request body" },
+    });
+    assert.equal(tooLargeResponse.statusCode, 413);
+    assert.deepEqual(tooLargeResponse.body, {
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: "Request body is too large" },
+    });
+  });
+
   test("formats mongoose validation errors as bad requests", () => {
     const err = {
       name: "ValidationError",

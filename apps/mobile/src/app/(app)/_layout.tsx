@@ -5,6 +5,7 @@ import { AppDrawerContent } from "@/components/app-shell";
 import { StateView } from "@/components/ui/screen";
 import { useAppearance } from "@/features/appearance/appearance-provider";
 import { useAuth } from "@/features/auth/auth-provider";
+import { SessionUnreachable } from "@/features/auth/session-unreachable";
 
 export default function ProtectedLayout() {
   const { status } = useAuth();
@@ -14,6 +15,7 @@ export default function ProtectedLayout() {
       <StateView loading title="Restoring your session" message="One moment." />
     );
   }
+  if (status === "unreachable") return <SessionUnreachable />;
   if (status !== "authenticated") return <Redirect href="/login" />;
 
   return (

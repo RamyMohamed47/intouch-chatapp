@@ -132,6 +132,99 @@ describe("authentication transactions", () => {
     assert.equal(linked?.avatarUrl, "https://example.com/linked-avatar.png");
   });
 
+  test("removes an unverified password when linking Google", async () => {
+    const repository = createMongooseUserRepository();
+    const linkedAt = new Date("2026-09-02T10:00:00.000Z");
+    const pending = await repository.createPasswordUser({
+      username: "pending_link_user",
+      displayName: "Pending Link User",
+      email: "pending-link@example.com",
+      passwordHash: "hashed:attacker-password",
+    });
+
+    const linked = await repository.linkGoogleProvider(
+      pending.id,
+      "pending-google-account",
+      linkedAt,
+      undefined,
+      { removePasswordProvider: true },
+    );
+
+    assert.equal(linked?.id, pending.id);
+    assert.equal(
+      await repository.findPasswordUserByEmail("pending-link@example.com"),
+      null,
+    );
+    assert.equal(
+      (await repository.useGoogleProvider("pending-google-account", linkedAt))
+        ?.id,
+      pending.id,
+    );
+    const account = await repository.findAuthAccountByEmail(
+      "pending-link@example.com",
+    );
+    assert.equal(account?.hasPassword, false);
+    assert.equal(account?.emailVerificationStatus, "VERIFIED");
+  });
+
+  test("keeps a verified password when asked to remove a pending one", async () => {
+    const repository = createMongooseUserRepository();
+    const linkedAt = new Date("2026-09-02T10:00:00.000Z");
+    const verified = await repository.createPasswordUser({
+      username: "verified_link_user",
+      displayName: "Verified Link User",
+      email: "verified-link@example.com",
+      passwordHash: "hashed:owner-password",
+    });
+    await repository.markEmailVerified(verified.id, linkedAt);
+
+    const linked = await repository.linkGoogleProvider(
+      verified.id,
+      "verified-google-account",
+      linkedAt,
+      undefined,
+      { removePasswordProvider: true },
+    );
+
+    assert.equal(linked, null);
+    assert.notEqual(
+      await repository.findPasswordUserByEmail("verified-link@example.com"),
+      null,
+    );
+  });
+
+  test("rotates a session once per token outside the grace window", async () => {
+    const sessions = createMongooseAuthSessionRepository();
+    const issuedAt = new Date("2026-09-02T10:00:00.000Z");
+    const id = "11111111-1111-4111-8111-111111111111";
+    await sessions.create({
+      id,
+      userId: new mongoose.Types.ObjectId().toString(),
+      tokenHash: "first",
+      expiresAt: new Date(issuedAt.getTime() + 60 * 60 * 1000),
+    });
+    const rotate = (
+      currentTokenHash: string,
+      nextTokenHash: string,
+      offsetMs: number,
+    ) =>
+      sessions.rotate({
+        id,
+        currentTokenHash,
+        nextTokenHash,
+        now: new Date(issuedAt.getTime() + offsetMs),
+        reuseGraceMs: 30_000,
+      });
+
+    assert.notEqual(await rotate("first", "second", 0), null);
+    assert.notEqual(await rotate("first", "third", 10_000), null);
+    assert.equal(await rotate("second", "fourth", 11_000), null);
+    assert.notEqual(await rotate("first", "fifth", 29_000), null);
+    assert.equal(await rotate("first", "sixth", 30_000), null);
+    assert.notEqual(await rotate("fifth", "seventh", 31_000), null);
+    assert.equal(await rotate("first", "eighth", 32_000), null);
+  });
+
   test("rolls back registration when outbox creation fails", async () => {
     const unitOfWork: AuthUnitOfWork = {
       run: (work) =>

@@ -1,4 +1,4 @@
-import type { RequestHandler, Response } from "express";
+import type { Request, RequestHandler, Response } from "express";
 import {
   authRequestAcceptedResponseSchema,
   authResponseSchema,
@@ -32,6 +32,7 @@ import type { AuthService } from "./auth.service.js";
 import type {
   AuthCookieConfig,
   AuthLocals,
+  AuthRequestContext,
   OAuthStateManager,
 } from "./auth.types.js";
 
@@ -120,6 +121,9 @@ const getFrontendRedirect = (
   url.searchParams.set("googleAuth", status);
   return url.toString();
 };
+
+const getRequestContext = (req: Request): AuthRequestContext =>
+  req.ip ? { clientIp: req.ip } : {};
 
 const isExpectedGoogleFailure = (error: unknown) =>
   error instanceof InvalidGoogleAuthenticationError ||
@@ -217,19 +221,28 @@ const createAuthController = (
   }),
 
   resetPassword: catchAsync(async (req, res) => {
-    await authService.resetPassword(req.body as ResetPasswordInput);
+    await authService.resetPassword(
+      req.body as ResetPasswordInput,
+      getRequestContext(req),
+    );
     res.status(204).send();
   }),
 
   login: catchAsync(async (req, res) => {
-    const result = await authService.login(req.body as LoginInput);
+    const result = await authService.login(
+      req.body as LoginInput,
+      getRequestContext(req),
+    );
 
     setRefreshCookie(res, cookie, result.refreshToken);
     res.status(200).json(authResponseSchema.parse(result));
   }),
 
   mobileLogin: catchAsync(async (req, res) => {
-    const result = await authService.login(req.body as MobileLoginInput);
+    const result = await authService.login(
+      req.body as MobileLoginInput,
+      getRequestContext(req),
+    );
     res.status(200).json(mobileAuthResponseSchema.parse(result));
   }),
 

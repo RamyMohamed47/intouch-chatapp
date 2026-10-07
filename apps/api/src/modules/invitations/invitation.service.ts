@@ -81,12 +81,6 @@ const createInvitationService = ({
     organizationId: string,
     input: InviteMemberInput,
   ) {
-    const invitedUser = await users.findVerifiedPublicByEmail(input.email);
-
-    if (!invitedUser) {
-      throw new InvitationTargetNotFoundError();
-    }
-
     const currentTime = now();
     const expiresAt = new Date(currentTime.getTime() + INVITATION_LIFETIME_MS);
     const inviter = await users.findPublicById(inviterUserId);
@@ -103,6 +97,13 @@ const createInvitationService = ({
           organization,
           inviterMembership,
         );
+        // Resolved only for an authorized inviter so the outcome cannot be
+        // used to probe which email addresses are registered.
+        const invitedUser = await users.findVerifiedPublicByEmail(input.email);
+
+        if (!invitedUser) {
+          throw new InvitationTargetNotFoundError();
+        }
         if (!(await context.organizations.lockForMutation(organizationId))) {
           throw new OrganizationNotFoundError();
         }

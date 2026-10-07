@@ -29,6 +29,8 @@ erDiagram
         string id
         ObjectId userId
         string tokenHash
+        string previousTokenHash
+        datetime rotatedAt
         datetime expiresAt
         datetime createdAt
         datetime updatedAt
@@ -413,7 +415,12 @@ Google users/provider links and their initial `AuthSession` are committed in
 one MongoDB transaction. Password registration instead commits a pending user,
 a single-use verification token, and its encrypted outbox job atomically; it
 does not create an authenticated session until the user confirms the email and
-logs in.
+logs in. Linking Google to a pending password account removes the unverified
+`PASSWORD` provider in the same update.
+
+`AuthSession.previousTokenHash` and `rotatedAt` are optional and record the
+last rotation. The previous token is accepted for 30 seconds after `rotatedAt`
+without moving that timestamp, so a retried refresh cannot extend the window.
 
 `AuthActionToken` stores only an HMAC of the opaque token secret. Tokens are
 unique per `(userId, purpose)`, expire through a TTL index, and are consumed

@@ -42,6 +42,8 @@ npm run dev:mobile
 
 Frontend server settings are documented in `apps/web/.env.example`.
 `BACKEND_ORIGIN` is server-only and powers the same-origin API proxy;
+`PROXY_CLIENT_IP_SECRET` (the same value in the API and web environments) lets
+that proxy pass the browser address to the API for rate limiting;
 `NEXT_PUBLIC_SOCKET_ORIGIN` is the direct Socket.IO endpoint.
 `NEXT_PUBLIC_R2_ORIGIN` is the exact Cloudflare R2 S3 origin used only by
 browser presigned uploads and private asset reads. The application uses the

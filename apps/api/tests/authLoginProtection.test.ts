@@ -8,6 +8,7 @@ import type {
   ReserveLoginAttemptInput,
 } from "../src/modules/auth/auth.login-attempt.repository.js";
 import createLoginProtectionService, {
+  createLoginClientIdentifierHash,
   createLoginIdentifierHash,
 } from "../src/modules/auth/auth.login-protection.js";
 
@@ -45,6 +46,7 @@ describe("login protection", () => {
       attempts,
       policy: {
         attemptLimit: 10,
+        accountAttemptLimit: 100,
         windowMs: 900_000,
         cooldownMs: 900_000,
         hashSecret: secret,
@@ -84,6 +86,7 @@ describe("login protection", () => {
       },
       policy: {
         attemptLimit: 10,
+        accountAttemptLimit: 100,
         windowMs: 900_000,
         cooldownMs: 900_000,
         hashSecret: secret,
@@ -103,6 +106,84 @@ describe("login protection", () => {
     assert.equal(observed[0]?.attemptCount, 10);
     assert.equal(observed[0]?.blockedUntil, blockedUntil);
     assert.doesNotMatch(JSON.stringify(observed), /user@example\.com/i);
+  });
+
+  test("limits a known client per account and address", async () => {
+    const reserved: ReserveLoginAttemptInput[] = [];
+    const cleared: string[] = [];
+    const service = createLoginProtectionService({
+      attempts: {
+        reserve: async (input) => {
+          reserved.push(input);
+          return { allowed: true, attemptCount: 1 };
+        },
+        clear: async (identifierHash) => {
+          cleared.push(identifierHash);
+        },
+      },
+      policy: {
+        attemptLimit: 10,
+        accountAttemptLimit: 100,
+        windowMs: 900_000,
+        cooldownMs: 900_000,
+        hashSecret: secret,
+      },
+      now: () => now,
+    });
+    const accountHash = createLoginIdentifierHash("user@example.com", secret);
+    const clientHash = createLoginClientIdentifierHash(
+      "user@example.com",
+      "203.0.113.7",
+      secret,
+    );
+
+    await service.reserveAttempt("User@Example.com", "203.0.113.7");
+    await service.clearAttempts("user@example.com", "203.0.113.7");
+
+    assert.deepEqual(
+      reserved.map(({ identifierHash, limit }) => ({ identifierHash, limit })),
+      [
+        { identifierHash: clientHash, limit: 10 },
+        { identifierHash: accountHash, limit: 100 },
+      ],
+    );
+    assert.deepEqual(cleared, [accountHash, clientHash]);
+    assert.notEqual(clientHash, accountHash);
+    assert.notEqual(
+      createLoginClientIdentifierHash(
+        "user@example.com",
+        "203.0.113.8",
+        secret,
+      ),
+      clientHash,
+    );
+  });
+
+  test("stops at the client limit without spending the account budget", async () => {
+    const reserved: string[] = [];
+    const service = createLoginProtectionService({
+      attempts: {
+        reserve: async (input) => {
+          reserved.push(input.identifierHash);
+          return { allowed: false, attemptCount: 10 };
+        },
+        clear: async () => undefined,
+      },
+      policy: {
+        attemptLimit: 10,
+        accountAttemptLimit: 100,
+        windowMs: 900_000,
+        cooldownMs: 900_000,
+        hashSecret: secret,
+      },
+      now: () => now,
+    });
+
+    await assert.rejects(
+      service.reserveAttempt("user@example.com", "203.0.113.7"),
+      { statusCode: 429 },
+    );
+    assert.equal(reserved.length, 1);
   });
 
   test("declares unique identifier and TTL indexes", () => {

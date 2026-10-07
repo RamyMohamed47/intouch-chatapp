@@ -65,9 +65,11 @@ paths:
       summary: Authenticate user
       description: |
         Password login is protected by independent per-IP and per-account
-        attempt limits. The first ten account attempts within fifteen minutes
-        are admitted. Further attempts receive a generic 429 response during a
-        non-extending fifteen-minute cooldown.
+        attempt limits. The first ten attempts for an account from one client
+        address within fifteen minutes are admitted. Further attempts from
+        that address receive a generic 429 response during a non-extending
+        fifteen-minute cooldown. A higher account-wide ceiling applies across
+        all addresses.
       security: []
       requestBody:
         $ref: "#/components/requestBodies/LoginRequest"
@@ -133,7 +135,11 @@ paths:
     post:
       tags: [Authentication]
       summary: Rotate a native mobile refresh token
-      description: Accepts the refresh credential in a strict JSON body and returns a replacement pair without setting cookies.
+      description: |
+        Accepts the refresh credential in a strict JSON body and returns a
+        replacement pair without setting cookies. The immediately previous
+        credential is accepted for 30 seconds after rotation so a lost
+        response can be retried; later reuse revokes the session.
       security: []
       requestBody:
         $ref: "#/components/requestBodies/MobileRefreshRequest"
@@ -273,6 +279,10 @@ paths:
     post:
       tags: [Authentication]
       summary: Refresh access token
+      description: |
+        Rotates the refresh cookie. The immediately previous credential is
+        accepted for 30 seconds after rotation so a lost response can be
+        retried; later reuse revokes the session.
       security:
         - refreshCookie: []
       parameters:

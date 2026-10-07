@@ -14,6 +14,7 @@ import ForbiddenError from "./errors/ForbiddenError.js";
 import { createObservabilityMiddleware } from "./infrastructure/observability/observability.middleware.js";
 import handleError from "./middleware/errorHandler.js";
 import createHttpLogger from "./middleware/httpLogger.js";
+import createTrustedClientIp from "./middleware/trustedClientIp.js";
 
 export interface AppDependencies {
   allowedOrigins?: readonly string[];
@@ -45,6 +46,7 @@ export interface AppDependencies {
   voiceSessionRouter?: Router;
   voiceWebhookRouter?: Router;
   trustProxy?: boolean | number | string;
+  proxyClientIpSecret?: string;
   readiness?: { isReady(): boolean };
 }
 
@@ -78,11 +80,13 @@ const createApp = ({
   voiceSessionRouter,
   voiceWebhookRouter,
   trustProxy = false,
+  proxyClientIpSecret,
   readiness = { isReady: () => true },
 }: AppDependencies = {}) => {
   const app = express();
 
   app.set("trust proxy", trustProxy);
+  app.use(createTrustedClientIp(proxyClientIpSecret));
   app.use(helmet());
   app.use(
     cors({

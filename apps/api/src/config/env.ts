@@ -94,6 +94,7 @@ export interface AppConfig {
   googleOAuthClientSecret: string;
   googleOAuthFrontendRedirectUrl: string;
   googleOAuthStateCookieName: string;
+  loginAttemptAccountLimit: number;
   loginAttemptCooldownMs: number;
   loginAttemptLimit: number;
   loginAttemptWindowMs: number;
@@ -109,6 +110,7 @@ export interface AppConfig {
   port: number;
   searchProvider: "atlas" | "native";
   trustProxy: boolean | number | string;
+  proxyClientIpSecret?: string;
   storage: StorageConfig;
   uploadDailyUserBytes: number;
   organizationStorageBytes: number;
@@ -668,6 +670,12 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     googleOAuthStateCookieName: isProduction
       ? "__Secure-intouch_google_oauth_state"
       : "intouch_google_oauth_state",
+    loginAttemptAccountLimit: parseBoundedInteger(
+      env.LOGIN_ATTEMPT_ACCOUNT_LIMIT,
+      100,
+      "LOGIN_ATTEMPT_ACCOUNT_LIMIT",
+      10_000,
+    ),
     loginAttemptCooldownMs: parseBoundedInteger(
       env.LOGIN_ATTEMPT_COOLDOWN_MS,
       15 * 60 * 1000,
@@ -718,6 +726,14 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     push: parsePush(env, isProduction),
     voice: parseVoice(env, isProduction),
     trustProxy: isProduction ? 1 : "loopback",
+    ...(env.PROXY_CLIENT_IP_SECRET
+      ? {
+          proxyClientIpSecret: validateSecret(
+            env.PROXY_CLIENT_IP_SECRET,
+            "PROXY_CLIENT_IP_SECRET",
+          ),
+        }
+      : {}),
     webAppUrl: parseWebAppUrl(
       requireEnv(env, "WEB_APP_URL"),
       clientOrigins,

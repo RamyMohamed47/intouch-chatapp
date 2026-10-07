@@ -14,6 +14,7 @@ export interface RotateAuthSessionInput {
   currentTokenHash: string;
   nextTokenHash: string;
   now: Date;
+  reuseGraceMs: number;
 }
 
 export interface AuthSessionRepository {
@@ -42,15 +43,37 @@ const createMongooseAuthSessionRepository = (
   },
 
   async rotate(input) {
+    const presentsCurrentToken = {
+      $eq: ["$tokenHash", input.currentTokenHash],
+    };
     const query = AuthSessionModel.findOneAndUpdate(
       {
         _id: input.id,
-        tokenHash: input.currentTokenHash,
         expiresAt: { $gt: input.now },
+        $or: [
+          { tokenHash: input.currentTokenHash },
+          {
+            previousTokenHash: input.currentTokenHash,
+            rotatedAt: {
+              $gt: new Date(input.now.getTime() - input.reuseGraceMs),
+            },
+          },
+        ],
       },
-      {
-        $set: { tokenHash: input.nextTokenHash },
-      },
+      [
+        {
+          // A grace-window retry must not move the window forward.
+          $set: {
+            tokenHash: input.nextTokenHash,
+            previousTokenHash: {
+              $cond: [presentsCurrentToken, "$tokenHash", "$previousTokenHash"],
+            },
+            rotatedAt: {
+              $cond: [presentsCurrentToken, input.now, "$rotatedAt"],
+            },
+          },
+        },
+      ],
       {
         new: false,
       },

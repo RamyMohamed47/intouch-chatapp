@@ -59,6 +59,8 @@ describe("auth environment configuration", () => {
       "intouch_google_oauth_state",
     );
     assert.equal(config.loginAttemptLimit, 10);
+    assert.equal(config.loginAttemptAccountLimit, 100);
+    assert.equal(config.proxyClientIpSecret, undefined);
     assert.equal(config.loginAttemptWindowMs, 900_000);
     assert.equal(config.loginAttemptCooldownMs, 900_000);
     assert.equal(config.searchProvider, "native");

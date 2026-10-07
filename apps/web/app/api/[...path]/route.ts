@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { applyProxyClientIp } from "@/lib/api/client-ip";
 import { buildBackendProxyTarget } from "@/lib/api/proxy-target";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ const proxy = async (request: NextRequest) => {
   headers.delete("connection");
   headers.delete("content-length");
   headers.delete("host");
+  applyProxyClientIp(headers);
 
   const response = await fetch(target, {
     method: request.method,

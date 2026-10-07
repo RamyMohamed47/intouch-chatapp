@@ -34,6 +34,7 @@ export interface AuthModuleConfig {
   };
   loginProtection: {
     attemptLimit: number;
+    accountAttemptLimit: number;
     cooldownMs: number;
     hashSecret: string;
     windowMs: number;

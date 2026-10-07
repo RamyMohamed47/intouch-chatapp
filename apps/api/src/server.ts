@@ -369,6 +369,7 @@ const auth = createAuthModule({
   },
   loginProtection: {
     attemptLimit: config.loginAttemptLimit,
+    accountAttemptLimit: config.loginAttemptAccountLimit,
     cooldownMs: config.loginAttemptCooldownMs,
     hashSecret: config.loginThrottleSecret,
     windowMs: config.loginAttemptWindowMs,
@@ -615,11 +616,19 @@ const app = createApp({
   voiceSessionRouter: organizations.voiceSessionRouter,
   voiceWebhookRouter: organizations.voiceWebhookRouter,
   trustProxy: config.trustProxy,
+  ...(config.proxyClientIpSecret
+    ? { proxyClientIpSecret: config.proxyClientIpSecret }
+    : {}),
   readiness: {
     isReady: () =>
       isDatabaseReady() && runtimeState.isReady() && backgroundJobs.isReady(),
   },
 });
+if (!config.proxyClientIpSecret && process.env.NODE_ENV === "production") {
+  logger.warn(
+    "PROXY_CLIENT_IP_SECRET is not set; requests proxied by the web service share one rate-limit address",
+  );
+}
 const server = http.createServer(app);
 const io = new Server<
   ClientToServerEvents,

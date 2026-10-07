@@ -60,6 +60,10 @@ export interface RegistrationPendingResult {
   verificationRequired: true;
 }
 
+export interface AuthRequestContext {
+  clientIp?: string;
+}
+
 export interface AuthLocals {
   refreshToken?: string;
   userId?: string;

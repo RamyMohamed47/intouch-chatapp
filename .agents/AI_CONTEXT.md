@@ -47,7 +47,16 @@
 - Access tokens are 15-minute HS256 Bearer JWTs.
 - Refresh tokens are rotating opaque credentials stored only in HttpOnly cookies.
 - MongoDB stores only refresh-token hashes in `AuthSession` documents.
+- Refresh rotation accepts the immediately previous token for 30 seconds so a
+  lost response can be retried; reuse after that window revokes the session.
+  Clients end a stored session only on an explicit 400/401 rejection, never on
+  a network, throttling, or server failure.
 - Production browser traffic reaches Railway through the frontend's same-origin API proxy.
+- The web proxy forwards the browser address in `X-InTouch-Client-IP` together
+  with `PROXY_CLIENT_IP_SECRET`; the API uses it for rate limiting only when
+  the secret matches and strips both headers from every request.
+- Password login is limited per account and client address, with a higher
+  account-wide ceiling (`LOGIN_ATTEMPT_ACCOUNT_LIMIT`) across all addresses.
 - Refresh requests require an allowlisted Origin and `X-CSRF-Protection: 1`.
 - Shared request contracts are exported by the `@intouch/shared` workspace.
 - Password registration creates a pending account and a single-use email
@@ -61,7 +70,9 @@
   invitations are emailed to verified users.
 - Google sign-in uses a backend-owned authorization-code redirect flow.
 - Google identities are keyed by the verified ID-token `sub` claim and linked
-  to existing users only through verified email addresses.
+  to existing users only through verified email addresses. Linking Google to
+  a still-pending password account removes that unverified password, its
+  action tokens, and its sessions in the same transaction.
 - Google tokens are discarded after verification; InTouch continues to own JWT
   access tokens and rotating refresh sessions.
 - Native mobile authentication returns access and refresh tokens through strict

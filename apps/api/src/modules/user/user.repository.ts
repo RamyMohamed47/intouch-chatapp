@@ -31,6 +31,10 @@ export interface CreateGoogleUserInput {
   usedAt: Date;
 }
 
+export interface LinkGoogleProviderOptions {
+  removePasswordProvider?: boolean;
+}
+
 export interface UserRepository {
   hasIdentityConflict(email: string, username: string): Promise<boolean>;
   createPasswordUser(input: CreatePasswordUserInput): Promise<PublicUser>;
@@ -47,6 +51,7 @@ export interface UserRepository {
     providerAccountId: string,
     usedAt: Date,
     avatarUrl?: string,
+    options?: LinkGoogleProviderOptions,
   ): Promise<PublicUser | null>;
   touchPasswordProvider(userId: string, usedAt: Date): Promise<void>;
   useGoogleProvider(
@@ -288,32 +293,70 @@ const createMongooseUserRepository = (
     }));
   },
 
-  async linkGoogleProvider(userId, providerAccountId, usedAt, avatarUrl) {
+  async linkGoogleProvider(
+    userId,
+    providerAccountId,
+    usedAt,
+    avatarUrl,
+    { removePasswordProvider = false } = {},
+  ) {
+    const googleProvider = {
+      provider: AuthProvider.GOOGLE,
+      providerAccountId,
+      linkedAt: usedAt,
+      lastUsedAt: usedAt,
+    };
+    const verification = {
+      emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+      emailVerifiedAt: usedAt,
+      ...(avatarUrl ? { avatarUrl } : {}),
+    };
+    const withoutGoogleProvider = {
+      $not: { $elemMatch: { provider: AuthProvider.GOOGLE } },
+    };
+
     try {
-      const query = UserModel.findOneAndUpdate(
-        {
-          _id: userId,
-          loginProviders: {
-            $not: { $elemMatch: { provider: AuthProvider.GOOGLE } },
-          },
-        },
-        {
-          $push: {
-            loginProviders: {
-              provider: AuthProvider.GOOGLE,
-              providerAccountId,
-              linkedAt: usedAt,
-              lastUsedAt: usedAt,
+      const query = removePasswordProvider
+        ? UserModel.findOneAndUpdate(
+            {
+              _id: userId,
+              emailVerificationStatus: EmailVerificationStatus.PENDING,
+              loginProviders: withoutGoogleProvider,
             },
-          },
-          $set: {
-            emailVerificationStatus: EmailVerificationStatus.VERIFIED,
-            emailVerifiedAt: usedAt,
-            ...(avatarUrl ? { avatarUrl } : {}),
-          },
-        },
-        { new: true },
-      ).lean<UserRecord>();
+            [
+              {
+                $set: {
+                  ...verification,
+                  loginProviders: {
+                    $concatArrays: [
+                      {
+                        $filter: {
+                          input: "$loginProviders",
+                          as: "loginProvider",
+                          cond: {
+                            $ne: [
+                              "$$loginProvider.provider",
+                              AuthProvider.PASSWORD,
+                            ],
+                          },
+                        },
+                      },
+                      [{ ...googleProvider, metadata: {} }],
+                    ],
+                  },
+                },
+              },
+            ],
+            { new: true },
+          ).lean<UserRecord>()
+        : UserModel.findOneAndUpdate(
+            { _id: userId, loginProviders: withoutGoogleProvider },
+            {
+              $push: { loginProviders: googleProvider },
+              $set: verification,
+            },
+            { new: true },
+          ).lean<UserRecord>();
       if (session) query.session(session);
       const user = await query.exec();
 

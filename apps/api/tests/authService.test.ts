@@ -47,10 +47,13 @@ const user: PublicUser = {
 interface SessionRecord {
   userId: string;
   tokenHash: string;
+  previousTokenHash?: string;
+  rotatedAt?: Date;
   expiresAt: Date;
 }
 
 const createHarness = () => {
+  let currentTime = now;
   let passwordUser: PasswordUser | null = null;
   let conflict = false;
   let createdInput: CreatePasswordUserInput | undefined;
@@ -69,6 +72,7 @@ const createHarness = () => {
   let linkGoogleResult: PublicUser | null = user;
   const reservedLoginEmails: string[] = [];
   const clearedLoginEmails: string[] = [];
+  const loginClientIps: Array<string | undefined> = [];
   const reservedMailActions: string[] = [];
   const dummyComparisons: string[] = [];
   const verifiedUserIds: string[] = [];
@@ -79,6 +83,7 @@ const createHarness = () => {
         usedAt: Date;
         userId: string;
         avatarUrl?: string;
+        removePasswordProvider?: boolean;
       }
     | undefined;
   const usedGoogleProviders: Array<{
@@ -129,12 +134,16 @@ const createHarness = () => {
       providerAccountId,
       usedAt,
       avatarUrl,
+      options,
     ) => {
       linkedGoogleProvider = {
         userId,
         providerAccountId,
         usedAt,
         ...(avatarUrl ? { avatarUrl } : {}),
+        ...(options?.removePasswordProvider
+          ? { removePasswordProvider: true }
+          : {}),
       };
       return linkGoogleResult;
     },
@@ -169,10 +178,15 @@ const createHarness = () => {
     rotate: async (input) => {
       const record = sessionRecords.get(input.id);
 
-      if (
-        !record ||
-        record.tokenHash !== input.currentTokenHash ||
-        record.expiresAt <= input.now
+      if (!record || record.expiresAt <= input.now) return null;
+
+      if (record.tokenHash === input.currentTokenHash) {
+        record.previousTokenHash = record.tokenHash;
+        record.rotatedAt = input.now;
+      } else if (
+        record.previousTokenHash !== input.currentTokenHash ||
+        !record.rotatedAt ||
+        record.rotatedAt.getTime() <= input.now.getTime() - input.reuseGraceMs
       ) {
         return null;
       }
@@ -287,11 +301,13 @@ const createHarness = () => {
       }),
   };
   const loginProtection: LoginProtectionService = {
-    reserveAttempt: async (email) => {
+    reserveAttempt: async (email, clientIp) => {
       reservedLoginEmails.push(email);
+      loginClientIps.push(clientIp);
     },
-    clearAttempts: async (email) => {
+    clearAttempts: async (email, clientIp) => {
       clearedLoginEmails.push(email);
+      loginClientIps.push(clientIp);
     },
   };
   const service = createAuthService({
@@ -310,13 +326,15 @@ const createHarness = () => {
         reservedMailActions.push(`${purpose}:${email}`);
       },
     },
-    now: () => now,
+    now: () => currentTime,
     usernameSuffix: () => "deadbeef",
   });
 
   return {
     service,
+    actionTokenRecords,
     clearedLoginEmails,
+    loginClientIps,
     dummyComparisons,
     reservedLoginEmails,
     sessionRecords,
@@ -330,6 +348,9 @@ const createHarness = () => {
     getCreatedGoogleInput: () => createdGoogleInput,
     getLinkedGoogleProvider: () => linkedGoogleProvider,
     getUsedGoogleProviders: () => usedGoogleProviders,
+    advanceTime: (milliseconds: number) => {
+      currentTime = new Date(currentTime.getTime() + milliseconds);
+    },
     setEmailUser: (value: PublicUser | null) => {
       emailUser = value;
     },
@@ -401,6 +422,55 @@ describe("authService", () => {
       avatarUrl: "https://example.com/avatar.png",
     });
     assert.equal(harness.getCreatedGoogleInput(), undefined);
+  });
+
+  test("drops an unverified password when Google proves the email", async () => {
+    const harness = createHarness();
+    harness.setPasswordUser({
+      user,
+      passwordHash: "hashed:attacker-password",
+      emailVerificationStatus: EmailVerificationStatus.PENDING,
+    });
+    harness.actionTokenRecords.set(
+      `${user.id}:${AuthActionPurpose.VERIFY_EMAIL}`,
+      {
+        id: "pending-verification",
+        userId: user.id,
+        purpose: AuthActionPurpose.VERIFY_EMAIL,
+        secretHash: "hash",
+        expiresAt: new Date(now.getTime() + 60_000),
+      },
+    );
+
+    await harness.service.loginWithGoogle("authorization-code");
+
+    assert.equal(
+      harness.getLinkedGoogleProvider()?.removePasswordProvider,
+      true,
+    );
+    assert.equal(harness.actionTokenRecords.size, 0);
+    assert.deepEqual(harness.cancelledMailJobs, [
+      `auth-verification:${user.id}`,
+      `auth-reset:${user.id}`,
+    ]);
+    assert.equal(harness.sessionRecords.size, 1);
+  });
+
+  test("keeps a verified password when linking Google", async () => {
+    const harness = createHarness();
+    harness.setPasswordUser({
+      user,
+      passwordHash: "hashed:owner-password",
+      emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+    });
+
+    await harness.service.loginWithGoogle("authorization-code");
+
+    assert.equal(
+      harness.getLinkedGoogleProvider()?.removePasswordProvider,
+      undefined,
+    );
+    assert.deepEqual(harness.cancelledMailJobs, []);
   });
 
   test("refreshes the external avatar when reusing a Google provider", async () => {
@@ -672,6 +742,22 @@ describe("authService", () => {
     assert.deepEqual(harness.clearedLoginEmails, [user.email, user.email]);
   });
 
+  test("scopes login attempts to the requesting client address", async () => {
+    const harness = createHarness();
+    harness.setPasswordUser({
+      user,
+      passwordHash: "hashed:correct horse battery staple",
+      emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+    });
+
+    await harness.service.login(
+      { email: user.email, password: "correct horse battery staple" },
+      { clientIp: "203.0.113.7" },
+    );
+
+    assert.deepEqual(harness.loginClientIps, ["203.0.113.7", "203.0.113.7"]);
+  });
+
   test("rotates refresh tokens and revokes the session on replay", async () => {
     const harness = createHarness();
     harness.setPasswordUser({
@@ -687,12 +773,37 @@ describe("authService", () => {
 
     assert.notEqual(refreshed.refreshToken, authenticated.refreshToken);
     assert.equal(refreshed.accessToken, `access:${user.id}`);
+    harness.advanceTime(31_000);
     await assert.rejects(
       harness.service.refresh(authenticated.refreshToken),
       InvalidRefreshTokenError,
     );
     await assert.rejects(
       harness.service.refresh(refreshed.refreshToken),
+      InvalidRefreshTokenError,
+    );
+    assert.equal(harness.sessionRecords.size, 0);
+  });
+
+  test("accepts the previous refresh token inside the grace window", async () => {
+    const harness = createHarness();
+    harness.setPasswordUser({
+      user,
+      passwordHash: "hashed:correct horse battery staple",
+      emailVerificationStatus: EmailVerificationStatus.VERIFIED,
+    });
+    const authenticated = await harness.service.login({
+      email: user.email,
+      password: "correct horse battery staple",
+    });
+    const lost = await harness.service.refresh(authenticated.refreshToken);
+
+    harness.advanceTime(10_000);
+    const retried = await harness.service.refresh(authenticated.refreshToken);
+
+    assert.notEqual(retried.refreshToken, lost.refreshToken);
+    await assert.rejects(
+      harness.service.refresh(lost.refreshToken),
       InvalidRefreshTokenError,
     );
     assert.equal(harness.sessionRecords.size, 0);
